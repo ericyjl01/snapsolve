@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ElectronApplication, Page } from "playwright-core";
@@ -219,6 +219,40 @@ describe("panel (e2e)", () => {
       await launched.close();
       rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
       rmSync(projects, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 90_000);
+
+  it("a thread left running by an earlier run is listed errored with Retry at startup, and its thread.json says error (052)", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    const id = "7d0c5a1e-2b3f-4c6d-8e9f-0a1b2c3d4e5f";
+    const dir = path.join(dataDir, "threads", id);
+    mkdirSync(dir, { recursive: true });
+    copyFileSync(PROBLEM, path.join(dir, "001.png"));
+    writeFileSync(
+      path.join(dir, "thread.json"),
+      JSON.stringify({
+        id,
+        sessionId: "5e4d3c2b-1a0f-4e9d-8c7b-6a5f4e3d2c1b",
+        transcriptPath: null,
+        model: "opus",
+        effort: "high",
+        createdAt: new Date().toISOString(),
+        title: "",
+        status: "running",
+        turns: [{ role: "user", kind: "screenshot", file: "001.png" }],
+      }),
+    );
+    const launched = await launchApp({ dataDir, env: { SNAPSOLVE_TEST_CLAUDE: FAKE } });
+    try {
+      const page = await launched.app.firstWindow();
+      await page.waitForLoadState("domcontentloaded");
+      const retry = page.locator(`${card(id)} .retry`);
+      await retry.waitFor({ state: "visible", timeout: 10_000 });
+      expect(await page.locator(`${card(id)} .thinking`).count()).toBe(0);
+      expect(JSON.parse(readFileSync(path.join(dir, "thread.json"), "utf8")).status).toBe("error");
+    } finally {
+      await launched.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }, 90_000);
 

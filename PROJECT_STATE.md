@@ -13,6 +13,7 @@ Redesign (Eric chose mockup A2, canvas https://claude.ai/artifact/YDwUWu2mMWHJui
   060 show/hide ⌃⌥X with no tab, 061 native restyle + no Copy, 062 closed (macOS built-in speech), 063 voice ⌃⌥V start/stop,
   064 capture default ⌃⌥C (Eric's own config.json already set). Open: is append (⌃⌥⇧Q) still wanted?
 - Queue (Eric: "begin working on these changes"): 064 → 058 → 059 → 060 → 061 → 065 → 063 in M3.
+- 032 waits until the redesign is done (Eric, chat): then rewrite docs/checklists/macos.md (keel/032) for ⌃⌥C/X/V, the floating window and no tab; release a bumped version; Eric runs `/snapsolve update` and the checklist.
 
 ## Log
 2026-10-14 · 024 · closed · installer CLI snapsolve.mjs + commands.mjs: install (quit a previous install, package on first install / new Electron / missing exe), start, update (keeps new + previous version), uninstall [--purge] keeps history, doctor (Node, claude, auth, versions, smoke/ASR, claudePath); install.json; real CLI end-to-end test on Windows; follow-up 036 (7b29105)

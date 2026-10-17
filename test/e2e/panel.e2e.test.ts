@@ -192,7 +192,8 @@ describe("panel (e2e)", () => {
       const page = await launched.app.firstWindow();
       await page.waitForLoadState("domcontentloaded");
       const first = await capture(launched.app);
-      await page.locator(`${card(first)} .answer`).first().waitFor({ state: "visible", timeout: 20_000 });
+      // The saved answer, not the streaming node (also `.answer`): an append before it is saved seeds nothing (051).
+      await page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       expect(await page.locator(`${card(first)} .note`).count()).toBe(0);
 
       const next = await launched.app.evaluate(
@@ -215,6 +216,48 @@ describe("panel (e2e)", () => {
       expect(starts).toHaveLength(2);
       const texts = starts[1].stdin?.message.content.filter((b) => b.type === "text").map((b) => b.text) ?? [];
       expect(texts.join("\n")).toContain("Answer 1: saw 1 image(s).");
+    } finally {
+      await launched.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      rmSync(projects, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 90_000);
+
+  it("the continued note shows while the seeded thread's answer is still pending, not only once it is done (057)", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    const projects = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-projects-"));
+    const scenarioFile = path.join(projects, "scenario");
+    writeFileSync(scenarioFile, "ok");
+    writeFileSync(path.join(dataDir, "config.json"), JSON.stringify({ maxScreenshotsPerThread: 1 }));
+    const launched = await launchApp({
+      dataDir,
+      env: {
+        SNAPSOLVE_TEST_CLAUDE: FAKE,
+        SNAPSOLVE_TEST_PROJECTS: projects,
+        FAKE_PROJECTS: projects,
+        FAKE_CLAUDE_SCENARIO_FILE: scenarioFile,
+        // The seeded turn's answer is held back for ~20 s, far past the note's wait.
+        FAKE_DELAY_MS: "20000",
+      },
+    });
+    try {
+      const page = await launched.app.firstWindow();
+      await page.waitForLoadState("domcontentloaded");
+      const first = await capture(launched.app);
+      // The saved answer, not the streaming node (also `.answer`): an append before it is saved seeds nothing (051).
+      await page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+
+      writeFileSync(scenarioFile, "slow");
+      const next = await launched.app.evaluate(
+        (_electron, png) =>
+          (globalThis as unknown as { snapsolveTest: { appendFromFile(p: string): Promise<string> } }).snapsolveTest.appendFromFile(png),
+        PROBLEM,
+      );
+      expect(next).not.toBe(first);
+      const note = page.locator(`${card(next)} .note`);
+      await note.waitFor({ state: "visible", timeout: 5_000 });
+      expect(await note.textContent()).toBe(CONTINUED_NOTE);
+      expect(await page.locator(`${card(next)} .answer:not(.streaming)`).count()).toBe(0);
     } finally {
       await launched.close();
       rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

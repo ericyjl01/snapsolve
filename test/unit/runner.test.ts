@@ -819,6 +819,35 @@ describe("seeded new thread (051): the 7th append carries the previous thread's 
     expect(saved.turns).toHaveLength(2);
   });
 
+  it("the saved user turn is emitted (turn) after status and before any delta: the seed reaches the card at the turn's start (057)", async () => {
+    scripted("ok:part two");
+    const { runner, events } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file, seed: SEED });
+    const types = events.map((e) => e.type);
+    expect(types.filter((x) => x === "turn")).toHaveLength(1);
+    expect(types.indexOf("status")).toBeLessThan(types.indexOf("turn"));
+    expect(types.indexOf("turn")).toBeLessThan(types.indexOf("delta"));
+    const turn = events.find((e) => e.type === "turn") as { threadId: string; thread: Thread };
+    expect(turn.threadId).toBe(t.id);
+    expect(turn.thread.status).toBe("running");
+    expect(turn.thread.turns).toEqual([{ role: "user", kind: "screenshot", file: "001.png", seed: SEED }]);
+  });
+
+  it("a follow-up emits turn with its question last; a retry adds no user turn and emits no turn (057)", async () => {
+    scripted("ok:x = 4", "fail", "ok:because");
+    const { runner, events } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "why?" })).ok).toBe(false);
+    const turns = events.filter((e) => e.type === "turn") as { thread: Thread }[];
+    expect(turns).toHaveLength(2);
+    expect(turns[1].thread.turns.at(-1)).toEqual({ role: "user", kind: "text", text: "why?" });
+    events.length = 0;
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    expect(events.some((e) => e.type === "turn")).toBe(false);
+  });
+
   it("a new thread without a seed is unchanged: NEW_TEXT and no seed on the turn", async () => {
     scripted("ok:x = 4");
     const { runner } = makeRunner();

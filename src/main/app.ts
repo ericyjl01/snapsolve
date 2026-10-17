@@ -102,6 +102,10 @@ export function createApp(deps: AppDeps): App {
       case "status":
         void patchThread(event.threadId, { status: event.status });
         return;
+      case "turn":
+        remember(event.thread);
+        broadcast();
+        return;
       case "done":
         remember(event.thread);
         panel.send(IPC.answerDone, { threadId: event.threadId, thread: event.thread });

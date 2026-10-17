@@ -230,6 +230,27 @@ describe("runner events → panel", () => {
     listener!({ type: "status", threadId: thread.id, status: "queued" });
     await vi.waitFor(() => expect(sent(IPC.threadsChanged).length).toBeGreaterThan(0));
   });
+
+  it("a turn event is broadcast as threads:changed with its saved user turn, so the continued note shows before the answer (057)", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture({ png: PNG });
+    const before = sent(IPC.threadsChanged).length;
+    const created = await store.getThread(id);
+    const thread: Thread = {
+      ...created,
+      status: "running",
+      turns: [{ role: "user", kind: "screenshot", file: "001.png", seed: "the previous answer" }],
+    };
+    listener!({ type: "turn", threadId: id, thread } as unknown as RunnerEvent);
+    await vi.waitFor(() => expect(sent(IPC.threadsChanged).length).toBeGreaterThan(before));
+    const shown = (sent(IPC.threadsChanged).at(-1) as Thread[]).find((t) => t.id === id);
+    expect(shown?.turns).toEqual(thread.turns);
+    expect(continuedNote(shown!.turns[0])).toBe(CONTINUED_NOTE);
+    // A later status change keeps the turn.
+    listener!({ type: "status", threadId: id, status: "running" });
+    await vi.waitFor(() => expect(sent(IPC.threadsChanged).length).toBeGreaterThan(before + 1));
+    expect((sent(IPC.threadsChanged).at(-1) as Thread[]).find((t) => t.id === id)?.turns).toEqual(thread.turns);
+  });
 });
 
 describe("IPC handlers", () => {

@@ -49,6 +49,8 @@ export interface DataPaths {
   logFile: string;
   /** Packaged app versions (M2 bootstrap); created by the installer, not by ensureDirs. */
   app: string;
+  /** Where the floating window was left, per display (task 058); not config.json. */
+  windowState: string;
 }
 
 export function dataPaths(dir: string): DataPaths {
@@ -60,6 +62,7 @@ export function dataPaths(dir: string): DataPaths {
     logs: path.join(dir, "logs"),
     logFile: path.join(dir, "logs", "snapsolve.log"),
     app: path.join(dir, "app"),
+    windowState: path.join(dir, "window.json"),
   };
 }
 

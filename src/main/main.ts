@@ -32,7 +32,7 @@ import { encodeForModel } from "./encode";
 import { createHotkeys } from "./hotkeys";
 import { createLogger, type Logger } from "./log";
 import { createPermissionHandlers, darwinStartup, hotkeyLabel } from "./macos";
-import { createPanel, resolveSnapsolveUrl, SCHEME } from "./panel";
+import { createPanel, loadWindowBounds, resolveSnapsolveUrl, saveWindowBounds, SCHEME } from "./panel";
 import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
 import { createStore } from "./store";
@@ -113,6 +113,7 @@ async function start(): Promise<void> {
         Menu,
         image: trayImage(process.platform),
         onOpenPanel: () => panel.toggle(),
+        onResetPosition: () => panel.resetPosition(),
         onPause: () => keys.pause(),
         onResume: () => keys.resume(),
         onOpenHistory: () => void openHistoryFolder(paths.threads, { mkdir, openPath: (dir) => shell.openPath(dir), log }),
@@ -167,6 +168,8 @@ async function start(): Promise<void> {
     preloadPath: path.join(__dirname, "preload.js"),
     config,
     log,
+    bounds: await loadWindowBounds(paths.windowState, { log }),
+    saveBounds: (saved) => saveWindowBounds(paths.windowState, saved),
   });
   const core = createApp({
     store,

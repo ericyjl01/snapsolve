@@ -70,18 +70,18 @@ describe("tray", () => {
     const { click, labels, deps } = setup();
     click("Pause hotkeys");
     expect(deps.onPause).toHaveBeenCalledTimes(1);
-    expect(labels()).toEqual(["Open panel", "Resume hotkeys", "Open history folder", "Clear history", "Quit"]);
+    expect(labels()).toEqual(["Open panel", "Reset window position", "Resume hotkeys", "Open history folder", "Clear history", "Quit"]);
     click("Resume hotkeys");
     expect(deps.onResume).toHaveBeenCalledTimes(1);
-    expect(labels()[1]).toBe("Pause hotkeys");
+    expect(labels()[2]).toBe("Pause hotkeys");
   });
 
   it("setPaused syncs the label without calling the handlers", () => {
     const { tray, labels, deps } = setup();
     tray.setPaused(true);
-    expect(labels()[1]).toBe("Resume hotkeys");
+    expect(labels()[2]).toBe("Resume hotkeys");
     tray.setPaused(false);
-    expect(labels()[1]).toBe("Pause hotkeys");
+    expect(labels()[2]).toBe("Pause hotkeys");
     expect(deps.onPause).not.toHaveBeenCalled();
     expect(deps.onResume).not.toHaveBeenCalled();
   });

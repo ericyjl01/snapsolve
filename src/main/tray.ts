@@ -1,8 +1,9 @@
-// The tray (SPEC §1.2): Open panel · Pause/Resume hotkeys · Open history folder · Clear history · Quit, and a
-// tooltip with usage (§3.6). The icon is drawn in code (no image files): a ring with a centre dot.
+// The tray (SPEC §1.2): Open panel · Reset window position (task 058) · Pause/Resume hotkeys · Open history folder ·
+// Clear history · Quit, and a tooltip with usage (§3.6). The icon is drawn in code (no image files): a ring with a centre dot.
 
 export const TRAY_LABELS = {
   open: "Open panel",
+  resetPosition: "Reset window position",
   pause: "Pause hotkeys",
   resume: "Resume hotkeys",
   history: "Open history folder",
@@ -30,6 +31,7 @@ export interface TrayDeps<Image, Menu> {
   Menu: { buildFromTemplate(template: MenuItem[]): Menu };
   image: Image;
   onOpenPanel: () => void;
+  onResetPosition: () => void;
   onPause: () => void;
   onResume: () => void;
   onOpenHistory: () => void;
@@ -54,6 +56,7 @@ export function createTray<Image, Menu>(deps: TrayDeps<Image, Menu>): TrayContro
   function build(): void {
     const template: MenuItem[] = [
       { label: TRAY_LABELS.open, click: deps.onOpenPanel },
+      { label: TRAY_LABELS.resetPosition, click: deps.onResetPosition },
       {
         label: paused ? TRAY_LABELS.resume : TRAY_LABELS.pause,
         click: () => {

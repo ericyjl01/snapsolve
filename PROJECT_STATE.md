@@ -2,14 +2,13 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-050 closed (merge 749b2df): retry re-runs the failed turn in place, no duplicate user turn.
-- next action: start 051 (7th append seeds a new thread), then 052
+051 closed (merge 09c9d4f): an append past the screenshot limit seeds the new thread; the card says so.
+- next action: start 052
 Waiting on Eric: 032 (run docs/checklists/macos.md on keel/032), 013 (Windows PC: park, split or macOS capture checks?)
 Backlog: 033, 042, 053.
 - Windows PC leftovers: stale %APPDATA%\snapsolve (014), ASR exclusion
 
 ## Log
-2026-10-14 · 020 · closed · Eric chose (a): M2 ships unsigned, doctor detects the ASR block, real install checked on an unmanaged Windows PC; 015 stays parked for the Mac (-)
 2026-10-14 · keel · planned · M2 — Plugin and installer (Windows) (6 tasks) (-)
 2026-10-14 · 021 · closed · bootstrap/boot.js runs <data>/app/current/main.js (data dir rules in step with paths.ts by a parity test) or shows an error box naming /snapsolve install and exits 1; no Electron access outside Electron; bootstrap/package.json without dependencies (c68294f)
 2026-10-14 · 027 · blocked · plugin.json version: omit per the claude-skills convention, or set it per DESIGN §5? (-)
@@ -49,3 +48,4 @@ Backlog: 033, 042, 053.
 2026-10-17 · 030 · closed · macos.ts: darwinStartup hides the Dock before the tray and merges the login PATH once (warning logged), permission handlers (fixed Screen Recording settings URL, darwin only, args ignored; relaunch + exit), hotkeyLabel in the taken-hotkey notice; preload grows to eleven functions (Amendment 2); a denied capture shows an unsaved permission card in the panel; follow-up 053 (ce0a347)
 2026-10-17 · 032 · blocked · needs Eric to run the macOS checklist and report results → keel/032 (a402d20)
 2026-10-17 · 050 · closed · a Retry is a runner retry request: retryTarget re-runs the last user turn followed only by errored answers as the request that first ran it, without appending it again; resumes the owned transcript or takes the fresh-session fallback; nothing to retry → ok:false, no spawn (749b2df)
+2026-10-17 · 051 · closed · an append past maxScreenshotsPerThread starts a thread seeded with the previous thread's last successful answer (seed on the first screenshot turn: image + seededQuestion, kept on retry, first of the earlier answers in a fallback); the card shows CONTINUED_NOTE; no answer → plain new thread (09c9d4f)

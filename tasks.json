@@ -1345,23 +1345,28 @@
     {
       "id": "051",
       "title": "7th append seeds the new thread with the previous thread's last answer",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 1,
       "deps": [],
       "file": "docs/tasks/051-append-cap-seed.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/051",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "09c9d4f",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/runner.test.ts test/unit/app.test.ts",
-      "tests_commit": null,
+      "tests_commit": "752a6cadc8ccdc5a9d2c3e984f902d68bfeec558",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "1c696601fda3659e2a6d77eec49711c9be902e7f",
+        "reasons": "app.test proves an append at maxScreenshotsPerThread enqueues a new thread seeded with the last successful answer (errored/empty answers skipped -> no seed key; capture never seeds); runner.test proves the first stdin message is the image then SEED_HEADER+previous answer+APPEND_TEXT, seed persisted on the user turn, kept across retry and resume fallback, invalid seeds refused; continuedNote unit test + panel e2e prove the new card shows CONTINUED_NOTE and fake claude received the prior answer; tests unchanged since red; task tests, --project unit and npm test all exit 0",
+        "at": "2026-10-17"
+      }
     },
     {
       "id": "052",

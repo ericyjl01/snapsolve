@@ -185,7 +185,7 @@ describe("IPC handlers", () => {
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
   });
 
-  it("retry re-runs an errored thread's last request: a follow-up's text", async () => {
+  it("retry of an errored follow-up queues a retry request (the runner re-runs the turn without re-adding it)", async () => {
     const app = createApp(deps);
     const t = await erroredThread([
       { role: "user", kind: "screenshot", file: "001.png" },
@@ -194,14 +194,15 @@ describe("IPC handlers", () => {
       errorTurn,
     ]);
     await app.handlers.retry(t.id);
-    expect(deps.runner.enqueue).toHaveBeenCalledWith(t.id, { kind: "followUp", text: "why?" });
+    expect(deps.runner.enqueue).toHaveBeenCalledTimes(1);
+    expect(deps.runner.enqueue).toHaveBeenCalledWith(t.id, { kind: "retry" });
   });
 
-  it("retry of a failed first screenshot re-runs it as a new turn; a later one as an append", async () => {
+  it("retry of a failed first screenshot, a failed append, or a turn that failed before claude ran queues a retry", async () => {
     const app = createApp(deps);
     const first = await erroredThread([{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn]);
     await app.handlers.retry(first.id);
-    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(first.id, { kind: "new", screenshot: "001.png" });
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(first.id, { kind: "retry" });
     const later = await erroredThread([
       { role: "user", kind: "screenshot", file: "001.png" },
       { ...errorTurn, isError: false, text: "x = 4", errorKind: undefined, errorMessage: undefined },
@@ -209,7 +210,24 @@ describe("IPC handlers", () => {
       errorTurn,
     ]);
     await app.handlers.retry(later.id);
-    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(later.id, { kind: "append", screenshot: "002.png" });
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(later.id, { kind: "retry" });
+    // An exception before claude ran leaves the user turn without an errored answer.
+    const bare = await erroredThread([{ role: "user", kind: "screenshot", file: "001.png" }]);
+    await app.handlers.retry(bare.id);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(bare.id, { kind: "retry" });
+    expect(deps.runner.enqueue).toHaveBeenCalledTimes(3);
+  });
+
+  it("retry of an errored thread whose last turn is a successful answer, or that has no user turn, queues nothing", async () => {
+    const app = createApp(deps);
+    const answered = await erroredThread([
+      { role: "user", kind: "screenshot", file: "001.png" },
+      { ...errorTurn, isError: false, text: "x = 4", errorKind: undefined, errorMessage: undefined },
+    ]);
+    await app.handlers.retry(answered.id);
+    const empty = await erroredThread([]);
+    await app.handlers.retry(empty.id);
+    expect(deps.runner.enqueue).not.toHaveBeenCalled();
   });
 
   it("retry of a thread that is not errored does nothing", async () => {

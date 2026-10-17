@@ -422,6 +422,7 @@ function turnProblem(turn: unknown): string | null {
     if (turn.kind === "screenshot") {
       if (typeof turn.file !== "string" || !SCREENSHOT.test(turn.file)) return "invalid screenshot file";
       if (turn.text !== undefined && typeof turn.text !== "string") return "invalid text";
+      if (turn.seed !== undefined && typeof turn.seed !== "string") return "invalid seed";
       return null;
     }
     if (turn.kind === "text") return typeof turn.text === "string" ? null : "invalid text";

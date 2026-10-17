@@ -1,4 +1,5 @@
 // Error kinds and the text the card shows for each (SPEC §7.1). Shared by main and renderer: no Node imports.
+import type { Turn } from "./types";
 
 export const ERROR_KINDS = [
   "claudeNotFound",
@@ -33,6 +34,14 @@ const MESSAGES: Record<ErrorKind, string> = {
   threadNotFound: "This thread no longer exists.",
   internal: "Something went wrong. Details are in the snapsolve log.",
 };
+
+/** SPEC §2.3: the card note on a thread an append past the screenshot limit started. */
+export const CONTINUED_NOTE = "Continued from the previous thread (screenshot limit reached); its last answer was sent along.";
+
+/** The note the card shows at `turn`: `CONTINUED_NOTE` for a seeded screenshot, else null. */
+export function continuedNote(turn: Turn): string | null {
+  return turn.role === "user" && turn.kind === "screenshot" && turn.seed !== undefined ? CONTINUED_NOTE : null;
+}
 
 /** The card text for `kind`; an unknown kind (e.g. from a stale renderer) gets the `internal` text. */
 export function userMessage(kind: ErrorKind): string {

@@ -88,7 +88,7 @@ describe("app lifecycle (e2e)", () => {
     try {
       await expect.poll(() => panelWidth(first.app), { timeout: 5_000 }).toBe(8);
       expect(await secondInstance(first.dataDir)).toBe(0);
-      await expect.poll(() => panelWidth(first.app), { timeout: 5_000 }).toBe(420);
+      await expect.poll(() => panelWidth(first.app), { timeout: 5_000 }).toBe(360);
       expect(first.app.process().exitCode).toBeNull();
     } finally {
       await first.close();

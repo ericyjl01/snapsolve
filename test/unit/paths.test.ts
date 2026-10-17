@@ -81,6 +81,7 @@ describe("dataPaths", () => {
       logs: path.join(d, "logs"),
       logFile: path.join(d, "logs", "snapsolve.log"),
       app: path.join(d, "app"),
+      windowState: path.join(d, "window.json"),
     });
   });
 });

@@ -32,11 +32,18 @@ export interface SendImage {
   data: string;
 }
 
-/** `screenshot` is the `NNN.png` name from `store.saveScreenshot`. */
+/**
+ * `screenshot` is the `NNN.png` name from `store.saveScreenshot`. `retry` re-runs the thread's failed last user turn
+ * (SPEC §7.1 Retry) without adding it again; `retryTarget` says whether there is one.
+ */
 export type TurnRequest =
   | { kind: "new"; screenshot: string }
   | { kind: "append"; screenshot: string }
-  | { kind: "followUp"; text: string };
+  | { kind: "followUp"; text: string }
+  | { kind: "retry" };
+
+/** A request that adds a user turn; a retry re-runs one of these. */
+export type UserRequest = Exclude<TurnRequest, { kind: "retry" }>;
 
 type ContentBlock =
   | { type: "image"; source: { type: "base64"; media_type: SendImage["mediaType"]; data: string } }
@@ -197,7 +204,7 @@ export function buildEnv(env: Readonly<Record<string, string | undefined>>, allo
   return out;
 }
 
-export function buildUserMessage(kind: TurnRequest["kind"], images: SendImage[], text?: string): UserMessage {
+export function buildUserMessage(kind: UserRequest["kind"], images: SendImage[], text?: string): UserMessage {
   if (kind === "followUp") return userLine([{ type: "text", text: text ?? "" }]);
   return userLine([...images.map(imageBlock), { type: "text", text: kind === "new" ? NEW_TEXT : APPEND_TEXT }]);
 }
@@ -337,23 +344,35 @@ export function createRunner(deps: RunnerDeps): Runner {
   async function run(threadId: string, request: TurnRequest): Promise<TurnOutcome> {
     const startedAt = now();
     let thread = await store.getThread(threadId);
-    await setStatus(threadId, "running");
-    thread = await store.appendTurn(threadId, userTurn(request));
+    // A retry re-runs the failed last user turn where it stands; any other request adds its user turn first.
+    let target: { request: UserRequest; index: number } | null;
+    if (request.kind === "retry") {
+      target = retryTarget(thread);
+      if (!target) return fail(threadId, new SnapsolveError("internal", "nothing to retry"), null, { record: false });
+      thread = await setStatus(threadId, "running");
+    } else {
+      await setStatus(threadId, "running");
+      thread = await store.appendTurn(threadId, userTurn(request));
+      target = { request, index: thread.turns.length - 1 };
+    }
+    const asked = target.request;
     if (usage && isUsageBlocked(usage, now())) {
       log.info("runner.usageBlocked", { threadId, status: usage.status, resetsAt: usage.resetsAt });
       const blocked = new SnapsolveError("usageLimit", usageBlockedMessage(usage.resetsAt as number, now()));
       return fail(threadId, blocked, null, { startedAt, turn: true });
     }
-    const prior = thread.turns.slice(0, -1);
+    const prior = thread.turns.slice(0, target.index);
     const answers = prior.filter(isAnswer).map((t) => t.text);
 
-    let mode: Mode = prior.length === 0 ? "first" : "fallback";
+    // A retry never starts a session under the failed attempt's id (claude may have created it): it resumes the
+    // owned transcript or starts a fresh one carrying the thread's screenshots, each once.
+    let mode: Mode = prior.length === 0 && request.kind !== "retry" ? "first" : "fallback";
     if (thread.transcriptPath && !thread.transcriptMissing && (await isFile(thread.transcriptPath))) mode = "resume";
 
     let attempt: Attempt | null = null;
     let note: "resumeFallback" | undefined;
     if (mode === "resume") {
-      attempt = await spawnTurn(thread, { resume: thread.transcriptPath as string }, await requestMessage(thread, request));
+      attempt = await spawnTurn(thread, { resume: thread.transcriptPath as string }, await requestMessage(thread, asked));
       if (isResumeFailure(attempt)) {
         log.warn("runner.resumeFailed", { threadId, sessionId: thread.sessionId });
         mode = "fallback";
@@ -363,9 +382,9 @@ export function createRunner(deps: RunnerDeps): Runner {
       thread = await store.replaceSession(threadId);
       if (answers.length > 0) note = "resumeFallback";
       const images = await Promise.all(screenshotFiles(thread.turns).map((f) => deps.loadSendImage(screenshotPath(thread, f))));
-      attempt = await spawnTurn(thread, { id: thread.sessionId }, buildFallbackMessage(images, answers, question(request)));
+      attempt = await spawnTurn(thread, { id: thread.sessionId }, buildFallbackMessage(images, answers, question(asked)));
     } else if (mode === "first") {
-      attempt = await spawnTurn(thread, { id: thread.sessionId }, await requestMessage(thread, request));
+      attempt = await spawnTurn(thread, { id: thread.sessionId }, await requestMessage(thread, asked));
     }
     if (!attempt) throw new SnapsolveError("internal", `no attempt for mode ${mode}`);
 
@@ -402,7 +421,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     }
   }
 
-  async function requestMessage(thread: Thread, request: TurnRequest): Promise<UserMessage> {
+  async function requestMessage(thread: Thread, request: UserRequest): Promise<UserMessage> {
     if (request.kind === "followUp") return buildUserMessage("followUp", [], request.text);
     return buildUserMessage(request.kind, [await deps.loadSendImage(screenshotPath(thread, request.screenshot))]);
   }
@@ -579,13 +598,13 @@ function imageBlock(image: SendImage): ContentBlock {
   return { type: "image", source: { type: "base64", media_type: image.mediaType, data: image.data } };
 }
 
-function userTurn(request: TurnRequest): UserTurn {
+function userTurn(request: UserRequest): UserTurn {
   return request.kind === "followUp"
     ? { role: "user", kind: "text", text: request.text }
     : { role: "user", kind: "screenshot", file: request.screenshot };
 }
 
-function question(request: TurnRequest): string {
+function question(request: UserRequest): string {
   if (request.kind === "followUp") return request.text;
   return request.kind === "new" ? NEW_TEXT : APPEND_TEXT;
 }
@@ -600,11 +619,30 @@ function annotations(attempt: Attempt): Pick<AssistantTurn, "warning" | "usage">
   return { ...(attempt.apiKeyWarning ? { warning: "apiKeyInUse" as const } : {}), ...(line ? { usage: line } : {}) };
 }
 
+/**
+ * The failed last user turn a retry re-runs, as the request that first ran it, and its index; only errored answers
+ * may follow it. Null when the last turn is a successful answer or there is no user turn.
+ */
+export function retryTarget(thread: Thread): { request: UserRequest; index: number } | null {
+  let index = thread.turns.length - 1;
+  for (; index >= 0; index--) {
+    const turn = thread.turns[index];
+    if (turn.role === "user") break;
+    if (!turn.isError) return null;
+  }
+  if (index < 0) return null;
+  const turn = thread.turns[index] as UserTurn;
+  if (turn.kind === "text") return { request: { kind: "followUp", text: turn.text }, index };
+  const first = !thread.turns.slice(0, index).some((t) => t.role === "user");
+  return { request: { kind: first ? "new" : "append", screenshot: turn.file }, index };
+}
+
 function isAnswer(turn: Turn): turn is AssistantTurn {
   return turn.role === "assistant" && !turn.isError;
 }
 
 function requestProblem(request: TurnRequest): string | null {
+  if (request.kind === "retry") return null;
   if (request.kind === "followUp") {
     return typeof request.text === "string" && request.text.trim() !== "" ? null : "empty follow-up";
   }

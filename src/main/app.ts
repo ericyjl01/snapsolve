@@ -10,7 +10,7 @@ import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
 import { isSafeExternalUrl } from "./panel";
-import type { Command, Runner, RunnerEvent, TurnOutcome, TurnRequest } from "./runner";
+import { type Command, retryTarget, type Runner, type RunnerEvent, type TurnOutcome, type TurnRequest } from "./runner";
 import { isUuid, type Store } from "./store";
 
 export interface AppDeps {
@@ -177,12 +177,12 @@ export function createApp(deps: AppDeps): App {
         log.info("app.retryIgnored", { threadId: thread.id, status: thread.status });
         return;
       }
-      const request = retryRequest(thread);
-      if (!request) {
+      if (!retryTarget(thread)) {
         log.warn("app.retryNothing", { threadId: thread.id });
         return;
       }
-      start(thread.id, request);
+      // The runner re-runs the failed turn in place: no second copy of its user turn (task 050).
+      start(thread.id, { kind: "retry" });
     },
 
     async copy(text) {
@@ -256,15 +256,6 @@ export function createApp(deps: AppDeps): App {
 
     handlers,
   };
-}
-
-/** The request that re-runs an errored thread's last user turn. */
-function retryRequest(thread: Thread): TurnRequest | null {
-  const users = thread.turns.filter((t) => t.role === "user");
-  const last = users.at(-1);
-  if (!last) return null;
-  if (last.kind === "text") return { kind: "followUp", text: last.text };
-  return { kind: users.length === 1 ? "new" : "append", screenshot: last.file };
 }
 
 /**

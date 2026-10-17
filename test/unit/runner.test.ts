@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,12 +12,15 @@ import {
   buildFallbackMessage,
   buildUserMessage,
   createRunner,
+  APPEND_TEXT,
+  NEW_TEXT,
   type RunnerEvent,
   type SendImage,
   withLoginShellPath,
 } from "../../src/main/runner";
 import { createStore, type Store } from "../../src/main/store";
 import { userMessage } from "../../src/shared/errors";
+import type { Thread } from "../../src/shared/types";
 
 const SID = "0b8f6a3c-1d2e-4f50-9a6b-7c8d9e0f1a2b";
 const PROMPT = 'You are snapsolve.\nUse "Markdown" & $math$; never <html>.';
@@ -657,6 +660,124 @@ describe("timeout escalation: a timed-out claude never outlives its turn", () =>
 });
 
 // ── macOS login-shell PATH (028) ─────────────────────────────────────────────────────────────────────
+
+describe("retry (050): re-runs the failed turn without adding its user turn again", () => {
+  const failLines = [{ type: "result", subtype: "error_during_execution", is_error: true, errors: ["overloaded"] }];
+  /** Each spawn's outcome in order: "ok:<answer>" or "fail". */
+  function scripted(...plan: string[]) {
+    let n = 0;
+    script = (child, call) => {
+      const step = plan[n++] ?? "ok:x";
+      if (step === "fail") child.script(failLines, 1);
+      else child.script(okLines(call, step.slice(3)));
+    };
+  }
+  const shape = (t: Thread["turns"][number]) =>
+    t.role === "user" ? `user:${t.kind === "text" ? t.text : t.file}` : t.isError ? "error" : `answer:${t.text}`;
+  const sentMessage = (i: number) => JSON.parse(calls[i].child.written) as ReturnType<typeof buildUserMessage>;
+
+  it("a failed follow-up retried: its user turn once, then the errored answer, then the new answer; sent once", async () => {
+    scripted("ok:x = 4", "fail", "ok:because");
+    const { runner, events } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "why?" })).ok).toBe(false);
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    const saved = await store.getThread(t.id);
+    expect(saved.turns.map(shape)).toEqual(["user:001.png", "answer:x = 4", "user:why?", "error", "answer:because"]);
+    expect(saved.status).toBe("done");
+    // No owned transcript here (the fake writes none), so the retry is the fallback: screenshot, earlier answer, question.
+    expect(sentMessage(2)).toEqual(buildFallbackMessage([PNG], ["x = 4"], "why?"));
+    expect(events.filter((e) => e.type === "done")).toHaveLength(2);
+  });
+
+  it("a failed first screenshot retried: one screenshot turn; the message carries the image once", async () => {
+    scripted("fail", "ok:x = 4");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    expect((await runner.enqueue(t.id, { kind: "new", screenshot: shot.file })).ok).toBe(false);
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "error", "answer:x = 4"]);
+    const message = sentMessage(1);
+    expect(message).toEqual(buildUserMessage("new", [PNG]));
+    expect(message.message.content.filter((b) => b.type === "image")).toHaveLength(1);
+    expect(message.message.content).toContainEqual({ type: "text", text: NEW_TEXT });
+    // A fresh session: the failed attempt's session id is never reused.
+    expect(calls[1].args).toContain("--session-id");
+    expect(calls[1].args[calls[1].args.indexOf("--session-id") + 1]).not.toBe(t.sessionId);
+  });
+
+  it("a failed append retried: each screenshot once, the append question", async () => {
+    scripted("ok:x = 4", "fail", "ok:part two");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    const second = await store.saveScreenshot(t.id, Buffer.from("png2"));
+    expect((await runner.enqueue(t.id, { kind: "append", screenshot: second.file })).ok).toBe(false);
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "answer:x = 4", "user:002.png", "error", "answer:part two"]);
+    expect(sentMessage(2)).toEqual(buildFallbackMessage([PNG, PNG], ["x = 4"], APPEND_TEXT));
+  });
+
+  it("a turn that failed before claude ran (no errored answer) is retried the same way", async () => {
+    let loads = 0;
+    const { runner } = makeRunner({
+      loadSendImage: async () => {
+        if (loads++ === 0) throw new Error("cannot read image");
+        return PNG;
+      },
+    });
+    const { t, shot } = await newThread();
+    expect((await runner.enqueue(t.id, { kind: "new", screenshot: shot.file })).ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "answer:x = 4"]);
+  });
+
+  it("with an owned transcript the retry resumes it and sends only the follow-up", async () => {
+    let n = 0;
+    script = (child, call) => {
+      n++;
+      if (n === 1) {
+        // The first turn's transcript lands in claude's projects dir; the store adopts it into the thread dir.
+        const sid = call.args[call.args.indexOf("--session-id") + 1];
+        const dir = path.join(root, "projects", "C--snapsolve-sessions");
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(path.join(dir, `${sid}.jsonl`), `${JSON.stringify({ type: "user", sessionId: sid })}\n`);
+        child.script(okLines(call, "x = 4"));
+      } else if (n === 2) child.script(failLines, 1);
+      else child.script(okLines(call, "because"));
+    };
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    const owned = (await store.getThread(t.id)).transcriptPath;
+    expect(owned).not.toBeNull();
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "why?" })).ok).toBe(false);
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    expect(calls[2].args.slice(-2)).toEqual(["--resume", owned]);
+    expect(sentMessage(2)).toEqual(buildUserMessage("followUp", [], "why?"));
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "answer:x = 4", "user:why?", "error", "answer:because"]);
+  });
+
+  it("nothing to retry (the last turn is a successful answer, or no user turn): no spawn, the thread is untouched", async () => {
+    scripted("ok:x = 4");
+    const { runner, events } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    const before = await store.getThread(t.id);
+    const outcome = await runner.enqueue(t.id, { kind: "retry" });
+    expect(outcome.ok).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(await store.getThread(t.id)).toEqual(before);
+    expect(events.at(-1)).toMatchObject({ type: "error", threadId: t.id });
+
+    const empty = await store.createThread({ model: "opus", effort: "high" });
+    expect((await runner.enqueue(empty.id, { kind: "retry" })).ok).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect((await store.getThread(empty.id)).turns).toEqual([]);
+  });
+});
 
 describe("withLoginShellPath", () => {
   const HOME = "/Users/eric";

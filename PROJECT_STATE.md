@@ -2,21 +2,15 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master (no remote). macOS only (Amendment 4); local only (DECISIONS 055).
-055 closed: snapsolve 0.1.0 installed in Claude Code as snapsolve@snapsolve-local (~/dev/snapsolve-local).
-057 closed: the panel e2e flake had two causes (docs/issues.md); suite gate is deterministic again.
-  The installed 0.1.0 predates 057's fix: re-release (bump version) + `/snapsolve update` to pick it up.
-- 032 can start: Eric opens a NEW Claude Code session, runs docs/checklists/macos.md (on keel/032),
-  item 1 = `/snapsolve install` (or `/snapsolve:snapsolve install`).
-- e2e on this Mac: keep it awake (`caffeinate -dims`); with the lid closed tests hang 150–900 s.
-Backlog: 033 (macOS icon), 042, 053, 054, 056 (README row + plugin.json still say Windows).
-Redesign (Eric chose mockup A2, canvas https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH): 058 floating window, 059 resize,
-  060 show/hide ⌃⌥X with no tab, 061 native restyle + no Copy, 062 closed (macOS built-in speech), 063 voice ⌃⌥V start/stop,
-  064 capture default ⌃⌥C (Eric's own config.json already set). Open: is append (⌃⌥⇧Q) still wanted?
+- 064 BLOCKED (attempts exhausted; work on keel/064, code green): review 3 wants 2 assertions on SKILL.md's doctor
+  Mac line in test/unit/skill.test.ts:198-203. Asked Eric: OK to reopen 064 for that test-only fix? (docs/issues.md 064)
 - Queue (Eric: "begin working on these changes"): 064 → 058 → 059 → 060 → 061 → 065 → 063 in M3.
 - 032 waits until the redesign is done (Eric, chat): then rewrite docs/checklists/macos.md (keel/032) for ⌃⌥C/X/V, the floating window and no tab; release a bumped version; Eric runs `/snapsolve update` and the checklist.
+- e2e on this Mac: keep it awake (`caffeinate -dims`); with the lid closed tests hang 150–900 s.
+Backlog: 033 (macOS icon), 042, 053, 054, 056 (README row + plugin.json still say Windows).
+Redesign canvas (mockup A2): https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH. Open: is append (⌃⌥⇧Q) still wanted? (065 removes it)
 
 ## Log
-2026-10-14 · 024 · closed · installer CLI snapsolve.mjs + commands.mjs: install (quit a previous install, package on first install / new Electron / missing exe), start, update (keeps new + previous version), uninstall [--purge] keeps history, doctor (Node, claude, auth, versions, smoke/ASR, claudePath); install.json; real CLI end-to-end test on Windows; follow-up 036 (7b29105)
 2026-10-14 · 025 · closed · SKILL.md for /snapsolve: subcommand from $ARGUMENTS, one section per subcommand with its full snapsolve.mjs command, winget offer only after a yes, ASR/login/proxy/AltGr/Pro-plan notes, doctor hotkey question, --purge only after an explicit yes; frontmatter made valid YAML; DESIGN risk 1 resolved; follow-up 037 (0608462)
 2026-10-14 · 027 · closed · released plugin.json carries no version (claude-skills convention, Eric's answer); app/package.json keeps the app version for installer updates and the same-version refusal; DESIGN §5 updated; backlog 038 (4446bb5)
 2026-10-14 · 031 · closed · macOS installer branch: ~/Applications/snapsolve.app (LSUIElement) packaged and ad-hoc signed once per packaging, open -a launch, pgrep -x quit, current symlink, uninstall removes the .app; Screen Recording re-prompt warning on an Electron change; SKILL.md brew/Screen Recording notes; follow-up 039 (52041e5)
@@ -56,3 +50,4 @@ Redesign (Eric chose mockup A2, canvas https://claude.ai/artifact/YDwUWu2mMWHJui
 2026-10-17 · adhoc · hotkeys decided (capture ⌃⌥C, toggle ⌃⌥Z, voice ⌃⌥V start+stop): 060/062/063 updated, 064 added; Eric's config.json capture set to Control+Alt+C (-)
 2026-10-17 · adhoc · 065 added: capture continues the current chat, + button starts a new one, append hotkey removed (Eric's decision) (-)
 2026-10-17 · 062 · closed · speech-to-text is macOS built-in (Apple Speech on-device via a Swift helper); Approved libraries updated; 063 scoped and queued in M3 (-)
+2026-10-17 · 064 · blocked · review failed 3 times (last: doctor Mac line unasserted in skill.test.ts); reopen for a test-only fix? → keel/064 (3b6bb68)

@@ -207,3 +207,11 @@ Cause 2: the test's first wait `${card(first)} .answer` also matches the streami
 Fix:     runner emits `{ type: "turn", threadId, thread }` right after saving the user turn; app remembers the thread and broadcasts threads:changed. The 051 and 057 e2e tests wait for `.answer:not(.streaming)` before appending. Deterministic e2e: seeded answer held ~20 s (slow scenario), note must show within 5 s with no finished answer.
 Tried:   fix 1 alone still failed 1 of 9 file runs (cause 2); a 30-run loop also hit runs of 200–900 s that look like the Mac sleeping/throttling, not the app.
 Note:    a card shows only what a runner event or listThreads delivered; anything saved to disk mid-turn needs its own event. In e2e, `.answer` includes the streaming node: wait for `.answer:not(.streaming)` when the saved answer matters.
+
+## 2026-10-17 · task 064 · three review attempts used on test coverage + a SPEC.md commit
+tags: keel, review, attempts, memory files, SPEC.md, skill test, hotkey, 064
+Symptom: 064's code was right from the first commit (task tests + `npm test` green, grep clean), yet all 3 attempts went: review 1 fail, close refused, review 3 fail.
+Cause:   (1) `commands.mjs` DEFAULT_HOTKEY had no test, because the installer-commands fake `writeClaudePath` writes the hotkey itself. (2) SPEC.md is a keel memory file; committing the Amendment on keel/064 made `close` refuse, and the restore commit made the passing review stale. (3) `skill.test.ts` checked the install text for Ctrl+Option+C but not the doctor's "On a Mac, say Ctrl+Option+C" line.
+Tried:   review 1 fail → added the win32/darwin "config.json without hotkeys.capture" install test (b1130c4); review 2 pass.
+Tried:   close → "memory committed on keel/064: SPEC.md" → `git restore --source=master --staged -- SPEC.md` + "064: restore memory" (3b6bb68) → review stale → review 3 fail (doctor Mac line unasserted).
+Note:    SPEC.md amendments stay uncommitted until the close commit on W, like DECISIONS. Before the first review, mutate each changed literal back (scratch copy) and confirm some test fails, for user-facing text as well as code.

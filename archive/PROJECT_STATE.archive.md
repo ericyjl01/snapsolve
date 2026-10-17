@@ -12,3 +12,4 @@
 2026-10-14 · 006 · paused · flakes traced to transient EPERM on store renames; waits on 016 (pulled into M1); cap check and outcome checks fixed → keel/006 (e762521)
 2026-10-14 · 016 · closed · store renames (thread.json, transcript adoption) retry EPERM/EBUSY/EACCES up to 200 ms; ENOSPC and others fail at once; 006 stress 0/300 failures (a7c48b2)
 2026-10-14 · 006 · blocked · review failed 3 times: spawn error logs the system prompt; failed first turn leaves its transcript unadopted — how to proceed? → keel/006 (b7280c2)
+2026-10-14 · 007 · closed · encodeForModel (2576 long edge, JPEG 85 over 3 MB), capturer (cursor display, source match, mutex, panel hide below Win 10 2004 and on macOS), captureFailed kind, decideAppend (775ec73)

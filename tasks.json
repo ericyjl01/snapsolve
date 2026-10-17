@@ -1509,6 +1509,50 @@
         "reasons": "runner.test 057 x2 prove the saved user turn is emitted (after status, before delta; follow-up yes, retry no), app.test 057 proves turn -> threads:changed carrying the seed note and surviving a later status patch, panel e2e 057 proves the note shows within 5s while the seeded answer is held 20s; all 4 new tests fail against master src (verified in a scratch copy); 051 wait tightened to .answer:not(.streaming) (genuine test bug, renderer.ts:181); task tests 107/107, panel e2e 10/10 in a row, npm test exit 0 (793 passed)",
         "at": "2026-10-17"
       }
+    },
+    {
+      "id": "058",
+      "title": "panel: drag to move the open panel, position remembered",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [],
+      "file": "docs/tasks/058-panel-drag-to-move.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "Eric 2026-10-17: can't move the panel; wants it as a feature. Changes SPEC 4.1 (right-edge dock) — needs a DECISIONS row + SPEC amendment.",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/unit/panel.test.ts test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
+    },
+    {
+      "id": "059",
+      "title": "panel: resize the open panel by its edges, size remembered",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [
+        "058"
+      ],
+      "file": "docs/tasks/059-panel-resize.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "Eric 2026-10-17: can't resize the panel; wants it as a feature. Shares 058's saved-bounds store.",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/unit/panel.test.ts test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

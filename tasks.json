@@ -1539,7 +1539,7 @@
     {
       "id": "059",
       "title": "window: resize from any edge or corner, size remembered",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "milestone": 3,
       "deps": [
@@ -1547,17 +1547,22 @@
       ],
       "file": "docs/tasks/059-panel-resize.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/059",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "1bf32d2",
       "notes": "Eric 2026-10-17: mockup A2. Default 360x460, min 280x300. Shares 058's saved-bounds store.",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/panel.test.ts test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "1fd7f0288a863bbf91cac75b26c8218c89cb6f32",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "336bbef708d59a1ab1f3a206bc9b48b6d5f61e7c",
+        "reasons": "Unit tests prove resizable + 280x300 minimum only while open (tab exempt), resized saves width/height/x/y per display after debounce, under-minimum resizes put back and not saved, saved sizes raised to minimum and clamped to work area, transition resizes never saved, default 360x460, redock and reset handle size; e2e proves isResizable/getMinimumSize, OS-enforced minimum, window.json write and reopen at saved size after collapse+capture. Post-red test change only makes the e2e emit resized after restoring bounds (stabilization, no weakening). Task tests and npm test exit 0. Manual Mac edge-drag check deferred to the 032 checklist per DECISIONS.",
+        "at": "2026-10-17"
+      }
     },
     {
       "id": "060",
@@ -1716,6 +1721,27 @@
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/config.test.ts test/unit/installer-steps.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
+    },
+    {
+      "id": "067",
+      "title": "e2e: Thinking… check races the slow fake's first piece (panel e2e)",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [],
+      "file": "docs/tasks/067-e2e-thinking-check-races-the-slow-fake-s.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
       "tests_commit": null,
       "no_tests": null,
       "review": null

@@ -215,3 +215,9 @@ Cause:   (1) `commands.mjs` DEFAULT_HOTKEY had no test, because the installer-co
 Tried:   review 1 fail → added the win32/darwin "config.json without hotkeys.capture" install test (b1130c4); review 2 pass.
 Tried:   close → "memory committed on keel/064: SPEC.md" → `git restore --source=master --staged -- SPEC.md` + "064: restore memory" (3b6bb68) → review stale → review 3 fail (doctor Mac line unasserted).
 Note:    SPEC.md amendments stay uncommitted until the close commit on W, like DECISIONS. Before the first review, mutate each changed literal back (scratch copy) and confirm some test fails, for user-facing text as well as code.
+
+## 2026-10-17 · task 059 · panel e2e "captureFromFile opens…" saw an answer before its no-answer check (1 in 4)
+tags: e2e, flaky, panel, thinking, fake claude, slow scenario, cold start
+Symptom: `test/e2e/panel.e2e.test.ts` first test: `expect(… .answer count).toBe(0)` got 1 (1974 ms, first test right after `npm run build`); 3 isolated reruns passed.
+Cause:   (suspected) the slow fake emits its first text piece `FAKE_DELAY_MS / 3` = 500 ms after spawn; when the first window is slow to show "Thinking…", the answer node already exists by the time the check runs. Not from 059 (no renderer timing change).
+Note:    backlog task (see tasks.py list): check the order (Thinking… before any .answer) from a renderer-side record, or raise the first piece's delay in that test.

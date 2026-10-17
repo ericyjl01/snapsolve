@@ -855,7 +855,7 @@
     {
       "id": "032",
       "title": "macOS checklist on Eric's Mac",
-      "status": "open",
+      "status": "blocked",
       "priority": 5,
       "milestone": 3,
       "deps": [
@@ -865,9 +865,9 @@
         "031"
       ],
       "file": "docs/tasks/032-macos-checklist.md",
-      "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "blocked_on": "needs Eric: run docs/checklists/macos.md (on keel/032) on the Mac and report each item's result — pass, or what you saw; each fail becomes a follow-up task and the results are recorded in the file",
+      "attempts": 1,
+      "branch": "keel/032",
       "stash": null,
       "closed_at": null,
       "commit": null,

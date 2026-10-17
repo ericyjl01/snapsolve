@@ -2,14 +2,13 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-048, 015, 014 closed: macOS suite green; `npm test` is the full gate; userData = <data dir>/electron.
-009 blocked before any code: × / tab click need a renderer→main call the 9-function preload lacks (asked: Amendment 3 togglePanel()).
-- next action: queue all blocked on 009's question; answer it, then paste the goal line
-010/011/013/030 wait on 009. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
+009 closed: panel window (snapsolve://app renderer, thread thumbnails), 9-function preload, cards UI, app.ts pipeline; Esc-only dismissal.
+- next action: 010 (hotkeys, tray, lifecycle) is unblocked; then 011, 013, 030
+- follow-ups filed from 009 (M1): 050 retry duplicate turn, 051 7th-append seed, 052 stale busy threads
+M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
 - Windows PC leftovers: delete stale %APPDATA%\snapsolve (014); ASR exclusion still needed there
 
 ## Log
-2026-10-14 · 015 · blocked · parked: finish on a Mac (Eric); ASR rule 01443614 still blocks electron.exe on this PC (-)
 2026-10-14 · 006 · closed · runner: SPEC §3.1 argv, stripped env, stream events, per-thread FIFO under a global cap, timeout kill, resume with fresh-session fallback; spawn errors logged without argv; a new session's transcript adopted after any exit (712edc0)
 2026-10-14 · 012 · closed · prompts/system.md (DESIGN draft, new example, code-bug answer line quotes the faulty line); live test on 4 generated problem PNGs via the real runner: opus/high 4/4 in 5 consecutive runs, sonnet/high 3/4; docs/live-results.md, DESIGN §10 item 5 (3093f03)
 2026-10-14 · 017 · closed · option (a) (Eric): KaTeX's svg+path kept with only KaTeX's attributes — SPEC Amendment 1; render change is 019 (-)
@@ -49,3 +48,4 @@ On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip
 2026-10-17 · 015 · closed · npm test (unit + integration + e2e) is the full-suite gate again (keel.json, harness test); on Eric's Mac the Electron precondition is ok and the first full run of everything closed under the temporary gate is green (2218b7c)
 2026-10-17 · 009 · blocked · SPEC §4.3 × / tab click vs §4.4 nine-function preload — Amendment 3 togglePanel()? → keel/009 (-)
 2026-10-17 · 014 · closed · Electron userData is <data dir>/electron in every mode (resolveDataDir before ready); e2e covers the override and the platform default (HOME on macOS, LOCALAPPDATA on Windows); stale %APPDATA% cleanup left for the Windows PC (36c02ef)
+2026-10-17 · 009 · closed · panel window per platform (content protection before first show, showInactive, 6-step 120 ms tab/open transitions, Esc in main), renderer served from snapsolve://app with thread thumbnails from snapsolve://thread, exactly the 9 preload functions, cards UI (Thinking…, streamed rendered answer, Copy, Retry, follow-up, status line), app.ts capture → store → runner → panel pipeline with event-ordered thread view, claude path resolution, captureFromFile test hook; follow-ups 050–052 (4ea2f32)

@@ -16,3 +16,4 @@
 2026-10-14 · 008 · closed · renderAnswer: markdown-it (no raw HTML) + KaTeX HTML (trust off, maxExpand 1000, maxSize 50) + highlight.js common + DOMPurify (no img/svg/math, http(s) only); KaTeX CSS/fonts + hljs theme copied to dist/renderer (5e477bc)
 2026-10-14 · 017 · blocked · KaTeX SVG symbols stripped by the SPEC §4.4 svg ban — allow svg+path, accept, or steer the model? (-)
 2026-10-14 · 015 · blocked · precondition EPERM: Defender ASR rule 01443614 still blocks electron.exe — IT exclusion or Microsoft submission needed (-)
+2026-10-14 · 015 · blocked · parked: finish on a Mac (Eric); ASR rule 01443614 still blocks electron.exe on this PC (-)

@@ -14,7 +14,8 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `auth.ts`: `claude auth status`, usage/rate-limit formatting
   - `encode.ts`: resize / PNG→JPEG fallback for the image sent to the model (pure, over an image interface)
   - `capture.ts`: display + source selection, capture mutex, platform panel handling
-  - `panel.ts`: the panel BrowserWindow, tab/open bounds, content protection, IPC handlers, `snapsolve://` protocol
+  - `panel.ts`: the panel BrowserWindow, tab/open bounds, content protection, IPC handlers, `snapsolve://` protocol (`app/<file>` = the renderer from `dist/renderer`, `thread/<uuid>/<n>.png` = thumbnails), auto-hide timer
+  - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `onAppend`), the renderer's request handlers, runner events → panel, `resolveClaudeCommand`
   - `hotkeys.ts`: globalShortcut registration, debounce, pause/resume
   - `tray.ts`: tray menu and tooltip
 - `src/preload/preload.ts`: contextBridge exposing exactly the SPEC §4.4 API

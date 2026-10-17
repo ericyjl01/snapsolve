@@ -178,3 +178,9 @@ Symptom: `expect(JSON.stringify(events.at(-1))).not.toContain(ANSWER)` failed wi
 Cause:   the `error` event carries the whole thread, whose saved assistant turn keeps the streamed partial answer as its text (shown on the card by design).
 Fix:     assert on the event's `message` (and the stored turn's `errorMessage`) instead of the whole event (0fcfd88).
 Note:    privacy checks on runner events: target the error fields; the thread payload legitimately holds answer text.
+
+## 2026-10-17 · task 009 · Playwright key presses skip before-input-event
+tags: e2e, playwright, electron, keyboard, esc, panel
+Symptom: panel e2e "Esc collapses to the tab" stayed at 420 px wide; main's `webContents.on("before-input-event")` never saw the key.
+Cause:   Playwright's `page.keyboard.press` dispatches through CDP (`Input.dispatchKeyEvent`), which does not pass Electron's browser-side input pre-handler. Probe: listener saw `[]` after `keyboard.press("Escape")`, `["keyDown:Escape"]` after `webContents.sendInputEvent`.
+Fix:     e2e sends keys that main handles with `webContents.sendInputEvent({ type: "keyDown"|"keyUp", keyCode })` from `app.evaluate` (d84a830). Use Playwright's keyboard only for keys the renderer handles (e.g. Enter in the follow-up box).

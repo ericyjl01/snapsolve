@@ -36,9 +36,9 @@ It checks Node, Claude Code and its login, installs the app into the user's loca
 
 When it succeeds, tell the user:
 
-- snapsolve runs in the notification area (Windows) or the menu bar (macOS), and the hotkey the output names (Ctrl+Alt+Q on Windows, Ctrl+Option+Q on macOS, unless they changed it) captures the screen and opens the answer panel.
+- snapsolve runs in the notification area (Windows) or the menu bar (macOS), and the hotkey the output names (Ctrl+Alt+C on Windows, Ctrl+Option+C on macOS, unless they changed it) captures the screen and opens the answer panel.
 - **Screen Recording (macOS)**: walk them through it. The first capture makes macOS ask for Screen Recording; they turn snapsolve on in System Settings → Privacy & Security → Screen Recording, then click Relaunch on the snapsolve card (macOS only applies the grant to a restarted app). Until then the card offers Open System Settings and Relaunch.
-- **AltGr** (Windows): on German, French and Polish keyboard layouts Ctrl+Alt is the same as AltGr, so Ctrl+Alt+Q also catches AltGr+Q (that types @ on a German keyboard). If they need that key, change `hotkeys.capture` in the config.json the output names.
+- **AltGr** (Windows): on German, French and Polish keyboard layouts Ctrl+Alt is the same as AltGr, so Ctrl+Alt+C also catches AltGr+C (that types ć on a Polish keyboard). If they need that key, change `hotkeys.capture` in the config.json the output names.
 - **Pro plan**: snapsolve answers with Opus at high effort, which uses a Pro plan's weekly Opus allowance faster. The tray tooltip shows the 5-hour and 7-day usage. To save allowance, set `"model": "sonnet"` in config.json and restart snapsolve.
 
 ## start
@@ -71,9 +71,9 @@ node "${CLAUDE_PLUGIN_ROOT}/skills/snapsolve/scripts/snapsolve.mjs" doctor
 
 Report every `fail:` and `warn:` line with its fix (the install section explains the Node, login and Defender ASR ones; an older installed version means `/snapsolve update`). Then ask:
 
-> Press Ctrl+Alt+Q now — did a card appear with an answer?
+> Press Ctrl+Alt+C now — did a card appear with an answer?
 
-On a Mac, say Ctrl+Option+Q instead. Read `hotkeys.capture` in the config file first (`%LOCALAPPDATA%\snapsolve\config.json` on Windows, `~/Library/Application Support/snapsolve/config.json` on a Mac): if it is set to another hotkey, ask with that one.
+On a Mac, say Ctrl+Option+C instead. Read `hotkeys.capture` in the config file first (`%LOCALAPPDATA%\snapsolve\config.json` on Windows, `~/Library/Application Support/snapsolve/config.json` on a Mac): if it is set to another hotkey, ask with that one.
 
 If no card appeared: check that the snapsolve icon is in the tray (the menu bar on a Mac; `/snapsolve start` if not), whether a notification said the hotkey is taken by another app, and read the newest lines of the log (`%LOCALAPPDATA%\snapsolve\logs\snapsolve.log` on Windows, `~/Library/Application Support/snapsolve/logs/snapsolve.log` on a Mac).
 

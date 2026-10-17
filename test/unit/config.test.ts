@@ -180,7 +180,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       panelWidth: 500,
-      hotkeys: { capture: "Control+Alt+Q", append: "Control+Alt+Shift+W" },
+      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+W" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -251,7 +251,7 @@ describe("loadConfig", () => {
     await writeConfig({
       model: "sonnet",
       colour: "blue",
-      hotkeys: { capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q", extra: "x" },
+      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+Q", extra: "x" },
     });
     const before = await snapshot();
     const r = await loadConfig(file);

@@ -6,7 +6,7 @@ import type { Config, Effort, Hotkeys } from "../shared/types";
 import type { Logger } from "./log";
 
 export const DEFAULTS: Readonly<Config> = Object.freeze({
-  hotkeys: Object.freeze({ capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q" }),
+  hotkeys: Object.freeze({ capture: "Control+Alt+C", append: "Control+Alt+Shift+Q" }),
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -139,7 +139,7 @@ function validateHotkeys(raw: unknown, warnings: string[]): Hotkeys {
     } else if (typeof value === "string" && normalizeAccelerator(value) !== null) {
       hotkeys[key] = value;
     } else {
-      warnings.push(invalid(`hotkeys.${key}`, 'an Electron accelerator such as "Control+Alt+Q"', value, DEFAULTS.hotkeys[key]));
+      warnings.push(invalid(`hotkeys.${key}`, 'an Electron accelerator such as "Control+Alt+C"', value, DEFAULTS.hotkeys[key]));
     }
   }
   if (normalizeAccelerator(hotkeys.capture) === normalizeAccelerator(hotkeys.append)) {

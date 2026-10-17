@@ -29,3 +29,4 @@
 2026-10-14 · 027 · blocked · plugin.json version: omit per the claude-skills convention, or set it per DESIGN §5? (-)
 2026-10-14 · 022 · blocked · review failed 3 times: packager 20.3.0 needs Node >= 22.12 vs DESIGN's Node >= 20; node_modules exclusion untested — raise the minimum to 22.12 or pin packager 18.4.4? → keel/022 (2ce8b77)
 2026-10-14 · keel · planned · M3 — macOS (6 tasks: 018 moved in, 028–032; backlog 033 app icons) (-)
+2026-10-14 · 030 · blocked · SPEC §4.4 preload list vs §7.1 macOS card buttons — amend to add openScreenRecordingSettings() and relaunch()? (-)

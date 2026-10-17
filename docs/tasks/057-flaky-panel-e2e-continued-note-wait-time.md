@@ -8,9 +8,9 @@ In:  the 051 continued-thread path (app.ts append → store seed → panel threa
 Out: other e2e tests unless they share the same root cause (then a separate task); raising timeouts as the fix.
 
 ## Done when
-- [ ] the root cause is named in docs/issues.md with the evidence
-- [ ] `npx vitest run test/e2e/panel.e2e.test.ts` passes 10 runs in a row (`for i in $(seq 10); do npx vitest run test/e2e/panel.e2e.test.ts || break; done`)
-- [ ] `npm test` exits 0
+- [x] the root cause is named in docs/issues.md with the evidence
+- [x] `npx vitest run test/e2e/panel.e2e.test.ts` passes 10 runs in a row (`for i in $(seq 10); do npx vitest run test/e2e/panel.e2e.test.ts || break; done`)
+- [x] `npm test` exits 0
 
 ## Tests
 Command: `npx vitest run test/e2e/panel.e2e.test.ts`
@@ -21,3 +21,4 @@ SPEC §4.3 (thread view), DECISIONS row for 051 (continued threads).
 
 ## Notes
 Found by 055's reviewer, 2026-10-17. Use systematic debugging: reproduce with repeated runs and app logs before touching code.
+2026-10-17: two causes (docs/issues.md 057). (1) the seeded user turn reached the card only at answer:done → runner `turn` event + app broadcast (46f93ef). (2) the 051 (and new 057) e2e waited on `.answer`, which also matches the streaming node, so the append could run before the first answer was saved → unseeded thread, no note (dbc899b). Done-when: 10/10 panel e2e runs (12–14 s each, under `caffeinate -dims` — the lid-closed Mac otherwise sleeps mid-run and hangs tests 150–900 s); task tests 107/107; npm test 793 passed.

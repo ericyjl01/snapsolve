@@ -1487,23 +1487,28 @@
     {
       "id": "057",
       "title": "flaky panel e2e: continued-note wait times out (panel.e2e.test.ts:205)",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 3,
       "deps": [],
       "file": "docs/tasks/057-flaky-panel-e2e-continued-note-wait-time.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/057",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "d1e5294",
       "notes": "",
       "kind": "task",
-      "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "test_cmd": "npx vitest run test/unit/runner.test.ts test/unit/app.test.ts test/e2e/panel.e2e.test.ts",
+      "tests_commit": "69a1f632174f9815a9aac791b4d3fc30d8765496",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "dbc899b35b014a1a6fcc14f64e496e5fac002fd1",
+        "reasons": "runner.test 057 x2 prove the saved user turn is emitted (after status, before delta; follow-up yes, retry no), app.test 057 proves turn -> threads:changed carrying the seed note and surviving a later status patch, panel e2e 057 proves the note shows within 5s while the seeded answer is held 20s; all 4 new tests fail against master src (verified in a scratch copy); 051 wait tightened to .answer:not(.streaming) (genuine test bug, renderer.ts:181); task tests 107/107, panel e2e 10/10 in a row, npm test exit 0 (793 passed)",
+        "at": "2026-10-17"
+      }
     }
   ]
 }

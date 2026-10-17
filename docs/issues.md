@@ -191,3 +191,10 @@ Symptom: first reviewer failed 010: the tray's "Open history folder" called `she
 Cause:   `shell.openPath` resolves with an error message instead of rejecting, and the folder is only recreated on the next capture.
 Fix:     `openHistoryFolder` in tray.ts: mkdir -p threads/, then openPath, failures logged; unit test; Windows taken-key notice moved to `tray.displayBalloon` per the reviewer's note (f71b417).
 Note:    `shell.openPath` never throws: check its resolved string, and create a folder the user may have cleared before opening it.
+
+## 2026-10-17 · task 011 · review fail: uncommitted DECISIONS rows pushed the file over its cap
+tags: keel, caps, decisions, review, harness, memory files
+Symptom: reviewer 1 failed 011: `npm test` exit 1 at test/unit/harness.test.ts "keeps keel caps within limits" — DECISIONS.md 101/100 lines after five 011 rows (the committed tip itself was fine).
+Cause:   the harness caps check reads the working tree, where memory files sit uncommitted until close; the rows were added after the last full-suite run.
+Fix:     folded the two auth rows into one (100/100). `tasks.py review` refuses a pass on the commit that failed and memory files may not be committed on keel/<id>, so the tip moved with an empty marker commit (95753b5) naming the fix; reviewer 3 passed.
+Note:    run `check.py caps` after adding DECISIONS rows and before the review; tidy DECISIONS.md when it nears 100 lines.

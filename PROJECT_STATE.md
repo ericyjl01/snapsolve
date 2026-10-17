@@ -2,13 +2,12 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-010 closed (merge f2a5903): hotkeys, tray, single instance, power/screen events, capture wiring.
-- not verified here: tray icon by eye and a real Ctrl+Option+Q capture → 013/032 checklists
-Next: 011 (error states, auth, usage), then 050, 051, 052, 013, 030. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
-- Windows PC leftovers: delete stale %APPDATA%\snapsolve (014); ASR exclusion still needed there
+011 closed (merge c0aa915): auth status, usage gate, error/warning/usage on the card and tray tooltip.
+- DECISIONS.md is at its 100-line cap: tidy (archive closed-task rows) before the next task adds a row
+Next: 050 (Retry without a duplicate user turn), then 051, 052, 013, 030. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
+- not verified here: tray icon / real capture (013/032 checklists); Windows PC: delete stale %APPDATA%\snapsolve (014), ASR exclusion
 
 ## Log
-2026-10-14 · 012 · closed · prompts/system.md (DESIGN draft, new example, code-bug answer line quotes the faulty line); live test on 4 generated problem PNGs via the real runner: opus/high 4/4 in 5 consecutive runs, sonnet/high 3/4; docs/live-results.md, DESIGN §10 item 5 (3093f03)
 2026-10-14 · 017 · closed · option (a) (Eric): KaTeX's svg+path kept with only KaTeX's attributes — SPEC Amendment 1; render change is 019 (-)
 2026-10-14 · 019 · paused · Eric asked to pause; tests committed and red accepted, implementation not started → keel/019 (4fd7640)
 2026-10-14 · 019 · closed · KaTeX svg+path kept with only KaTeX's attributes (own DOMPurify instance, hooks drop other SVG elements and attributes, geometry URI-safe); sanitize(html) exported; \cancel strike stays out; DESIGN §3.6 updated (ce39fd3)
@@ -48,3 +47,4 @@ Next: 011 (error states, auth, usage), then 050, 051, 052, 013, 030. M2 026 (app
 2026-10-17 · 014 · closed · Electron userData is <data dir>/electron in every mode (resolveDataDir before ready); e2e covers the override and the platform default (HOME on macOS, LOCALAPPDATA on Windows); stale %APPDATA% cleanup left for the Windows PC (36c02ef)
 2026-10-17 · 009 · closed · panel window per platform (content protection before first show, showInactive, 6-step 120 ms tab/open transitions, Esc in main), renderer served from snapsolve://app with thread thumbnails from snapsolve://thread, exactly the 9 preload functions, cards UI (Thinking…, streamed rendered answer, Copy, Retry, follow-up, status line), app.ts capture → store → runner → panel pipeline with event-ordered thread view, claude path resolution, captureFromFile test hook; follow-ups 050–052 (4ea2f32)
 2026-10-17 · 010 · closed · hotkeys (capture/append, 400 ms debounce, taken-key notice naming hotkeys.<name>; Windows as a tray balloon), tray drawn in code with 5 items (Open panel, Pause/Resume, Open history folder creating threads/ first, Clear history, Quit), single instance with --quit, pause/resume on suspend/lock with hotkey re-registration; manual tray/capture checks deferred to 013/032 (f2a5903)
+2026-10-17 · 011 · closed · auth.ts: claude auth status (output decides, identity fields never returned or logged), usage line 5h N% · 7d M%, block until resetsAt with a local reset time; runner rechecks auth after an error result, fails usage-blocked turns before spawning, saves warning/usage on answers; startup notice for not found / logged out; card warning + usage footer; tray tooltip usage (c0aa915)

@@ -18,3 +18,4 @@
 2026-10-14 · 015 · blocked · precondition EPERM: Defender ASR rule 01443614 still blocks electron.exe — IT exclusion or Microsoft submission needed (-)
 2026-10-14 · 015 · blocked · parked: finish on a Mac (Eric); ASR rule 01443614 still blocks electron.exe on this PC (-)
 2026-10-14 · 006 · closed · runner: SPEC §3.1 argv, stripped env, stream events, per-thread FIFO under a global cap, timeout kill, resume with fresh-session fallback; spawn errors logged without argv; a new session's transcript adopted after any exit (712edc0)
+2026-10-14 · 012 · closed · prompts/system.md (DESIGN draft, new example, code-bug answer line quotes the faulty line); live test on 4 generated problem PNGs via the real runner: opus/high 4/4 in 5 consecutive runs, sonnet/high 3/4; docs/live-results.md, DESIGN §10 item 5 (3093f03)

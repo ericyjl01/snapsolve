@@ -294,7 +294,7 @@
     {
       "id": "011",
       "title": "Error states, auth and usage surfacing",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 1,
       "deps": [
@@ -302,17 +302,22 @@
       ],
       "file": "docs/tasks/011-errors-auth.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 2,
+      "branch": "keel/011",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "c0aa915",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/auth.test.ts test/integration/errors.integration.test.ts test/e2e/errors.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "377fbe1931b02535f516295b9f0244e1d9dfa335",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "95753b5fd35160a3b076eab0fb95b87009ef39da",
+        "reasons": "build exit 0; task tests 36/36 and npm test 741 pass (7 pre-existing platform skips) prove: auth status parse true/false, exit-1 JSON->loggedOut, ENOENT->claudeNotFound, malformed->unknown, no email/org leak; usage rounding/omission, non-allowed->blocked with reset time; notLoggedIn via recheck, api-key warning event+card, rate-limit gate with no spawn until reset; e2e exact not-found text, hang->Retry->ok answer; post-red test edits only strengthen; caps fixed (DECISIONS 100/100)",
+        "at": "2026-10-17"
+      }
     },
     {
       "id": "012",

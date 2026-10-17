@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import {
   app,
   BrowserWindow,
@@ -24,6 +25,7 @@ import {
 import { SnapsolveError, userMessage } from "../shared/errors";
 import { IPC } from "../shared/ipc";
 import { createApp, resolveClaudeCommand, type Shot } from "./app";
+import { checkAuth } from "./auth";
 import { createCapturer } from "./capture";
 import { loadConfig } from "./config";
 import { encodeForModel } from "./encode";
@@ -95,6 +97,13 @@ async function start(): Promise<void> {
     : () => resolveClaudeCommand({ claudePath: config.claudePath, env: process.env, platform: process.platform, home, isFile });
   const env = fakeClaude ? { ...process.env, ELECTRON_RUN_AS_NODE: "1" } : process.env;
   const projectsDir = (test && process.env.SNAPSOLVE_TEST_PROJECTS) || path.join(home, ".claude", "projects");
+  const authStatus = () =>
+    checkAuth({
+      execFile: promisify(execFile),
+      command: typeof command === "function" ? command() : command,
+      env: buildEnv(env, config.allowApiKey),
+      log,
+    });
 
   const store = createStore({
     dataDir,
@@ -112,6 +121,7 @@ async function start(): Promise<void> {
     sessionsDir: paths.sessions,
     log,
     loadSendImage,
+    checkAuth: authStatus,
   });
 
   const rendererDir = path.join(__dirname, "renderer");
@@ -151,6 +161,7 @@ async function start(): Promise<void> {
       return response === 0;
     },
     onTurnEnded: () => panel.turnEnded(),
+    onUsage: (usage) => tray?.setTooltip(usage),
   });
   panel.handle({
     [IPC.threadsList]: core.handlers.listThreads,
@@ -161,9 +172,12 @@ async function start(): Promise<void> {
     [IPC.historyClear]: core.handlers.clearHistory,
   });
 
-  // SPEC §1.1 "tray notification": a balloon on the Windows tray icon; a system notification on macOS.
+  // SPEC §1.1 "tray notification": a balloon on the Windows tray icon; a system notification on macOS. Test mode
+  // records them instead (e2e reads them through `snapsolveTest.notifications`).
+  const notices: string[] = [];
   const notify = (body: string) => {
-    if (process.platform === "win32" && tray) tray.balloon(body);
+    if (test) notices.push(body);
+    else if (process.platform === "win32" && tray) tray.balloon(body);
     else if (Notification.isSupported()) new Notification({ title: "snapsolve", body }).show();
     else log.warn("app.notifyUnsupported", {});
   };
@@ -222,8 +236,15 @@ async function start(): Promise<void> {
       /** The same through the append path (the most recent capture's thread). */
       appendFromFile: async (png: string) => core.onAppend({ png: readImage(png).toPNG() }),
       hotkeyStatus: () => keys.status(),
+      notifications: () => [...notices],
     };
   }
+
+  // SPEC §3.6: at startup, a claude that cannot be found or is logged out is reported before the first capture.
+  void authStatus().then((auth) => {
+    if (auth.kind === "claudeNotFound") notify(userMessage("claudeNotFound"));
+    else if (auth.kind === "ok" && !auth.loggedIn) notify(userMessage("notLoggedIn"));
+  });
   log.info("app.ready", { version: __APP_VERSION__, platform: process.platform, test });
 }
 

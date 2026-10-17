@@ -42,6 +42,10 @@ export interface AssistantTurn {
   errorMessage?: string;
   /** Set when resume failed and this answer came from a fresh session seeded with the thread's history. */
   note?: "resumeFallback";
+  /** Set when this turn billed to an API key although `allowApiKey` is false (SPEC §3.6). */
+  warning?: "apiKeyInUse";
+  /** The usage after this turn, as the card footer shows it ("5h N% · 7d M%"). */
+  usage?: string;
 }
 
 export type Turn = UserTurn | AssistantTurn;

@@ -7,6 +7,7 @@ import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { type ErrorKind, SnapsolveError, userMessage } from "../shared/errors";
 import type { AssistantTurn, Config, Effort, Thread, ThreadStatus, Turn, UserTurn } from "../shared/types";
+import { type AuthStatus, formatUsage, isUsageBlocked, type UsageInfo, usageBlockedMessage } from "./auth";
 import type { Logger } from "./log";
 import type { Store } from "./store";
 import { createLineSplitter, parseEvent, type RateWindow, type StreamEvent } from "./stream";
@@ -90,6 +91,8 @@ export interface RunnerDeps {
   loadSendImage: (file: string) => Promise<SendImage>;
   /** How long a timed-out claude gets to exit after the first kill before SIGKILL; default `KILL_GRACE_MS`. */
   killGraceMs?: number;
+  /** `claude auth status`, rechecked after an error result (SPEC §3.6); logged out turns the error into notLoggedIn. */
+  checkAuth?: () => Promise<AuthStatus>;
 }
 
 export interface Runner {
@@ -221,6 +224,10 @@ interface Attempt {
   sawText: boolean;
   ttftMs: number | null;
   rateLimited: boolean;
+  /** `system/init` said billing goes to an API key although `allowApiKey` is false. */
+  apiKeyWarning: boolean;
+  /** This attempt's latest `rate_limit_event`. */
+  usage: UsageInfo | null;
   /** claude started (got a pid), so it may have written a transcript. */
   ran: boolean;
   spawnError: NodeJS.ErrnoException | null;
@@ -236,6 +243,8 @@ export function createRunner(deps: RunnerDeps): Runner {
   const waiting: Job[] = [];
   const busy = new Set<string>();
   let running = 0;
+  /** The latest `rate_limit_event` of any turn: while it blocks, turns fail before spawning (SPEC §3.6). */
+  let usage: UsageInfo | null = null;
 
   function emit(event: RunnerEvent): void {
     for (const listener of listeners) {
@@ -271,31 +280,36 @@ export function createRunner(deps: RunnerDeps): Runner {
   }
 
   /**
-   * Emits `error` and, when `record`, saves the errored assistant turn (if claude ran) and the error status.
-   * Never throws.
+   * Emits `error` and, when `record`, saves the errored assistant turn (if claude ran, or `turn`) and the error
+   * status. An error result first rechecks `claude auth status`. Never throws.
    */
   async function fail(
     threadId: string,
     e: unknown,
     attempt: Attempt | null,
-    { startedAt = now(), record = true } = {},
+    { startedAt = now(), record = true, turn: saveTurn = attempt !== null } = {},
   ): Promise<TurnOutcome> {
-    const { kind, message } = classifyError(e);
+    let { kind, message } = classifyError(e);
     // The error carries the details (stderr tail, exception, stack); never the answer text.
     log.warn("runner.turnFailed", { threadId, kind, code: attempt?.code ?? null, error: e });
+    if (attempt?.result?.isError && kind !== "notLoggedIn" && kind !== "usageLimit" && (await loggedOut())) {
+      kind = "notLoggedIn";
+      message = userMessage(kind);
+    }
     let thread: Thread | null = null;
     if (record && kind !== "threadNotFound") {
       try {
-        if (attempt) {
+        if (saveTurn) {
           const turn: AssistantTurn = {
             role: "assistant",
-            text: attempt.text,
-            durationMs: attempt.result?.durationMs ?? now() - startedAt,
-            ttftMs: attempt.result?.ttftMs ?? attempt.ttftMs,
-            costUsd: attempt.result?.totalCostUsd ?? null,
+            text: attempt?.text ?? "",
+            durationMs: attempt?.result?.durationMs ?? now() - startedAt,
+            ttftMs: attempt?.result?.ttftMs ?? attempt?.ttftMs ?? null,
+            costUsd: attempt?.result?.totalCostUsd ?? null,
             isError: true,
             errorKind: kind,
             errorMessage: message,
+            ...(attempt ? annotations(attempt) : {}),
           };
           await store.appendTurn(threadId, turn);
         }
@@ -308,11 +322,28 @@ export function createRunner(deps: RunnerDeps): Runner {
     return { ok: false, kind, message };
   }
 
+  /** True only when `claude auth status` answered and said logged out; any failure to check is not a verdict. */
+  async function loggedOut(): Promise<boolean> {
+    if (!deps.checkAuth) return false;
+    try {
+      const auth = await deps.checkAuth();
+      return auth.kind === "ok" && !auth.loggedIn;
+    } catch (e) {
+      log.warn("runner.authCheckFailed", { error: e });
+      return false;
+    }
+  }
+
   async function run(threadId: string, request: TurnRequest): Promise<TurnOutcome> {
     const startedAt = now();
     let thread = await store.getThread(threadId);
     await setStatus(threadId, "running");
     thread = await store.appendTurn(threadId, userTurn(request));
+    if (usage && isUsageBlocked(usage, now())) {
+      log.info("runner.usageBlocked", { threadId, status: usage.status, resetsAt: usage.resetsAt });
+      const blocked = new SnapsolveError("usageLimit", usageBlockedMessage(usage.resetsAt as number, now()));
+      return fail(threadId, blocked, null, { startedAt, turn: true });
+    }
     const prior = thread.turns.slice(0, -1);
     const answers = prior.filter(isAnswer).map((t) => t.text);
 
@@ -353,6 +384,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       costUsd: result.totalCostUsd,
       isError: false,
       ...(note ? { note } : {}),
+      ...annotations(attempt),
     };
     await store.appendTurn(threadId, turn);
     thread = await setStatus(threadId, "done");
@@ -386,6 +418,8 @@ export function createRunner(deps: RunnerDeps): Runner {
       sawText: false,
       ttftMs: null,
       rateLimited: false,
+      apiKeyWarning: false,
+      usage: null,
       ran: false,
       spawnError: null,
       timedOut: false,
@@ -436,17 +470,20 @@ export function createRunner(deps: RunnerDeps): Runner {
           emit({ type: "thinking", threadId: thread.id });
           return;
         case "init":
+          attempt.apiKeyWarning = !config.allowApiKey && event.apiKeySource !== null && event.apiKeySource !== "none";
           emit({
             type: "init",
             threadId: thread.id,
             sessionId: event.sessionId,
             apiKeySource: event.apiKeySource,
             model: event.model,
-            apiKeyWarning: !config.allowApiKey && event.apiKeySource !== null && event.apiKeySource !== "none",
+            apiKeyWarning: attempt.apiKeyWarning,
           });
           return;
         case "rateLimit":
           attempt.rateLimited ||= !event.status.startsWith("allowed");
+          usage = { status: event.status, resetsAt: event.resetsAt, fiveHour: event.fiveHour, sevenDay: event.sevenDay };
+          attempt.usage = usage;
           emit({
             type: "rateLimit",
             threadId: thread.id,
@@ -555,6 +592,12 @@ function question(request: TurnRequest): string {
 
 function screenshotFiles(turns: Turn[]): string[] {
   return turns.flatMap((t) => (t.role === "user" && t.kind === "screenshot" ? [t.file] : []));
+}
+
+/** What the card shows next to an answer: the API-key warning and the usage line (SPEC §3.6). */
+function annotations(attempt: Attempt): Pick<AssistantTurn, "warning" | "usage"> {
+  const line = attempt.usage ? formatUsage(attempt.usage) : "";
+  return { ...(attempt.apiKeyWarning ? { warning: "apiKeyInUse" as const } : {}), ...(line ? { usage: line } : {}) };
 }
 
 function isAnswer(turn: Turn): turn is AssistantTurn {

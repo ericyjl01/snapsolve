@@ -126,6 +126,7 @@ describe("runner with the fake claude", () => {
       ttftMs: 321,
       costUsd: 0.0123,
       isError: false,
+      usage: "5h 12% · 7d 34%",
     });
 
     const owned = path.join(dataDir, "threads", t.id, `${t.sessionId}.jsonl`);

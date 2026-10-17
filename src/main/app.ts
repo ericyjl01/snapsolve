@@ -5,6 +5,7 @@ import path from "node:path";
 import { SnapsolveError } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
 import type { Config, Thread } from "../shared/types";
+import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
 import { isSafeExternalUrl } from "./panel";
@@ -24,6 +25,8 @@ export interface AppDeps {
   confirmClearHistory: () => Promise<boolean>;
   /** Called after every turn ends (the panel's auto-hide countdown). */
   onTurnEnded?: () => void;
+  /** The usage line ("5h N% · 7d M%") from every `rate_limit_event`: the tray tooltip (SPEC §3.6). */
+  onUsage?: (usage: string) => void;
 }
 
 /** A capture's full-resolution PNG (`Screenshot` from capture.ts, or a test fixture). */
@@ -104,6 +107,9 @@ export function createApp(deps: AppDeps): App {
           void patchThread(event.threadId, { status: "error" });
         }
         deps.onTurnEnded?.();
+        return;
+      case "rateLimit":
+        deps.onUsage?.(formatUsage(event));
         return;
       default:
         return;

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -33,7 +33,8 @@ let store: Store;
 const quietLog: Logger = { debug() {}, info() {}, warn() {}, error() {}, flush: async () => {} };
 
 beforeEach(async () => {
-  root = await mkdtemp(path.join(os.tmpdir(), "snapsolve-runner-int-"));
+  // Canonical, so paths compare equal to the child's process.cwd() (macOS tmpdir is under the /var → /private/var link).
+  root = await realpath(await mkdtemp(path.join(os.tmpdir(), "snapsolve-runner-int-")));
   dataDir = path.join(root, "data");
   projects = path.join(root, "projects");
   fakeLog = path.join(root, "fake.log");
@@ -141,6 +142,24 @@ describe("runner with the fake claude", () => {
     expect(start.env).not.toContain("ANTHROPIC_API_KEY");
     expect(start.env).toContain("FAKE_LOG");
     expect(start.stdin?.message.content.map((b) => b.type)).toEqual(["image", "text"]);
+  });
+
+  it("a data dir reached through a symlink: claude runs in its sessions dir and the transcript is still adopted", async () => {
+    const real = path.join(root, "real-data");
+    await mkdir(real);
+    dataDir = path.join(root, "linked-data");
+    await symlink(real, dataDir, process.platform === "win32" ? "junction" : "dir");
+    store = createStore({ dataDir, projectsDir: projects, purge: async () => {}, log: quietLog });
+    const { runner } = makeRunner("ok");
+    const { t, shot } = await newThread();
+    expect(await runner.enqueue(t.id, { kind: "new", screenshot: shot.file })).toEqual(OK);
+
+    const [start] = await fakeEntries();
+    expect(await realpath(start.cwd as string)).toBe(await realpath(path.join(dataDir, "sessions")));
+    const owned = path.join(dataDir, "threads", t.id, `${t.sessionId}.jsonl`);
+    expect((await store.getThread(t.id)).transcriptPath).toBe(owned);
+    expect(existsSync(path.join(real, "threads", t.id, `${t.sessionId}.jsonl`))).toBe(true);
+    expect(await leftInProjects()).toEqual([]);
   });
 
   it("a follow-up resumes by absolute transcript path and the fake appends to that file", async () => {

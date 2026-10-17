@@ -1014,6 +1014,20 @@ describe("CLI test hooks (realSteps.mjs)", () => {
     expect(await isRunning()).toBe(false);
   });
 
+  it("SNAPSOLVE_TEST=1 → only a file named claude.exe (either slash style) runs the fake, on any host OS", async () => {
+    const { b, w } = await wire({ SNAPSOLVE_TEST: "1", SNAPSOLVE_TEST_CLAUDE: FAKE });
+    await w.preflight({ platform: "win32" });
+    const exec = firstArg(b.preflight).exec as Exec;
+    for (const claude of ["C:\\Users\\e\\.local\\bin\\claude.exe", "C:/Users/e/.local/bin/Claude.Exe", "/c/Users/e/claude.exe"]) {
+      await exec(claude, ["--version"], { timeoutMs: 1 });
+      expect(b.run).toHaveBeenLastCalledWith(process.execPath, [FAKE, "--version"], { timeoutMs: 1 });
+    }
+    for (const other of ["C:\\bin\\claude.exe.bak", "C:\\bin\\notclaude.exe", "/usr/local/bin/claude", "claude"]) {
+      await exec(other, ["--version"], { timeoutMs: 1 });
+      expect(b.run).toHaveBeenLastCalledWith(other, ["--version"], { timeoutMs: 1 });
+    }
+  });
+
   it("SNAPSOLVE_TEST=1 with no hook variables → the real exec, launch and isRunning", async () => {
     const { b, w } = await wire({ SNAPSOLVE_TEST: "1" });
     await w.preflight({ platform: "win32" });

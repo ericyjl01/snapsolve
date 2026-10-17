@@ -2,6 +2,8 @@
 
 Status: design agreed with Eric via grill-me interview, 2026-10-13; revised after a Fable design review the same day (see §11). Not yet built.
 
+> **2026-10-17: macOS only.** Windows is archived (SPEC Amendment 4, `archive/windows/README.md`); the Windows parts of this design are kept for reference and are inactive.
+
 ## 1. What it is
 
 Press **Ctrl+Alt+Q** (macOS: **Ctrl+Option+Q**). snapsolve captures the full screen, sends it to Claude (Opus, high effort) via the user's own Claude Code login, and streams a concise step-by-step explanation of the problem on screen into an auto-hiding side panel on the right edge. Answers and screenshots are kept as threads; each thread supports follow-up questions and appending more screenshots.

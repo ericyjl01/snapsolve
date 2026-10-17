@@ -10,10 +10,10 @@ On Eric's Mac at /Users/ericli/dev/snapsolve-master (no remote). macOS only (Ame
 - e2e on this Mac: keep it awake (`caffeinate -dims`); with the lid closed tests hang 150–900 s.
 Backlog: 033 (macOS icon), 042, 053, 054, 056 (README row + plugin.json still say Windows).
 Redesign (Eric chose mockup A2, canvas https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH): 058 floating window, 059 resize,
-  060 show/hide hotkey ⌃⌥W with no tab, 061 native restyle + no Copy, 062 voice engine (blocked: Eric's pick), 063 voice ⌃⌥V.
+  060 show/hide ⌃⌥Z with no tab, 061 native restyle + no Copy, 062 voice engine (blocked: Eric's pick), 063 voice ⌃⌥V start/stop,
+  064 capture default ⌃⌥C (Eric's own config.json already set). Open: is append (⌃⌥⇧Q) still wanted?
 
 ## Log
-2026-10-14 · 029 · closed · macOS capture requires the Screen Recording grant: granted → capture; not-determined → one prompting getSources, ScreenRecordingDeniedError(prompted); denied/restricted/unknown → denied, no capture, panel untouched; win32 never asks (de7e6f4)
 2026-10-14 · 022 · closed · release.mjs assembles plugins/snapsolve (plugin/ + app/ payload: built JS, prompts, assets, bootstrap, package.json with main.js, root lockfile), one marketplace entry and README row, same-version refusal, retrying swap that restores the old release; Node floor 22.12 (packager 20.3.0); staged npm ci --omit=dev ok (2900b33)
 2026-10-14 · 023 · closed · installer steps.mjs (plugin scripts, built-ins only): preflight (win32, Node >= 22.12, claude.exe, --version, auth status), staged npm ci --omit=dev --ignore-scripts swapped into <data>/app/<version>, current junction/symlink, bootstrap packaging into Programs + Start-menu shortcut, claudePath with user values kept, launch without CLAUDECODE*, quit-and-wait, ASR check; follow-up 035 (5962f00)
 2026-10-14 · 024 · closed · installer CLI snapsolve.mjs + commands.mjs: install (quit a previous install, package on first install / new Electron / missing exe), start, update (keeps new + previous version), uninstall [--purge] keeps history, doctor (Node, claude, auth, versions, smoke/ASR, claudePath); install.json; real CLI end-to-end test on Windows; follow-up 036 (7b29105)
@@ -53,3 +53,4 @@ Redesign (Eric chose mockup A2, canvas https://claude.ai/artifact/YDwUWu2mMWHJui
 2026-10-17 · 057 · closed · the continued note shows from the seeded turn's start: runner emits turn (the saved user turn) and app broadcasts it; the 051/057 e2e wait for the saved first answer, not the streaming .answer; 10/10 panel e2e runs (d1e5294)
 2026-10-17 · adhoc · backlog 058 (drag to move the open panel) and 059 (resize it), Eric's asks after first use of 0.1.0 (-)
 2026-10-17 · adhoc · backlog redesign from mockup A2: 058/059 rewritten as floating window + resize; 060 toggle hotkey, no tab; 061 native restyle, no Copy; 062 voice engine clarify (blocked); 063 voice follow-up (-)
+2026-10-17 · adhoc · hotkeys decided (capture ⌃⌥C, toggle ⌃⌥Z, voice ⌃⌥V start+stop): 060/062/063 updated, 064 added; Eric's config.json capture set to Control+Alt+C (-)

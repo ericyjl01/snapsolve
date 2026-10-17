@@ -32,3 +32,4 @@
 2026-10-14 · 030 · blocked · SPEC §4.4 preload list vs §7.1 macOS card buttons — amend to add openScreenRecordingSettings() and relaunch()? (-)
 2026-10-14 · 018 · closed · a timed-out turn whose claude ignores the first kill gets SIGKILL after the grace period (injectable killGraceMs, runner.sigkill logged); a child that exits on the kill never sees SIGKILL (e5d4490)
 2026-10-14 · 028 · closed · withLoginShellPath (runner.ts): on macOS the login shell's PATH (marked printf, 3 s timeout, SIGKILL) goes first, then the current PATH, Homebrew, /usr/local/bin, ~/.local/bin; failures keep PATH + extras with a warning; other platforms untouched (7141783)
+2026-10-14 · 029 · closed · macOS capture requires the Screen Recording grant: granted → capture; not-determined → one prompting getSources, ScreenRecordingDeniedError(prompted); denied/restricted/unknown → denied, no capture, panel untouched; win32 never asks (de7e6f4)

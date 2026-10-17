@@ -9,7 +9,7 @@ Which speech-to-text engine?
 2. **macOS's own speech recognizer** (SFSpeechRecognizer through a small native helper) — no model download, needs a Swift helper binary and the Speech Recognition permission.
 3. **A cloud API** (e.g. OpenAI or Deepgram) — simplest code, needs an API key and sends audio off the Mac.
 
-Also: which "any key ends dictation" mechanism — snapsolve takes keyboard focus while listening (no extra permission; recommended) or a global keyboard hook (needs Input Monitoring permission)?
+Ending dictation is settled: Ctrl+Option+V again (DECISIONS 2026-10-17 hotkeys), so no focus or Input Monitoring question remains.
 
 ## Done when
 - [ ] DECISIONS row with Eric's answers, verbatim

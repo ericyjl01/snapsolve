@@ -74,6 +74,25 @@ body {
   overflow-x: hidden;
 }
 
+/* Bottom-right resize grip (059): drawn only; the OS resizes the window from any edge or corner. */
+.grip {
+  position: fixed;
+  right: 3px;
+  bottom: 3px;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  background: linear-gradient(135deg, transparent 0 50%, var(--line) 50% 58%, transparent 58% 70%, var(--line) 70% 78%, transparent 78%);
+}
+
+/* The 8 px tab shows only its accent strip. */
+@media (max-width: 40px) {
+  .titlebar,
+  .grip {
+    display: none;
+  }
+}
+
 #threads {
   display: flex;
   flex-direction: column;

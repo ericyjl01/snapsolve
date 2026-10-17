@@ -401,7 +401,11 @@ describe("panel (e2e)", () => {
       });
       expect(small[0]).toBeGreaterThanOrEqual(280);
       expect(small[1]).toBeGreaterThanOrEqual(300);
-      await p.app.evaluate(({ BrowserWindow }, to) => BrowserWindow.getAllWindows()[0].setBounds(to), target);
+      await p.app.evaluate(({ BrowserWindow }, to) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        win.setBounds(to);
+        win.emit("resized");
+      }, target);
 
       // Collapse (the tab: not resizable, no minimum), then the next capture reopens at the saved size.
       await p.page.locator("#threads").click();

@@ -362,6 +362,67 @@ describe("panel (e2e)", () => {
     }
   }, 120_000);
 
+  it("resized window reopens at the new size: resizable with a 280 × 300 minimum while open, the size saved per display (059)", async () => {
+    const p = await launchPanel();
+    const stateFile = path.join(p.dataDir, "window.json");
+    try {
+      await capture(p.app);
+      await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(360);
+      await p.page.locator(".grip").waitFor({ state: "attached", timeout: 5_000 });
+      expect(await p.app.evaluate(({ BrowserWindow }) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        return { resizable: win.isResizable(), minimum: win.getMinimumSize() };
+      })).toEqual({ resizable: true, minimum: [280, 300] });
+
+      // An edge drag is the window server's: resize the way one ends, new bounds then Electron's `resized`.
+      const { workArea } = await windowInfo(p.app);
+      const target = { x: workArea.x + 80, y: workArea.y + 60, width: 500, height: 600 };
+      const displayId = await p.app.evaluate(({ BrowserWindow, screen }, to) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        win.setBounds(to);
+        win.emit("resized");
+        return screen.getDisplayMatching(win.getBounds()).id;
+      }, target);
+      await expect
+        .poll(() => {
+          try {
+            return JSON.parse(readFileSync(stateFile, "utf8")).displays[String(displayId)];
+          } catch {
+            return null;
+          }
+        }, { timeout: 5_000 })
+        .toEqual(target);
+
+      // The OS keeps it at or above the minimum.
+      const small = await p.app.evaluate(({ BrowserWindow }) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        win.setSize(200, 200);
+        return win.getSize();
+      });
+      expect(small[0]).toBeGreaterThanOrEqual(280);
+      expect(small[1]).toBeGreaterThanOrEqual(300);
+      await p.app.evaluate(({ BrowserWindow }, to) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        win.setBounds(to);
+        win.emit("resized");
+      }, target);
+
+      // Collapse (the tab: not resizable, no minimum), then the next capture reopens at the saved size.
+      await p.page.locator("#threads").click();
+      await p.app.evaluate(({ BrowserWindow }) => {
+        const { webContents } = BrowserWindow.getAllWindows()[0];
+        webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+        webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+      });
+      await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(8);
+      expect(await p.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isResizable())).toBe(false);
+      await capture(p.app);
+      await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual(target);
+    } finally {
+      await p.close();
+    }
+  }, 120_000);
+
   it("a denied Screen Recording capture shows the permission card with its buttons and no Retry", async () => {
     const p = await launchPanel();
     try {

@@ -1,7 +1,7 @@
 // The panel (SPEC §2.2, §4.1–4.4, Amendment 5): one frameless, always-on-top, content-protected window that is either
 // an 8 × 72 tab on the right edge or a floating 360 × 460 window the user drags by its title bar (task 058), moved
-// between the two in 6 steps over 120 ms and shown with `showInactive`. Where the user leaves it is saved per display
-// in `<data>/window.json`. It loads the renderer from `snapsolve://app/…` (never file://), serves thumbnails from
+// between the two in 6 steps over 120 ms and shown with `showInactive`. The open window resizes from its edges (not
+// below 280 × 300, task 059); where the user leaves it, and at what size, is saved per display in `<data>/window.json`. It loads the renderer from `snapsolve://app/…` (never file://), serves thumbnails from
 // `snapsolve://thread/<uuid>/<n>.png`, denies window.open and navigation, and collapses on Esc (SPEC Amendment 3).
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -25,6 +25,8 @@ export const TAB_HEIGHT = 72;
 /** The floating window's size and its first position: this far in from the work area's right and top edges. */
 export const OPEN_SIZE = Object.freeze({ width: 360, height: 460 });
 export const OPEN_INSET = 24;
+/** The floating window cannot be resized below this (task 059); the tab is exempt. */
+export const MIN_SIZE = Object.freeze({ width: 280, height: 300 });
 /** A drag fires many `moved`; the position is written once it has rested this long. */
 export const SAVE_DEBOUNCE_MS = 300;
 export const TRANSITION_STEPS = 6;
@@ -278,6 +280,7 @@ export function createPanel(deps: PanelDeps): Panel {
     ...target,
     show: false,
     frame: false,
+    // Starts as the tab; resizable (with MIN_SIZE) only while open, see openChrome.
     resizable: false,
     movable: true,
     minimizable: false,
@@ -335,15 +338,35 @@ export function createPanel(deps: PanelDeps): Panel {
   });
   void win.loadURL(RENDERER_URL).catch((e: unknown) => log.error("panel.loadFailed", { error: e }));
 
+  /** Resizable with MIN_SIZE while open and at rest; the tab and the transition steps (smaller than it) are not. */
+  function openChrome(on: boolean): void {
+    if (win.isDestroyed()) return;
+    if (on) {
+      win.setResizable(true);
+      win.setMinimumSize(MIN_SIZE.width, MIN_SIZE.height);
+    } else {
+      win.setMinimumSize(0, 0);
+      win.setResizable(false);
+    }
+  }
+
+  function settled(): void {
+    animation = undefined;
+    if (state === "open") openChrome(true);
+  }
+
   function moveTo(to: Rect, animate: boolean): void {
     clearInterval(animation);
     animation = undefined;
     target = to;
     if (win.isDestroyed()) return;
     if (!animate || !win.isVisible()) {
+      if (state === "tab") openChrome(false);
       win.setBounds(to);
+      settled();
       return;
     }
+    openChrome(false);
     const steps = transitionSteps(win.getBounds(), to);
     let i = 0;
     animation = setInterval(() => {
@@ -354,15 +377,15 @@ export function createPanel(deps: PanelDeps): Panel {
       win.setBounds(steps[i++]);
       if (i >= steps.length) {
         clearInterval(animation);
-        animation = undefined;
+        settled();
       }
     }, TRANSITION_MS / TRANSITION_STEPS);
   }
 
-  /** The floating window's rect on `d`: its saved rect, else the default, clamped into its work area. */
+  /** The floating window's rect on `d`: its saved rect (at least MIN_SIZE), else the default, clamped into its work area. */
   function openBoundsOn(d: DisplayLike): Rect {
     const rect = saved[String(d.id)];
-    return rect ? clampIntoWorkArea(rect, d.workArea) : computeBounds("open", d);
+    return rect ? clampIntoWorkArea(atLeastMinimum(rect), d.workArea) : computeBounds("open", d);
   }
 
   function open(): void {
@@ -389,12 +412,17 @@ export function createPanel(deps: PanelDeps): Panel {
     void deps.saveBounds({ ...saved }).catch((e: unknown) => log.warn("panel.windowStateSaveFailed", { error: e }));
   }
 
-  // A user drag ends in `moved`; our own setBounds (transition steps, clamping) are told apart by the animation
-  // running or the window sitting exactly on the target we set. Saved per display, after the drag rests.
-  win.on("moved", () => {
+  // A user drag ends in `moved` (title bar) or `resized` (an edge or corner); our own setBounds (transition steps,
+  // clamping) are told apart by the animation running or the window sitting exactly on the target we set. A size
+  // under MIN_SIZE is put back to it, not saved. Saved per display, after the drag rests.
+  const userChanged = () => {
     if (state !== "open" || hiddenForCapture || animation || win.isDestroyed()) return;
     const bounds = win.getBounds();
     if (sameRect(bounds, target)) return;
+    if (bounds.width < MIN_SIZE.width || bounds.height < MIN_SIZE.height) {
+      moveTo(atLeastMinimum(bounds), false);
+      return;
+    }
     target = bounds;
     display = screen.getDisplayMatching(bounds);
     clearTimeout(saveTimer);
@@ -403,7 +431,9 @@ export function createPanel(deps: PanelDeps): Panel {
       saved = { ...saved, [id]: bounds };
       persist();
     }, SAVE_DEBOUNCE_MS);
-  });
+  };
+  win.on("moved", userChanged);
+  win.on("resized", userChanged);
 
   return {
     window: win,
@@ -416,8 +446,8 @@ export function createPanel(deps: PanelDeps): Panel {
       // Mid-transition: land on where it was going, so the window comes back whole; otherwise leave it where it is.
       if (animation) {
         clearInterval(animation);
-        animation = undefined;
         win.setBounds(target);
+        settled();
       }
       win.hide();
     },
@@ -448,6 +478,10 @@ export function createPanel(deps: PanelDeps): Panel {
     },
     turnEnded: () => autoHide.start(),
   };
+}
+
+function atLeastMinimum(rect: Rect): Rect {
+  return { ...rect, width: Math.max(rect.width, MIN_SIZE.width), height: Math.max(rect.height, MIN_SIZE.height) };
 }
 
 function schemeOf(url: string): string {

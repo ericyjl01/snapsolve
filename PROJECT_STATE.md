@@ -4,14 +4,15 @@
 On Eric's Mac at /Users/ericli/dev/snapsolve-master (no remote). macOS only (Amendment 4); local only (DECISIONS 055).
 - 064 BLOCKED (attempts exhausted; work on keel/064, code green): review 3 wants 2 assertions on SKILL.md's doctor
   Mac line in test/unit/skill.test.ts:198-203. Asked Eric: OK to reopen 064 for that test-only fix? (docs/issues.md 064)
-- Queue (Eric: "begin working on these changes"): 064 → 058 → 059 → 060 → 061 → 065 → 063 in M3.
+- 058 closed: floating 360 × 460 window, position per display in <data>/window.json, tray Reset window position.
+  Its Mac drag/Reset check is manual → add to the 032 checklist rewrite.
+- Queue (Eric: "begin working on these changes"): 059 → 060 → 061 → 065 → 063 in M3; backlog 066 (panelWidth).
 - 032 waits until the redesign is done (Eric, chat): then rewrite docs/checklists/macos.md (keel/032) for ⌃⌥C/X/V, the floating window and no tab; release a bumped version; Eric runs `/snapsolve update` and the checklist.
 - e2e on this Mac: keep it awake (`caffeinate -dims`); with the lid closed tests hang 150–900 s.
 Backlog: 033 (macOS icon), 042, 053, 054, 056 (README row + plugin.json still say Windows).
 Redesign canvas (mockup A2): https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH. Open: is append (⌃⌥⇧Q) still wanted? (065 removes it)
 
 ## Log
-2026-10-14 · 025 · closed · SKILL.md for /snapsolve: subcommand from $ARGUMENTS, one section per subcommand with its full snapsolve.mjs command, winget offer only after a yes, ASR/login/proxy/AltGr/Pro-plan notes, doctor hotkey question, --purge only after an explicit yes; frontmatter made valid YAML; DESIGN risk 1 resolved; follow-up 037 (0608462)
 2026-10-14 · 027 · closed · released plugin.json carries no version (claude-skills convention, Eric's answer); app/package.json keeps the app version for installer updates and the same-version refusal; DESIGN §5 updated; backlog 038 (4446bb5)
 2026-10-14 · 031 · closed · macOS installer branch: ~/Applications/snapsolve.app (LSUIElement) packaged and ad-hoc signed once per packaging, open -a launch, pgrep -x quit, current symlink, uninstall removes the .app; Screen Recording re-prompt warning on an Electron change; SKILL.md brew/Screen Recording notes; follow-up 039 (52041e5)
 2026-10-14 · 035 · closed · packageBootstrap returns warnings naming a previous launcher (Programs dir or .app) it could not remove, win32 and darwin, via an injectable rm; quitAndWait's default win32 isRunning tested (tasklist on the exe's basename, --quit only when listed, tasklist failure propagates); backlog 040 (5f8b828)
@@ -51,3 +52,4 @@ Redesign canvas (mockup A2): https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH. 
 2026-10-17 · adhoc · 065 added: capture continues the current chat, + button starts a new one, append hotkey removed (Eric's decision) (-)
 2026-10-17 · 062 · closed · speech-to-text is macOS built-in (Apple Speech on-device via a Swift helper); Approved libraries updated; 063 scoped and queued in M3 (-)
 2026-10-17 · 064 · blocked · review failed 3 times (last: doctor Mac line unasserted in skill.test.ts); reopen for a test-only fix? → keel/064 (3b6bb68)
+2026-10-17 · 058 · closed · floating 360 × 460 window (SPEC Amendment 6): movable, 36 px drag-region title bar, opens at the cursor display's saved rect or 24 px from top-right, saved per display id in window.json after a drag rests (never from a transition), clamped into the work area on open/redock, hide keeps the position, tray Reset window position; Mac drag check deferred to 032; backlog 066 (panelWidth) (18f6a6e)

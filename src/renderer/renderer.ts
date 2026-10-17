@@ -125,9 +125,11 @@ function renderTurns(card: Card, thread: Thread): void {
         nodes.push(el("p", "question", turn.text));
       }
     } else if (turn.isError) {
+      if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));
       if (turn.text) nodes.push(answerNode("partial", turn.text));
       nodes.push(el("p", "error", turn.errorMessage ?? userMessage(turn.errorKind ?? "internal")));
     } else {
+      if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));
       if (turn.note === "resumeFallback") nodes.push(el("p", "note", userMessage("resumeFailed")));
       nodes.push(answerNode("answer", turn.text));
     }
@@ -147,6 +149,7 @@ function statusLine(thread: Thread): string {
   const parts = [thread.model];
   if (turn?.ttftMs != null) parts.push(`TTFT ${(turn.ttftMs / 1000).toFixed(1)} s`);
   if (turn) parts.push(`${(turn.durationMs / 1000).toFixed(1)} s`);
+  if (turn?.usage) parts.push(turn.usage);
   return parts.join(" · ");
 }
 

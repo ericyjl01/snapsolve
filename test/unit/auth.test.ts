@@ -122,6 +122,8 @@ describe("formatUsage", () => {
       formatUsage({ fiveHour: { utilization: 0.034, resetsAt: null }, sevenDay: { utilization: 0.995, resetsAt: null } }),
     ).toBe("5h 3% · 7d 100%");
     expect(formatUsage({ fiveHour: { utilization: 0.125, resetsAt: null }, sevenDay: null })).toBe("5h 13%");
+    // 0.285 * 100 is 28.499… in floating point; the decimal value rounds up.
+    expect(formatUsage({ fiveHour: { utilization: 0.285, resetsAt: null }, sevenDay: null })).toBe("5h 29%");
   });
 
   it("omits a missing window; nothing known → empty", () => {

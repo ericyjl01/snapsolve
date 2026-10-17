@@ -22,3 +22,4 @@
 2026-10-14 · 017 · closed · option (a) (Eric): KaTeX's svg+path kept with only KaTeX's attributes — SPEC Amendment 1; render change is 019 (-)
 2026-10-14 · 019 · paused · Eric asked to pause; tests committed and red accepted, implementation not started → keel/019 (4fd7640)
 2026-10-14 · 019 · closed · KaTeX svg+path kept with only KaTeX's attributes (own DOMPurify instance, hooks drop other SVG elements and attributes, geometry URI-safe); sanitize(html) exported; \cancel strike stays out; DESIGN §3.6 updated (ce39fd3)
+2026-10-14 · 020 · blocked · M2 signing decision (DESIGN §10 risk 6): unsigned per SPEC non-goals, Authenticode signing, or defer M2 until M1 is finished on the Mac? (-)

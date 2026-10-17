@@ -2,10 +2,10 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-050 in progress on keel/050: tests 6a402dd (red accepted), code committed; task tests 76/76, unit 748 passed, errors e2e green.
-- in flight: review (tasks.py brief 050 → fresh Opus reviewer); then close 050
+050 closed (merge 749b2df): retry re-runs the failed turn in place, no duplicate user turn.
+- next action: start 051 (7th append seeds a new thread), then 052
 Waiting on Eric: 032 (run docs/checklists/macos.md on keel/032), 013 (Windows PC: park, split or macOS capture checks?)
-Then 051, 052. Backlog: 033, 042, 053.
+Backlog: 033, 042, 053.
 - Windows PC leftovers: stale %APPDATA%\snapsolve (014), ASR exclusion
 
 ## Log

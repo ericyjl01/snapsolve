@@ -184,3 +184,10 @@ tags: e2e, playwright, electron, keyboard, esc, panel
 Symptom: panel e2e "Esc collapses to the tab" stayed at 420 px wide; main's `webContents.on("before-input-event")` never saw the key.
 Cause:   Playwright's `page.keyboard.press` dispatches through CDP (`Input.dispatchKeyEvent`), which does not pass Electron's browser-side input pre-handler. Probe: listener saw `[]` after `keyboard.press("Escape")`, `["keyDown:Escape"]` after `webContents.sendInputEvent`.
 Fix:     e2e sends keys that main handles with `webContents.sendInputEvent({ type: "keyDown"|"keyUp", keyCode })` from `app.evaluate` (d84a830). Use Playwright's keyboard only for keys the renderer handles (e.g. Enter in the follow-up box).
+
+## 2026-10-17 · task 010 · review fail: tray "Open history folder" did nothing after Clear history
+tags: review, tray, history, threads, openPath, clear history
+Symptom: first reviewer failed 010: the tray's "Open history folder" called `shell.openPath(<data>/threads)` directly; after Clear history removes threads/, openPath returns an error string and nothing opens (silently).
+Cause:   `shell.openPath` resolves with an error message instead of rejecting, and the folder is only recreated on the next capture.
+Fix:     `openHistoryFolder` in tray.ts: mkdir -p threads/, then openPath, failures logged; unit test; Windows taken-key notice moved to `tray.displayBalloon` per the reviewer's note (f71b417).
+Note:    `shell.openPath` never throws: check its resolved string, and create a folder the user may have cleared before opening it.

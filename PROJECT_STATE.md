@@ -2,14 +2,13 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-009 closed: panel window (snapsolve://app renderer, thread thumbnails), 9-function preload, cards UI, app.ts pipeline; Esc-only dismissal.
-- next action: 010 (hotkeys, tray, lifecycle) is unblocked; then 011, 013, 030
-- follow-ups filed from 009 (M1): 050 retry duplicate turn, 051 7th-append seed, 052 stale busy threads
-M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
+010 in progress on keel/010: tests d2d356c (red accepted), code committed; task tests + unit suite green; npm start log clean.
+- not verifiable here: tray icon by eye and a real Ctrl+Option+Q capture (needs a human + Screen Recording grant) → 013/032 checklists
+- in flight: review PASS recorded at f71b417 (after fail 1 fixed); next: python3 .claude/memory/tasks.py close 010
+Then 011, 050–052, 013, 030. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
 - Windows PC leftovers: delete stale %APPDATA%\snapsolve (014); ASR exclusion still needed there
 
 ## Log
-2026-10-14 · 006 · closed · runner: SPEC §3.1 argv, stripped env, stream events, per-thread FIFO under a global cap, timeout kill, resume with fresh-session fallback; spawn errors logged without argv; a new session's transcript adopted after any exit (712edc0)
 2026-10-14 · 012 · closed · prompts/system.md (DESIGN draft, new example, code-bug answer line quotes the faulty line); live test on 4 generated problem PNGs via the real runner: opus/high 4/4 in 5 consecutive runs, sonnet/high 3/4; docs/live-results.md, DESIGN §10 item 5 (3093f03)
 2026-10-14 · 017 · closed · option (a) (Eric): KaTeX's svg+path kept with only KaTeX's attributes — SPEC Amendment 1; render change is 019 (-)
 2026-10-14 · 019 · paused · Eric asked to pause; tests committed and red accepted, implementation not started → keel/019 (4fd7640)
@@ -49,3 +48,4 @@ M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
 2026-10-17 · 009 · blocked · SPEC §4.3 × / tab click vs §4.4 nine-function preload — Amendment 3 togglePanel()? → keel/009 (-)
 2026-10-17 · 014 · closed · Electron userData is <data dir>/electron in every mode (resolveDataDir before ready); e2e covers the override and the platform default (HOME on macOS, LOCALAPPDATA on Windows); stale %APPDATA% cleanup left for the Windows PC (36c02ef)
 2026-10-17 · 009 · closed · panel window per platform (content protection before first show, showInactive, 6-step 120 ms tab/open transitions, Esc in main), renderer served from snapsolve://app with thread thumbnails from snapsolve://thread, exactly the 9 preload functions, cards UI (Thinking…, streamed rendered answer, Copy, Retry, follow-up, status line), app.ts capture → store → runner → panel pipeline with event-ordered thread view, claude path resolution, captureFromFile test hook; follow-ups 050–052 (4ea2f32)
+2026-10-17 · 010 · closed · hotkeys (capture/append, 400 ms debounce, taken-key notice naming hotkeys.<name>; Windows as a tray balloon), tray drawn in code with 5 items (Open panel, Pause/Resume, Open history folder creating threads/ first, Clear history, Quit), single instance with --quit, pause/resume on suspend/lock with hotkey re-registration; manual tray/capture checks deferred to 013/032 (f2a5903)

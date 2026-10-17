@@ -266,7 +266,7 @@
     {
       "id": "010",
       "title": "Hotkeys, tray and app lifecycle wiring",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 1,
       "deps": [
@@ -274,17 +274,22 @@
       ],
       "file": "docs/tasks/010-lifecycle.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 2,
+      "branch": "keel/010",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "f2a5903",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/hotkeys.test.ts test/unit/tray.test.ts test/e2e/lifecycle.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "d2d356c21bca84fa20f3542fe944c412c51c8a1d",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "f71b4172b6897fd1b480a472b4a1877e797538c5",
+        "reasons": "hotkeys.test: both config accelerators registered, taken key notifies naming accelerator + hotkeys.<name>, 399ms→1/401ms→2 captures on fake clock, pause unregisters both, resume re-registers, reRegisterIfLost registers only the lost key; tray.test: exactly 5 items in order, Pause↔Resume flip with handlers, tooltip shows usage, openHistoryFolder mkdirs before openPath (prior fail fixed); lifecycle e2e: --quit second launch exits first with 0 <10s, plain second launch opens panel 8→420px and exits, lone --quit starts nothing, both hotkeys registered at startup, appendFromFile lands 002.png in the latest thread. Task tests 29/29 exit 0, npm test 705 passed/7 skipped exit 0, build exit 0; post-red test diff only adds tests; no new deps. Manual Done-when (tray by eye, real Ctrl+Alt+Q) not verifiable here, deferred to 013/032 checklists.",
+        "at": "2026-10-17"
+      }
     },
     {
       "id": "011",

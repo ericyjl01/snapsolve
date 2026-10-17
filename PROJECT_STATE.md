@@ -1,15 +1,13 @@
 # PROJECT_STATE
 
 ## Now
-043, 044, 045 closed (merges 3f74473, 15f92c0, 4baaef1): claudePath symlink on macOS; one compareVersions; commands.mjs reuses steps.mjs fs helpers.
-046 closed (merge eea7d86): transcript scan stats ≤32 project dirs at once (equal-mtime tie order is now arbitrary; readdir order was too).
-047 closed (merge 473afe1): turnFailed logs `result: <n> chars omitted` instead of a result that follows streamed answer text.
-All /code-review tasks (043–047) done; master pushed to origin through 8a43166.
-- next action: queue is all blocked on 015 (finish on a Mac); backlog 033/042 only if Eric pulls them in
-M2 left: 026 (needs Eric's approval, waits on 013). M3: 030 waits on 010/011; 032 Mac. Backlog: 033, 042.
-- 015 blocked (finish on a Mac); 009–014 wait on it
+Moved to Eric's Mac (2026-10-17): fresh git repo from snapsolve-master.zip (baseline 45ffe22, no remote; origin history not carried over).
+`npm ci` + Electron binary download ok; build ok; 015 precondition `ok`; first macOS `npm test`: 595 pass, 2 fail (e2e green).
+015 unblocked; it now depends on 048 (runner integration /var vs /private/var cwd) and 049 (realSteps basename of a Windows path on POSIX).
+- next action: 048, then 049, then 015 (restore `npm test` as the full gate)
+After 015: 009 → 010 → 011 → 013 (Windows checklist); 014; M2 026 (approval, waits on 013); M3 030, 032 (Mac). Backlog: 033, 042.
 - Temporary gate (option A): full suite = `npx vitest run --project unit`; 015 restores `npm test`
-- Remote: origin = https://github.com/ericlfd/snapsolve.git (private); master pushed; keel/* branches stay local (all merged)
+- fsevents install script not in allowScripts (optional macOS watcher dep; harmless for `vitest run`)
 
 ## Log
 2026-10-14 · 007 · closed · encodeForModel (2576 long edge, JPEG 85 over 3 MB), capturer (cursor display, source match, mutex, panel hide below Win 10 2004 and on macOS), captureFailed kind, decideAppend (775ec73)

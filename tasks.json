@@ -384,12 +384,15 @@
     {
       "id": "015",
       "title": "Restore npm test as the full-suite gate and re-run e2e",
-      "status": "blocked",
+      "status": "open",
       "priority": 5,
       "milestone": 1,
-      "deps": [],
+      "deps": [
+        "048",
+        "049"
+      ],
       "file": "docs/tasks/015-restore-full-gate.md",
-      "blocked_on": "parked by Eric: finish on a Mac — Defender ASR rule 01443614 blocks electron.exe on this Windows PC (docs/tasks/015 Notes); unblock when working on macOS",
+      "blocked_on": null,
       "attempts": 0,
       "branch": null,
       "stash": null,
@@ -1236,6 +1239,48 @@
         "reasons": "3 new runner tests prove a streamed-then-is_error turn never logs the answer (turnFailed names 'result: N chars omitted'), keeps errors[] text like 'overloaded', and still classifies usageLimit without the answer in log/card/stored error; existing notLoggedIn test stays green; post-red edit only narrows to event.message because event.thread carries the partial answer by design",
         "at": "2026-10-15"
       }
+    },
+    {
+      "id": "048",
+      "title": "runner integration: macOS /var → /private/var cwd mismatch",
+      "status": "open",
+      "priority": 4,
+      "milestone": 1,
+      "deps": [],
+      "file": "docs/tasks/048-macos-tmp-realpath.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/integration/runner.integration.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
+    },
+    {
+      "id": "049",
+      "title": "realSteps test hook: match claude.exe across path styles on POSIX",
+      "status": "open",
+      "priority": 4,
+      "milestone": 1,
+      "deps": [],
+      "file": "docs/tasks/049-realsteps-basename.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/unit/installer-commands.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

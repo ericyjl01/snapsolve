@@ -4,12 +4,13 @@
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
 macOS only from 2026-10-17 (SPEC Amendment 4): Windows archived (archive/windows/README.md); 013 and 026 dropped.
 Local only (DECISIONS 055): no claude-skills release. macOS live run: 4/4 correct (docs/live-results.md).
-- next: 055 local install (release into ~/dev/snapsolve-local, add it to Claude Code as snapsolve-local)
-- then 032: Eric runs docs/checklists/macos.md (on keel/032), starting with /snapsolve install
-Backlog: 033 (macOS icon), 042, 053, 054.
+055 closed: snapsolve 0.1.0 is in ~/dev/snapsolve-local, installed in Claude Code as snapsolve@snapsolve-local.
+- 032 can start now: Eric opens a NEW Claude Code session and runs docs/checklists/macos.md (on keel/032),
+  item 1 = `/snapsolve install` (or `/snapsolve:snapsolve install` if bare /snapsolve does not resolve).
+- next: 057 flaky panel e2e (continued-note wait, 1 in 3 runs) — debug before fixing.
+Backlog: 033 (macOS icon), 042, 053, 054, 056 (README row + plugin.json still say Windows).
 
 ## Log
-2026-10-14 · keel · planned · M3 — macOS (6 tasks: 018 moved in, 028–032; backlog 033 app icons) (-)
 2026-10-14 · 030 · blocked · SPEC §4.4 preload list vs §7.1 macOS card buttons — amend to add openScreenRecordingSettings() and relaunch()? (-)
 2026-10-14 · 018 · closed · a timed-out turn whose claude ignores the first kill gets SIGKILL after the grace period (injectable killGraceMs, runner.sigkill logged); a child that exits on the kill never sees SIGKILL (e5d4490)
 2026-10-14 · 028 · closed · withLoginShellPath (runner.ts): on macOS the login shell's PATH (marked printf, 3 s timeout, SIGKILL) goes first, then the current PATH, Homebrew, /usr/local/bin, ~/.local/bin; failures keep PATH + extras with a warning; other platforms untouched (7141783)
@@ -49,3 +50,4 @@ Backlog: 033 (macOS icon), 042, 053, 054.
 2026-10-17 · 013 · dropped · Windows archived (Amendment 4): Mac only from now on (-)
 2026-10-17 · 026 · dropped · Windows archived (Amendment 4); the first release moves to 055 on the Mac (-)
 2026-10-17 · adhoc · macOS live run: opus/high 4/4 correct; rates once 60.3 s (claude 34.4 s), rerun 5.6 s (-)
+2026-10-17 · 055 · closed · snapsolve 0.1.0 released into private marketplace ~/dev/snapsolve-local and installed in Claude Code as snapsolve@snapsolve-local (user scope); doctor ok for Node/claude/auth; skill is snapsolve:snapsolve; found 056 (backlog, widened to plugin.json) and 057 (flaky panel e2e) (3b5bed8)

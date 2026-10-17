@@ -33,7 +33,8 @@ let store: Store;
 const quietLog: Logger = { debug() {}, info() {}, warn() {}, error() {}, flush: async () => {} };
 
 beforeEach(async () => {
-  root = await mkdtemp(path.join(os.tmpdir(), "snapsolve-runner-int-"));
+  // Canonical, so paths compare equal to the child's process.cwd() (macOS tmpdir is under the /var → /private/var link).
+  root = await realpath(await mkdtemp(path.join(os.tmpdir(), "snapsolve-runner-int-")));
   dataDir = path.join(root, "data");
   projects = path.join(root, "projects");
   fakeLog = path.join(root, "fake.log");

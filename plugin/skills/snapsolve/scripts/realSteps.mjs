@@ -7,8 +7,8 @@ import * as steps from "./steps.mjs";
 /**
  * The steps with their real dependencies (`base` = steps.mjs; a test passes fakes). Test hooks, inert unless
  * SNAPSOLVE_TEST=1 (the integration test): SNAPSOLVE_TEST_CLAUDE runs that script with node whenever claude.exe is
- * executed (only a real .exe counts as claude on Windows), and SNAPSOLVE_TEST_LAUNCH_LOG records launches instead
- * of starting anything (so nothing runs).
+ * executed (only a real .exe counts as claude on Windows; the win32 basename splits `\` and `/`, so a Windows path
+ * matches on any host), and SNAPSOLVE_TEST_LAUNCH_LOG records launches instead of starting anything (so nothing runs).
  */
 export function realSteps(env, base = steps) {
   const test = env.SNAPSOLVE_TEST === "1";
@@ -17,7 +17,7 @@ export function realSteps(env, base = steps) {
 
   const exec = fakeClaude
     ? (command, commandArgs, options) =>
-        path.basename(command).toLowerCase() === "claude.exe"
+        path.win32.basename(command).toLowerCase() === "claude.exe"
           ? base.run(process.execPath, [fakeClaude, ...commandArgs], options)
           : base.run(command, commandArgs, options)
     : base.run;

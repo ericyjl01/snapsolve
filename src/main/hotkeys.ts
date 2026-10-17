@@ -19,6 +19,8 @@ export interface HotkeysDeps {
   onAppend: () => void;
   /** Shows a tray notification. */
   notify: (message: string) => void;
+  /** How an accelerator is named to the user (macos.ts `hotkeyLabel`); default: as configured. */
+  label?: (accelerator: string) => string;
   now?: () => number;
   log?: Pick<Logger, "warn" | "error">;
 }
@@ -88,7 +90,8 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
     for (const name of ["capture", "append"] as const) {
       if (isRegistered(name)) continue;
       if (!register(name) && notify) {
-        deps.notify(`${config.hotkeys[name]} is taken by another app. Change hotkeys.${name} in config.json.`);
+        const key = deps.label ? deps.label(config.hotkeys[name]) : config.hotkeys[name];
+        deps.notify(`${key} is taken by another app. Change hotkeys.${name} in config.json.`);
       }
     }
   }

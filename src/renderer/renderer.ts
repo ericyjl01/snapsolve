@@ -1,8 +1,10 @@
 // The panel UI (SPEC §4.2): one card per thread, newest first — thumbnail, the conversation with rendered answers,
 // "Thinking…" until the first text arrives, the streamed answer, Copy (Markdown), Retry on error, a follow-up box
 // and a status line. Talks to main only through `window.snapsolve` (SPEC §4.4); model output goes through render.ts.
-// No × button and no clickable tab: Esc in main collapses the panel (SPEC Amendment 3).
-import { userMessage } from "../shared/errors";
+// No × button and no clickable tab: Esc in main collapses the panel (SPEC Amendment 3). On macOS a missing Screen
+// Recording grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings /
+// Relaunch, nothing else.
+import { screenRecordingCard, userMessage } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
 import type { AssistantTurn, Thread } from "../shared/types";
 import { renderAnswer } from "./render";
@@ -14,6 +16,7 @@ declare global {
 }
 
 interface Card {
+  kind: "thread";
   root: HTMLElement;
   turns: HTMLElement;
   live: HTMLElement;
@@ -27,8 +30,15 @@ const api = window.snapsolve;
 const list = document.getElementById("threads") as HTMLElement;
 const empty = document.getElementById("empty") as HTMLElement;
 
+interface PermissionCard {
+  kind: "permission";
+  root: HTMLElement;
+  message: HTMLElement;
+  actions: HTMLElement;
+}
+
 const threads = new Map<string, Thread>();
-const cards = new Map<string, Card>();
+const cards = new Map<string, Card | PermissionCard>();
 /** Answer text streamed so far for a thread's running turn. */
 const streams = new Map<string, string>();
 /** Threads with a follow-up or retry sent whose turn has not ended yet. */
@@ -100,7 +110,33 @@ function createCard(thread: Thread): Card {
       update(thread.id);
     });
   });
-  return { root, turns, live, retry, copy, box, status };
+  return { kind: "thread", root, turns, live, retry, copy, box, status };
+}
+
+function createPermissionCard(thread: Thread): PermissionCard {
+  const root = el("article", "card permission");
+  root.dataset.threadId = thread.id;
+  const message = el("p", "error");
+  const actions = el("div", "actions");
+  root.append(message, actions);
+  return { kind: "permission", root, message, actions };
+}
+
+/** The buttons follow `prompted`, which can change while the card is shown (a later denied capture). */
+function updatePermission(card: PermissionCard, prompted: boolean): void {
+  const model = screenRecordingCard(prompted);
+  card.message.textContent = model.message;
+  const buttons = model.actions.map((action) => {
+    const button =
+      action === "openSettings" ? el("button", "open-settings", "Open System Settings") : el("button", "relaunch", "Relaunch");
+    button.type = "button";
+    button.addEventListener("click", () => {
+      const done = action === "openSettings" ? api.openScreenRecordingSettings() : api.relaunch();
+      done.catch(() => flash(button, "Failed"));
+    });
+    return button;
+  });
+  card.actions.replaceChildren(...buttons);
 }
 
 function flash(button: HTMLButtonElement, text: string): void {
@@ -157,6 +193,10 @@ function update(threadId: string): void {
   const thread = threads.get(threadId);
   const card = cards.get(threadId);
   if (!thread || !card) return;
+  if (card.kind === "permission") {
+    updatePermission(card, thread.permission?.prompted ?? false);
+    return;
+  }
   renderTurns(card, thread);
   renderLive(card, thread);
   const busy = isBusy(thread);
@@ -185,7 +225,7 @@ function layout(): void {
   for (const thread of order) {
     let card = cards.get(thread.id);
     if (!card) {
-      card = createCard(thread);
+      card = thread.permission ? createPermissionCard(thread) : createCard(thread);
       cards.set(thread.id, card);
     }
     const want: Element | null = previous ? previous.nextElementSibling : list.firstElementChild;
@@ -208,7 +248,7 @@ api.onDelta(({ threadId, text }) => {
   streams.set(threadId, (streams.get(threadId) ?? "") + text);
   const thread = threads.get(threadId);
   const card = cards.get(threadId);
-  if (thread && card) renderLive(card, thread);
+  if (thread && card?.kind === "thread") renderLive(card, thread);
 });
 api.onDone(({ threadId, thread }) => {
   streams.delete(threadId);

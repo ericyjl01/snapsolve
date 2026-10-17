@@ -1,8 +1,9 @@
 // The capture → store → runner → panel pipeline (SPEC §2.1, §3.5, §4.2): a capture becomes a new thread whose
 // screenshot is saved and whose card is on screen before claude is spawned; an append joins the most recent
 // capture's thread; runner events and the renderer's requests (SPEC §4.4) are relayed between runner and panel.
+import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { SnapsolveError } from "../shared/errors";
+import { screenRecordingCard, SnapsolveError } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
 import type { Config, Thread } from "../shared/types";
 import { formatUsage } from "./auth";
@@ -48,6 +49,11 @@ export interface App {
   onCapture(shot: Shot): Promise<string>;
   /** Joins the most recent capture's thread; a new thread when there is none or it is full (SPEC §2.3). */
   onAppend(shot: Shot): Promise<string>;
+  /**
+   * macOS: a capture refused for want of the Screen Recording grant (SPEC §7.1). Opens the panel on one unsaved card
+   * that says what to do; a later denial updates it, the next capture that works removes it.
+   */
+  onCaptureDenied(prompted: boolean): Promise<void>;
   /** The renderer's requests (arguments come from the renderer, so each is checked). */
   handlers: AppHandlers;
 }
@@ -58,6 +64,8 @@ export function createApp(deps: AppDeps): App {
   // The threads as the renderer should see them: disk at first listing, then every change in event order. Re-reading
   // disk after an event could deliver a snapshot older than an answer:done already sent.
   const known = new Map<string, Thread>();
+  /** The Screen Recording card's id while it is shown; it lives only in `known`. */
+  let permissionId: string | null = null;
 
   function remember(thread: Thread): void {
     known.set(thread.id, thread);
@@ -126,8 +134,15 @@ export function createApp(deps: AppDeps): App {
     );
   }
 
+  /** A capture worked: the Screen Recording card has done its job. */
+  function dropPermissionCard(): void {
+    if (permissionId) known.delete(permissionId);
+    permissionId = null;
+  }
+
   async function newThread(shot: Shot): Promise<string> {
     const thread = await store.createThread({ model: config.model, effort: config.effort });
+    dropPermissionCard();
     // SPEC §2.1: the full-resolution PNG is on disk before anything is sent.
     const saved = await store.saveScreenshot(thread.id, shot.png);
     current = thread.id;
@@ -202,11 +217,41 @@ export function createApp(deps: AppDeps): App {
       if (current) target = await store.getThread(current).catch(() => null);
       if (!target || decideAppend(target, config.maxScreenshotsPerThread) === "newThread") return newThread(shot);
       const saved = await store.saveScreenshot(target.id, shot.png);
+      dropPermissionCard();
       if (!known.has(target.id)) remember(target);
       panel.open();
       broadcast();
       start(target.id, { kind: "append", screenshot: saved.file });
       return target.id;
+    },
+
+    async onCaptureDenied(prompted) {
+      permissionId ??= randomUUID();
+      remember({
+        id: permissionId,
+        sessionId: permissionId,
+        transcriptPath: null,
+        model: config.model,
+        effort: config.effort,
+        createdAt: new Date().toISOString(),
+        title: "Screen Recording",
+        status: "error",
+        turns: [
+          {
+            role: "assistant",
+            text: "",
+            durationMs: 0,
+            ttftMs: null,
+            costUsd: null,
+            isError: true,
+            errorKind: "screenRecordingDenied",
+            errorMessage: screenRecordingCard(prompted).message,
+          },
+        ],
+        permission: { prompted },
+      });
+      panel.open();
+      broadcast();
     },
 
     handlers,

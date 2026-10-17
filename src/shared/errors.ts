@@ -39,6 +39,22 @@ export function userMessage(kind: ErrorKind): string {
   return Object.hasOwn(MESSAGES, kind) ? MESSAGES[kind] : MESSAGES.internal;
 }
 
+/** What the macOS Screen Recording card shows (SPEC §7.1, Amendment 2) and the buttons it offers. */
+export interface ScreenRecordingCard {
+  message: string;
+  actions: ("openSettings" | "relaunch")[];
+}
+
+/**
+ * `prompted`: this capture just raised the system prompt, so granting there and relaunching is enough; otherwise the
+ * grant was refused earlier and only System Settings can change it.
+ */
+export function screenRecordingCard(prompted: boolean): ScreenRecordingCard {
+  return prompted
+    ? { message: "Grant Screen Recording in the prompt, then click Relaunch.", actions: ["relaunch"] }
+    : { message: MESSAGES.screenRecordingDenied, actions: ["openSettings", "relaunch"] };
+}
+
 /** The one error type the app throws or returns. `message` is for the log; the UI shows `userMessage(kind)`. */
 export class SnapsolveError extends Error {
   readonly kind: ErrorKind;

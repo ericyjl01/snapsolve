@@ -13,6 +13,9 @@ export const IPC = {
   clipboardCopy: "clipboard:copy",
   externalOpen: "external:open",
   historyClear: "history:clear",
+  // SPEC Amendment 2 (macOS Screen Recording card); neither takes an argument.
+  screenRecordingSettingsOpen: "settings:openScreenRecording",
+  appRelaunch: "app:relaunch",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -28,6 +31,8 @@ export const PRELOAD_CHANNELS = {
   copy: IPC.clipboardCopy,
   openExternal: IPC.externalOpen,
   clearHistory: IPC.historyClear,
+  openScreenRecordingSettings: IPC.screenRecordingSettingsOpen,
+  relaunch: IPC.appRelaunch,
 } as const satisfies Record<keyof SnapsolveApi, IpcChannel>;
 
 /** Payloads of main → renderer events. */
@@ -45,6 +50,8 @@ export interface IpcRequests {
   [IPC.clipboardCopy]: { args: [text: string]; result: void };
   [IPC.externalOpen]: { args: [url: string]; result: void };
   [IPC.historyClear]: { args: []; result: boolean };
+  [IPC.screenRecordingSettingsOpen]: { args: []; result: void };
+  [IPC.appRelaunch]: { args: []; result: void };
 }
 
 /** The renderer-side API preload exposes via contextBridge (implemented in task 009). */
@@ -59,4 +66,8 @@ export interface SnapsolveApi {
   openExternal(url: string): Promise<void>;
   /** Resolves false if the user cancelled the confirm dialog. */
   clearHistory(): Promise<boolean>;
+  /** macOS: main opens System Settings at Privacy & Security › Screen Recording (a fixed URL); elsewhere nothing. */
+  openScreenRecordingSettings(): Promise<void>;
+  /** Restarts the app (a new Screen Recording grant takes effect only in a new process). */
+  relaunch(): Promise<void>;
 }

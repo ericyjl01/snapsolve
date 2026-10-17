@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
@@ -26,11 +26,12 @@ import { SnapsolveError, userMessage } from "../shared/errors";
 import { IPC } from "../shared/ipc";
 import { createApp, resolveClaudeCommand, type Shot } from "./app";
 import { checkAuth } from "./auth";
-import { createCapturer } from "./capture";
+import { createCapturer, ScreenRecordingDeniedError } from "./capture";
 import { loadConfig } from "./config";
 import { encodeForModel } from "./encode";
 import { createHotkeys } from "./hotkeys";
 import { createLogger, type Logger } from "./log";
+import { createPermissionHandlers, darwinStartup, hotkeyLabel } from "./macos";
 import { createPanel, resolveSnapsolveUrl, SCHEME } from "./panel";
 import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
@@ -95,7 +96,32 @@ async function start(): Promise<void> {
   const command: Command | (() => Command) = fakeClaude
     ? { path: process.execPath, prefixArgs: [fakeClaude] }
     : () => resolveClaudeCommand({ claudePath: config.claudePath, env: process.env, platform: process.platform, home, isFile });
-  const env = fakeClaude ? { ...process.env, ELECTRON_RUN_AS_NODE: "1" } : process.env;
+
+  // SPEC §9.1: on macOS no Dock icon (hidden before the tray appears) and claude gets the login shell's PATH. The
+  // tray is created this early, before the hotkeys register (their failure notification is a balloon on it); its
+  // menu handlers reach the panel, app and hotkeys created below only when clicked.
+  const startup = darwinStartup({
+    platform: process.platform,
+    app,
+    env: process.env,
+    home,
+    execFileSync: (file, args, options) => execFileSync(file, args, options),
+    log,
+    createTray: () =>
+      createTray({
+        Tray,
+        Menu,
+        image: trayImage(process.platform),
+        onOpenPanel: () => panel.toggle(),
+        onPause: () => keys.pause(),
+        onResume: () => keys.resume(),
+        onOpenHistory: () => void openHistoryFolder(paths.threads, { mkdir, openPath: (dir) => shell.openPath(dir), log }),
+        onClearHistory: () => void core.handlers.clearHistory().catch((e: unknown) => log.error("app.clearFailed", { error: e })),
+        onQuit: () => app.quit(),
+      }),
+  });
+  tray = startup.tray;
+  const env = fakeClaude ? { ...startup.env, ELECTRON_RUN_AS_NODE: "1" } : startup.env;
   const projectsDir = (test && process.env.SNAPSOLVE_TEST_PROJECTS) || path.join(home, ".claude", "projects");
   const authStatus = () =>
     checkAuth({
@@ -163,6 +189,13 @@ async function start(): Promise<void> {
     onTurnEnded: () => panel.turnEnded(),
     onUsage: (usage) => tray?.setTooltip(usage),
   });
+  const permissionHandlers = createPermissionHandlers({
+    platform: process.platform,
+    openExternal: (url) => shell.openExternal(url),
+    relaunch: () => app.relaunch(),
+    exit: () => app.exit(0),
+    log,
+  });
   panel.handle({
     [IPC.threadsList]: core.handlers.listThreads,
     [IPC.threadFollowUp]: core.handlers.followUp,
@@ -170,6 +203,8 @@ async function start(): Promise<void> {
     [IPC.clipboardCopy]: core.handlers.copy,
     [IPC.externalOpen]: core.handlers.openExternal,
     [IPC.historyClear]: core.handlers.clearHistory,
+    [IPC.screenRecordingSettingsOpen]: permissionHandlers.openScreenRecordingSettings,
+    [IPC.appRelaunch]: permissionHandlers.relaunch,
   });
 
   // SPEC §1.1 "tray notification": a balloon on the Windows tray icon; a system notification on macOS. Test mode
@@ -197,27 +232,17 @@ async function start(): Promise<void> {
       .then(into)
       .catch((e: unknown) => {
         log.warn("app.captureFailed", { error: e });
-        notify(userMessage(e instanceof SnapsolveError ? e.kind : "internal"));
+        // macOS without the Screen Recording grant: the panel card with Open System Settings / Relaunch (SPEC §7.1).
+        if (e instanceof ScreenRecordingDeniedError) void core.onCaptureDenied(e.prompted);
+        else notify(userMessage(e instanceof SnapsolveError ? e.kind : "internal"));
       });
-  tray = createTray({
-    Tray,
-    Menu,
-    image: trayImage(process.platform),
-    onOpenPanel: () => panel.toggle(),
-    // Created before the hotkeys register (their failure notification is a balloon on it); clicks come later.
-    onPause: () => keys.pause(),
-    onResume: () => keys.resume(),
-    onOpenHistory: () => void openHistoryFolder(paths.threads, { mkdir, openPath: (dir) => shell.openPath(dir), log }),
-    onClearHistory: () => void core.handlers.clearHistory().catch((e: unknown) => log.error("app.clearFailed", { error: e })),
-    onQuit: () => app.quit(),
-  });
-
   const keys = createHotkeys({
     globalShortcut,
     config,
     onCapture: captureInto(core.onCapture),
     onAppend: captureInto(core.onAppend),
     notify,
+    label: (accelerator) => hotkeyLabel(accelerator, process.platform),
     log,
   });
   keys.start();
@@ -237,6 +262,8 @@ async function start(): Promise<void> {
       appendFromFile: async (png: string) => core.onAppend({ png: readImage(png).toPNG() }),
       hotkeyStatus: () => keys.status(),
       notifications: () => [...notices],
+      /** A capture refused for want of the Screen Recording grant, as the capturer reports it. */
+      denyCapture: (prompted: boolean) => core.onCaptureDenied(prompted),
     };
   }
 

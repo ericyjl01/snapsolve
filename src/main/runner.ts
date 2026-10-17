@@ -59,6 +59,8 @@ export interface UserMessage {
 
 export type RunnerEvent =
   | { type: "status"; threadId: string; status: ThreadStatus }
+  /** The turn's user turn is saved: `thread` carries it, so the card shows it (and a seed's note) before the answer. */
+  | { type: "turn"; threadId: string; thread: Thread }
   | { type: "thinking"; threadId: string }
   | { type: "delta"; threadId: string; text: string }
   | {
@@ -360,6 +362,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     } else {
       await setStatus(threadId, "running");
       thread = await store.appendTurn(threadId, userTurn(request));
+      emit({ type: "turn", threadId, thread });
       target = { request, index: thread.turns.length - 1 };
     }
     const asked = target.request;

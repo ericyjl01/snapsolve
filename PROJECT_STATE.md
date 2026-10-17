@@ -2,11 +2,11 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-048, 015 closed: macOS suite green; `npm test` is the full gate again.
+048, 015, 014 closed: macOS suite green; `npm test` is the full gate; userData = <data dir>/electron.
 009 blocked before any code: × / tab click need a renderer→main call the 9-function preload lacks (asked: Amendment 3 togglePanel()).
-014 in review on keel/014: userData = <data dir>/electron in every mode; task tests 2/2, `npm test` 601 pass; real launch puts only electron/ in the data dir.
-- next action: reviewer verdict → close 014 → `tasks.py next`
+- next action: queue all blocked on 009's question; answer it, then paste the goal line
 010/011/013/030 wait on 009. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
+- Windows PC leftovers: delete stale %APPDATA%\snapsolve (014); ASR exclusion still needed there
 
 ## Log
 2026-10-14 · 015 · blocked · parked: finish on a Mac (Eric); ASR rule 01443614 still blocks electron.exe on this PC (-)

@@ -15,6 +15,7 @@ import { createLineSplitter, parseEvent, type RateWindow, type StreamEvent } fro
 export const NEW_TEXT = "Solve the problem on this screen.";
 export const APPEND_TEXT = "Here is the next part.";
 export const EARLIER_HEADER = "Earlier answers in this thread:";
+export const SEED_HEADER = "The previous thread's last answer:";
 
 const SCREENSHOT = /^(\d{3})\.png$/;
 const STDERR_KEEP = 4096;
@@ -33,11 +34,12 @@ export interface SendImage {
 }
 
 /**
- * `screenshot` is the `NNN.png` name from `store.saveScreenshot`. `retry` re-runs the thread's failed last user turn
+ * `screenshot` is the `NNN.png` name from `store.saveScreenshot`. `seed` is the previous thread's last answer when an
+ * append past the screenshot limit starts the thread (SPEC §2.3). `retry` re-runs the thread's failed last user turn
  * (SPEC §7.1 Retry) without adding it again; `retryTarget` says whether there is one.
  */
 export type TurnRequest =
-  | { kind: "new"; screenshot: string }
+  | { kind: "new"; screenshot: string; seed?: string }
   | { kind: "append"; screenshot: string }
   | { kind: "followUp"; text: string }
   | { kind: "retry" };
@@ -206,7 +208,12 @@ export function buildEnv(env: Readonly<Record<string, string | undefined>>, allo
 
 export function buildUserMessage(kind: UserRequest["kind"], images: SendImage[], text?: string): UserMessage {
   if (kind === "followUp") return userLine([{ type: "text", text: text ?? "" }]);
-  return userLine([...images.map(imageBlock), { type: "text", text: kind === "new" ? NEW_TEXT : APPEND_TEXT }]);
+  return userLine([...images.map(imageBlock), { type: "text", text: text ?? (kind === "new" ? NEW_TEXT : APPEND_TEXT) }]);
+}
+
+/** SPEC §2.3: a seeded thread's first question, the previous thread's last answer before the append question. */
+export function seededQuestion(seed: string): string {
+  return `${SEED_HEADER}\n\n${seed}\n\n---\n\n${APPEND_TEXT}`;
 }
 
 /** The first message of a replacement session (SPEC §3.4): every screenshot, the earlier answers, the question. */
@@ -363,6 +370,10 @@ export function createRunner(deps: RunnerDeps): Runner {
     }
     const prior = thread.turns.slice(0, target.index);
     const answers = prior.filter(isAnswer).map((t) => t.text);
+    // A seeded thread's later turns carry the previous thread's answer as the earliest one (the first turn's own
+    // question already holds it).
+    const seed = target.index > 0 ? threadSeed(thread) : undefined;
+    const earlier = seed === undefined ? answers : [seed, ...answers];
 
     // A retry never starts a session under the failed attempt's id (claude may have created it): it resumes the
     // owned transcript or starts a fresh one carrying the thread's screenshots, each once.
@@ -382,7 +393,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       thread = await store.replaceSession(threadId);
       if (answers.length > 0) note = "resumeFallback";
       const images = await Promise.all(screenshotFiles(thread.turns).map((f) => deps.loadSendImage(screenshotPath(thread, f))));
-      attempt = await spawnTurn(thread, { id: thread.sessionId }, buildFallbackMessage(images, answers, question(asked)));
+      attempt = await spawnTurn(thread, { id: thread.sessionId }, buildFallbackMessage(images, earlier, question(asked)));
     } else if (mode === "first") {
       attempt = await spawnTurn(thread, { id: thread.sessionId }, await requestMessage(thread, asked));
     }
@@ -423,7 +434,7 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   async function requestMessage(thread: Thread, request: UserRequest): Promise<UserMessage> {
     if (request.kind === "followUp") return buildUserMessage("followUp", [], request.text);
-    return buildUserMessage(request.kind, [await deps.loadSendImage(screenshotPath(thread, request.screenshot))]);
+    return buildUserMessage(request.kind, [await deps.loadSendImage(screenshotPath(thread, request.screenshot))], question(request));
   }
 
   function screenshotPath(thread: Thread, file: string): string {
@@ -599,14 +610,21 @@ function imageBlock(image: SendImage): ContentBlock {
 }
 
 function userTurn(request: UserRequest): UserTurn {
-  return request.kind === "followUp"
-    ? { role: "user", kind: "text", text: request.text }
-    : { role: "user", kind: "screenshot", file: request.screenshot };
+  if (request.kind === "followUp") return { role: "user", kind: "text", text: request.text };
+  const turn: UserTurn = { role: "user", kind: "screenshot", file: request.screenshot };
+  return request.kind === "new" && request.seed !== undefined ? { ...turn, seed: request.seed } : turn;
 }
 
 function question(request: UserRequest): string {
   if (request.kind === "followUp") return request.text;
-  return request.kind === "new" ? NEW_TEXT : APPEND_TEXT;
+  if (request.kind === "append") return APPEND_TEXT;
+  return request.seed === undefined ? NEW_TEXT : seededQuestion(request.seed);
+}
+
+/** The seed on the thread's first user turn, if that turn is a seeded screenshot. */
+function threadSeed(thread: Thread): string | undefined {
+  const first = thread.turns.find((t): t is UserTurn => t.role === "user");
+  return first?.kind === "screenshot" ? first.seed : undefined;
 }
 
 function screenshotFiles(turns: Turn[]): string[] {
@@ -634,7 +652,8 @@ export function retryTarget(thread: Thread): { request: UserRequest; index: numb
   const turn = thread.turns[index] as UserTurn;
   if (turn.kind === "text") return { request: { kind: "followUp", text: turn.text }, index };
   const first = !thread.turns.slice(0, index).some((t) => t.role === "user");
-  return { request: { kind: first ? "new" : "append", screenshot: turn.file }, index };
+  if (!first) return { request: { kind: "append", screenshot: turn.file }, index };
+  return { request: { kind: "new", screenshot: turn.file, ...(turn.seed !== undefined ? { seed: turn.seed } : {}) }, index };
 }
 
 function isAnswer(turn: Turn): turn is AssistantTurn {
@@ -647,7 +666,11 @@ function requestProblem(request: TurnRequest): string | null {
     return typeof request.text === "string" && request.text.trim() !== "" ? null : "empty follow-up";
   }
   if (request.kind === "new" || request.kind === "append") {
-    return typeof request.screenshot === "string" && SCREENSHOT.test(request.screenshot) ? null : "invalid screenshot";
+    if (!(typeof request.screenshot === "string" && SCREENSHOT.test(request.screenshot))) return "invalid screenshot";
+    const seed: unknown = (request as { seed?: unknown }).seed;
+    if (seed === undefined) return null;
+    if (request.kind === "append") return "only a new thread is seeded";
+    return typeof seed === "string" && seed.trim() !== "" ? null : "invalid seed";
   }
   return "unknown turn kind";
 }

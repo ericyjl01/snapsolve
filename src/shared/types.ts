@@ -27,7 +27,17 @@ export interface Config {
 export type ThreadStatus = "new" | "queued" | "running" | "done" | "error";
 
 export type UserTurn =
-  | { role: "user"; kind: "screenshot"; file: string; text?: string }
+  | {
+      role: "user";
+      kind: "screenshot";
+      file: string;
+      text?: string;
+      /**
+       * A thread's first screenshot only, when an append past `maxScreenshotsPerThread` started the thread: the previous
+       * thread's last answer, sent with the image (SPEC §2.3).
+       */
+      seed?: string;
+    }
   | { role: "user"; kind: "text"; text: string };
 
 export interface AssistantTurn {

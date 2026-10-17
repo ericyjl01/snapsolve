@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { screenRecordingCard, SnapsolveError } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
-import type { Config, Thread } from "../shared/types";
+import type { AssistantTurn, Config, Thread } from "../shared/types";
 import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
@@ -140,7 +140,8 @@ export function createApp(deps: AppDeps): App {
     permissionId = null;
   }
 
-  async function newThread(shot: Shot): Promise<string> {
+  /** `seed`: the previous thread's last answer, when an append past the screenshot limit starts this one (SPEC §2.3). */
+  async function newThread(shot: Shot, seed?: string): Promise<string> {
     const thread = await store.createThread({ model: config.model, effort: config.effort });
     dropPermissionCard();
     // SPEC §2.1: the full-resolution PNG is on disk before anything is sent.
@@ -150,7 +151,7 @@ export function createApp(deps: AppDeps): App {
     // SPEC §4.2: the card (thumbnail + "Thinking…") is on screen before claude is spawned.
     panel.open();
     broadcast();
-    start(thread.id, { kind: "new", screenshot: saved.file });
+    start(thread.id, { kind: "new", screenshot: saved.file, ...(seed !== undefined ? { seed } : {}) });
     return thread.id;
   }
 
@@ -210,12 +211,13 @@ export function createApp(deps: AppDeps): App {
   };
 
   return {
-    onCapture: newThread,
+    onCapture: (shot) => newThread(shot),
 
     async onAppend(shot) {
       let target: Thread | null = null;
       if (current) target = await store.getThread(current).catch(() => null);
-      if (!target || decideAppend(target, config.maxScreenshotsPerThread) === "newThread") return newThread(shot);
+      if (!target) return newThread(shot);
+      if (decideAppend(target, config.maxScreenshotsPerThread) === "newThread") return newThread(shot, lastAnswerText(target));
       const saved = await store.saveScreenshot(target.id, shot.png);
       dropPermissionCard();
       if (!known.has(target.id)) remember(target);
@@ -282,6 +284,11 @@ export function resolveClaudeCommand(options: {
     if (options.isFile(file)) return { path: file, prefixArgs: [] };
   }
   return { path: "claude", prefixArgs: [] };
+}
+
+/** The thread's last successful, non-empty answer: what a thread started past the screenshot limit is seeded with. */
+function lastAnswerText(thread: Thread): string | undefined {
+  return thread.turns.findLast((t): t is AssistantTurn => t.role === "assistant" && !t.isError && t.text.trim() !== "")?.text;
 }
 
 function schemeOf(url: unknown): string {

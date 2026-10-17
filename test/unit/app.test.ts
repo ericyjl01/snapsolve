@@ -7,6 +7,7 @@ import { createApp, resolveClaudeCommand, type AppDeps } from "../../src/main/ap
 import type { Logger } from "../../src/main/log";
 import type { RunnerEvent, TurnRequest } from "../../src/main/runner";
 import { createStore, type Store } from "../../src/main/store";
+import { CONTINUED_NOTE, continuedNote } from "../../src/shared/errors";
 import { IPC } from "../../src/shared/ipc";
 import type { AssistantTurn, Thread } from "../../src/shared/types";
 
@@ -74,6 +75,8 @@ const errorTurn: AssistantTurn = {
   errorMessage: "Timed out and stopped. Press Retry to try again.",
 };
 
+const answer = (text: string): AssistantTurn => ({ role: "assistant", text, durationMs: 5, ttftMs: 1, costUsd: null, isError: false });
+
 describe("onCapture", () => {
   it("creates a thread with the configured model, saves the PNG, opens the panel with the card, then enqueues the turn", async () => {
     const app = createApp(deps);
@@ -127,6 +130,77 @@ describe("onAppend", () => {
     const next = await app.onAppend({ png: PNG2 });
     expect(next).not.toBe(first);
     expect(deps.runner.enqueue).toHaveBeenLastCalledWith(next, { kind: "new", screenshot: "001.png" });
+  });
+
+  it("at the cap: the new thread's turn is seeded with the previous thread's last answer (051)", async () => {
+    deps.config.maxScreenshotsPerThread = 2;
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    for (const turn of [
+      { role: "user", kind: "screenshot", file: "001.png" },
+      answer("first answer"),
+      { role: "user", kind: "screenshot", file: "002.png" },
+      answer("x = 4, so y = 2."),
+    ] as Thread["turns"]) {
+      await store.appendTurn(first, turn);
+    }
+    const next = await app.onAppend({ png: PNG2 });
+    expect(next).not.toBe(first);
+    expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "new", screenshot: "001.png", seed: "x = 4, so y = 2." }]);
+    expect(await readFile(store.screenshotPath(next, 1))).toEqual(Buffer.from(PNG2));
+    // The new thread becomes the append target.
+    await app.onAppend({ png: PNG });
+    expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "append", screenshot: "002.png" }]);
+  });
+
+  it("at the cap, the seed is the last successful answer, skipping a later errored one", async () => {
+    deps.config.maxScreenshotsPerThread = 1;
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    for (const turn of [
+      { role: "user", kind: "screenshot", file: "001.png" },
+      answer("x = 4"),
+      { role: "user", kind: "text", text: "why?" },
+      { ...errorTurn, text: "partial" },
+    ] as Thread["turns"]) {
+      await store.appendTurn(first, turn);
+    }
+    const next = await app.onAppend({ png: PNG2 });
+    expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "new", screenshot: "001.png", seed: "x = 4" }]);
+  });
+
+  it("at the cap with no successful answer (only errors, or an empty answer): a plain new thread, no seed key", async () => {
+    deps.config.maxScreenshotsPerThread = 1;
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    for (const turn of [{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn, answer("")] as Thread["turns"]) {
+      await store.appendTurn(first, turn);
+    }
+    const next = await app.onAppend({ png: PNG2 });
+    expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "new", screenshot: "001.png" }]);
+  });
+
+  it("a capture (not an append) never seeds, even when the previous thread is full", async () => {
+    deps.config.maxScreenshotsPerThread = 1;
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    for (const turn of [{ role: "user", kind: "screenshot", file: "001.png" }, answer("x = 4")] as Thread["turns"]) {
+      await store.appendTurn(first, turn);
+    }
+    const next = await app.onCapture({ png: PNG2 });
+    expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "new", screenshot: "001.png" }]);
+  });
+});
+
+describe("continuedNote (051)", () => {
+  it("is the card's text for a thread seeded from the previous one, and only for that", () => {
+    expect(CONTINUED_NOTE).toMatch(/continued from the previous thread/i);
+    const seeded = { role: "user", kind: "screenshot", file: "001.png", seed: "x = 4" } as const;
+    const plain = { role: "user", kind: "screenshot", file: "001.png" } as const;
+    expect(continuedNote(seeded)).toBe(CONTINUED_NOTE);
+    expect(continuedNote(plain)).toBeNull();
+    expect(continuedNote({ role: "user", kind: "text", text: "why?" })).toBeNull();
+    expect(continuedNote(answer("x = 4"))).toBeNull();
   });
 });
 

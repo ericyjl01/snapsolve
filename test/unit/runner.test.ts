@@ -15,7 +15,10 @@ import {
   APPEND_TEXT,
   NEW_TEXT,
   type RunnerEvent,
+  SEED_HEADER,
+  seededQuestion,
   type SendImage,
+  type TurnRequest,
   withLoginShellPath,
 } from "../../src/main/runner";
 import { createStore, type Store } from "../../src/main/store";
@@ -776,6 +779,99 @@ describe("retry (050): re-runs the failed turn without adding its user turn agai
     expect((await runner.enqueue(empty.id, { kind: "retry" })).ok).toBe(false);
     expect(calls).toHaveLength(1);
     expect((await store.getThread(empty.id)).turns).toEqual([]);
+  });
+});
+
+describe("seeded new thread (051): the 7th append carries the previous thread's last answer", () => {
+  const SEED = "The previous answer: $x = 4$.";
+  const failLines = [{ type: "result", subtype: "error_during_execution", is_error: true, errors: ["overloaded"] }];
+  function scripted(...plan: string[]) {
+    let n = 0;
+    script = (child, call) => {
+      const step = plan[n++] ?? "ok:x";
+      if (step === "fail") child.script(failLines, 1);
+      else child.script(okLines(call, step.slice(3)));
+    };
+  }
+  const sentMessage = (i: number) => JSON.parse(calls[i].child.written) as ReturnType<typeof buildUserMessage>;
+
+  it("seededQuestion: the header, the previous answer, then the append question", () => {
+    const text = seededQuestion(SEED);
+    expect(text.startsWith(`${SEED_HEADER}\n\n${SEED}`)).toBe(true);
+    expect(text.endsWith(APPEND_TEXT)).toBe(true);
+    expect(text).not.toContain(NEW_TEXT);
+  });
+
+  it("the first stdin message has the image once, then the previous answer as text; a new session; the seed is saved on the user turn", async () => {
+    scripted("ok:part two");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    expect(await runner.enqueue(t.id, { kind: "new", screenshot: shot.file, seed: SEED })).toMatchObject({ ok: true });
+    const message = sentMessage(0);
+    expect(message.message.content).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: PNG.data } },
+      { type: "text", text: seededQuestion(SEED) },
+    ]);
+    expect(calls[0].args).toContain("--session-id");
+    expect(calls[0].args).not.toContain("--resume");
+    const saved = await store.getThread(t.id);
+    expect(saved.turns[0]).toEqual({ role: "user", kind: "screenshot", file: "001.png", seed: SEED });
+    expect(saved.turns).toHaveLength(2);
+  });
+
+  it("a new thread without a seed is unchanged: NEW_TEXT and no seed on the turn", async () => {
+    scripted("ok:x = 4");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect(sentMessage(0)).toEqual(buildUserMessage("new", [PNG]));
+    expect((await store.getThread(t.id)).turns[0]).toEqual({ role: "user", kind: "screenshot", file: "001.png" });
+  });
+
+  it("a failed seeded first turn retried still sends the previous answer (once) and keeps one user turn", async () => {
+    scripted("fail", "ok:part two");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    expect((await runner.enqueue(t.id, { kind: "new", screenshot: shot.file, seed: SEED })).ok).toBe(false);
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    const message = sentMessage(1);
+    expect(message.message.content.filter((b) => b.type === "image")).toHaveLength(1);
+    const texts = message.message.content.flatMap((b) => (b.type === "text" ? [b.text] : []));
+    expect(texts.join("\n").split(SEED)).toHaveLength(2);
+    expect(texts.join("\n")).toContain(APPEND_TEXT);
+    const turns = (await store.getThread(t.id)).turns;
+    expect(turns.filter((x) => x.role === "user")).toEqual([{ role: "user", kind: "screenshot", file: "001.png", seed: SEED }]);
+  });
+
+  it("a later turn that takes the resume fallback lists the previous thread's answer first among the earlier answers", async () => {
+    scripted("ok:part two", "ok:because");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file, seed: SEED });
+    // The fake writes no transcript, so the follow-up is the fallback.
+    await runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    expect(sentMessage(1)).toEqual(buildFallbackMessage([PNG], [SEED, "part two"], "why?"));
+  });
+
+  it.each([
+    ["an empty seed", ""],
+    ["a blank seed", "  \n "],
+    ["a non-string seed", 42],
+  ])("%s is refused: no spawn, no user turn", async (_name, seed) => {
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    const outcome = await runner.enqueue(t.id, { kind: "new", screenshot: shot.file, seed } as unknown as TurnRequest);
+    expect(outcome.ok).toBe(false);
+    expect(calls).toHaveLength(0);
+    expect((await store.getThread(t.id)).turns).toEqual([]);
+  });
+
+  it("an append request with a seed is refused (only a new thread is seeded)", async () => {
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    const outcome = await runner.enqueue(t.id, { kind: "append", screenshot: shot.file, seed: SEED } as unknown as TurnRequest);
+    expect(outcome.ok).toBe(false);
+    expect(calls).toHaveLength(0);
   });
 });
 

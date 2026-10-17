@@ -4,7 +4,7 @@
 // No × button and no clickable tab: Esc in main collapses the panel (SPEC Amendment 3). On macOS a missing Screen
 // Recording grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings /
 // Relaunch, nothing else.
-import { screenRecordingCard, userMessage } from "../shared/errors";
+import { continuedNote, screenRecordingCard, userMessage } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
 import type { AssistantTurn, Thread } from "../shared/types";
 import { renderAnswer } from "./render";
@@ -154,6 +154,8 @@ function renderTurns(card: Card, thread: Thread): void {
   let screenshots = 0;
   for (const turn of thread.turns) {
     if (turn.role === "user") {
+      const note = continuedNote(turn);
+      if (note) nodes.push(el("p", "note", note));
       // The first screenshot is the card's thumbnail; appended ones show where they joined.
       if (turn.kind === "screenshot") {
         if (++screenshots > 1) nodes.push(thumbnail(thread.id, Number.parseInt(turn.file, 10)));

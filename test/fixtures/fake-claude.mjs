@@ -3,7 +3,7 @@
 //   ok (default) · slow · hang · crash · no-conversation · not-logged-in · api-key · rate-limited
 // Writes transcripts like claude: `--session-id <sid>` → $FAKE_PROJECTS/<encoded cwd>/<sid>.jsonl, `--resume <path>`
 // → appends to <path> (missing or unparsable → "No conversation found"). Logs start/end, argv, env names, cwd and
-// stdin as JSON lines to $FAKE_LOG.
+// stdin as JSON lines to $FAKE_LOG. FAKE_ANSWER_SUFFIX is appended to every answer (e.g. math for the panel e2e).
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -83,7 +83,7 @@ async function main() {
     ? readFileSync(transcript, "utf8").split("\n").filter((l) => l.includes('"type":"assistant"')).length
     : 0;
   const images = message.message.content.filter((b) => b.type === "image").length;
-  const answer = `Answer ${answers + 1}: saw ${images} image(s).`;
+  const answer = `Answer ${answers + 1}: saw ${images} image(s).${process.env.FAKE_ANSWER_SUFFIX ?? ""}`;
   appendFileSync(transcript, `${JSON.stringify({ type: "user", sessionId: sid, message: message.message })}\n`);
 
   emit({ type: "stream_event", event: { type: "message_start", message: { role: "assistant", content: [] } }, session_id: sid });

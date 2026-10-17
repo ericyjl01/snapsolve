@@ -11,7 +11,20 @@ const PROBLEM = path.join(fixturesDir, "problems", "algebra.png");
 const CSP =
   "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' snapsolve:; " +
   "connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
-const PRELOAD_NAMES = ["onDelta", "onDone", "onThreadsChanged", "listThreads", "followUp", "retry", "copy", "openExternal", "clearHistory"];
+// SPEC §4.4's nine plus Amendment 2's two (task 030).
+const PRELOAD_NAMES = [
+  "onDelta",
+  "onDone",
+  "onThreadsChanged",
+  "listThreads",
+  "followUp",
+  "retry",
+  "copy",
+  "openExternal",
+  "clearHistory",
+  "openScreenRecordingSettings",
+  "relaunch",
+];
 
 interface Panel extends LaunchedApp {
   page: Page;
@@ -111,7 +124,7 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the nine preload functions", async () => {
+  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the eleven preload functions", async () => {
     const p = await launchPanel();
     try {
       expect((await windowInfo(p.app)).contentProtected).toBe(true);
@@ -164,4 +177,38 @@ describe("panel (e2e)", () => {
       await p.close();
     }
   }, 90_000);
+
+  it("a denied Screen Recording capture shows the permission card with its buttons and no Retry", async () => {
+    const p = await launchPanel();
+    try {
+      const deny = (prompted: boolean) =>
+        p.app.evaluate(
+          (_electron, value) =>
+            (globalThis as unknown as { snapsolveTest: { denyCapture(prompted: boolean): Promise<void> } }).snapsolveTest.denyCapture(value),
+          prompted,
+        );
+      await deny(false);
+      const permission = p.page.locator(".card.permission");
+      await permission.waitFor({ state: "visible", timeout: 5_000 });
+      expect(await p.page.locator(".card.permission").count()).toBe(1);
+      expect(await permission.locator(".error").textContent()).toBe(
+        "snapsolve needs Screen Recording permission. Grant it in System Settings, then relaunch.",
+      );
+      expect(await permission.locator("button.open-settings").isVisible()).toBe(true);
+      expect(await permission.locator("button.relaunch").isVisible()).toBe(true);
+      expect(await permission.locator(".retry").isVisible()).toBe(false);
+      expect(await permission.locator("textarea, input").count()).toBe(0);
+      expect(await permission.locator("img").count()).toBe(0);
+
+      await deny(true);
+      await expect
+        .poll(() => permission.locator(".error").textContent(), { timeout: 5_000 })
+        .toBe("Grant Screen Recording in the prompt, then click Relaunch.");
+      expect(await p.page.locator(".card.permission").count()).toBe(1);
+      expect(await permission.locator("button.open-settings").count()).toBe(0);
+      expect(await permission.locator("button.relaunch").isVisible()).toBe(true);
+    } finally {
+      await p.close();
+    }
+  });
 });

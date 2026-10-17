@@ -64,6 +64,11 @@ export interface Thread {
   turns: Turn[];
   /** Set when the first turn's transcript could not be adopted: the next turn takes the resume fallback. */
   transcriptMissing?: boolean;
+  /**
+   * Set only on the macOS Screen Recording card: a panel-only entry (never saved) whose one errored turn says what
+   * to do; `prompted` picks the buttons (`screenRecordingCard`).
+   */
+  permission?: { prompted: boolean };
 }
 
 /** main → renderer: a streamed chunk of answer text. */

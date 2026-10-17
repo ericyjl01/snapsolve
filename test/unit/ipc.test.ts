@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IPC, PRELOAD_CHANNELS } from "../../src/shared/ipc";
 
 describe("IPC contract", () => {
-  it("maps exactly the nine SPEC §4.4 preload functions", () => {
+  it("maps exactly the eleven preload functions (SPEC §4.4 + Amendment 2)", () => {
     expect(Object.keys(PRELOAD_CHANNELS).sort()).toEqual(
       [
         "onDelta",
@@ -14,6 +14,8 @@ describe("IPC contract", () => {
         "copy",
         "openExternal",
         "clearHistory",
+        "openScreenRecordingSettings",
+        "relaunch",
       ].sort(),
     );
   });

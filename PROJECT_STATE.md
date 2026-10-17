@@ -2,13 +2,12 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-011 closed (merge c0aa915): auth status, usage gate, error/warning/usage on the card and tray tooltip.
-- DECISIONS.md is at its 100-line cap: tidy (archive closed-task rows) before the next task adds a row
-Next: 050 (Retry without a duplicate user turn), then 051, 052, 013, 030. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
+011 closed (merge c0aa915); keel tidy 858eb76 archived 58 closed-task DECISIONS rows (001–029).
+013 blocked: needs a Windows PC that runs snapsolve — park, split (neutral checks here), or capture checks on macOS? (026 waits on 013)
+Next: whatever `tasks.py next` names (050–052, 030). M3 032 (Mac). Backlog: 033, 042.
 - not verified here: tray icon / real capture (013/032 checklists); Windows PC: delete stale %APPDATA%\snapsolve (014), ASR exclusion
 
 ## Log
-2026-10-14 · 017 · closed · option (a) (Eric): KaTeX's svg+path kept with only KaTeX's attributes — SPEC Amendment 1; render change is 019 (-)
 2026-10-14 · 019 · paused · Eric asked to pause; tests committed and red accepted, implementation not started → keel/019 (4fd7640)
 2026-10-14 · 019 · closed · KaTeX svg+path kept with only KaTeX's attributes (own DOMPurify instance, hooks drop other SVG elements and attributes, geometry URI-safe); sanitize(html) exported; \cancel strike stays out; DESIGN §3.6 updated (ce39fd3)
 2026-10-14 · 020 · blocked · M2 signing decision (DESIGN §10 risk 6): unsigned per SPEC non-goals, Authenticode signing, or defer M2 until M1 is finished on the Mac? (-)
@@ -48,3 +47,4 @@ Next: 050 (Retry without a duplicate user turn), then 051, 052, 013, 030. M2 026
 2026-10-17 · 009 · closed · panel window per platform (content protection before first show, showInactive, 6-step 120 ms tab/open transitions, Esc in main), renderer served from snapsolve://app with thread thumbnails from snapsolve://thread, exactly the 9 preload functions, cards UI (Thinking…, streamed rendered answer, Copy, Retry, follow-up, status line), app.ts capture → store → runner → panel pipeline with event-ordered thread view, claude path resolution, captureFromFile test hook; follow-ups 050–052 (4ea2f32)
 2026-10-17 · 010 · closed · hotkeys (capture/append, 400 ms debounce, taken-key notice naming hotkeys.<name>; Windows as a tray balloon), tray drawn in code with 5 items (Open panel, Pause/Resume, Open history folder creating threads/ first, Clear history, Quit), single instance with --quit, pause/resume on suspend/lock with hotkey re-registration; manual tray/capture checks deferred to 013/032 (f2a5903)
 2026-10-17 · 011 · closed · auth.ts: claude auth status (output decides, identity fields never returned or logged), usage line 5h N% · 7d M%, block until resetsAt with a local reset time; runner rechecks auth after an error result, fails usage-blocked turns before spawning, saves warning/usage on answers; startup notice for not found / logged out; card warning + usage footer; tray tooltip usage (c0aa915)
+2026-10-17 · 013 · blocked · needs a Windows PC that runs snapsolve (ASR-blocked work PC; work is on the Mac): park, split neutral checks to run here, or run capture checks on macOS? (-)

@@ -350,7 +350,7 @@
     {
       "id": "013",
       "title": "Windows end-to-end verification and checklist",
-      "status": "open",
+      "status": "blocked",
       "priority": 5,
       "milestone": 1,
       "deps": [
@@ -359,7 +359,7 @@
         "012"
       ],
       "file": "docs/tasks/013-windows-verify.md",
-      "blocked_on": null,
+      "blocked_on": "013 needs a Windows machine that runs snapsolve (real desktopCapturer, Windows content protection, the Windows checklist); the work PC is ASR-blocked and work moved to the Mac, where a win32-only e2e would just skip (red refuses green). Options: (a) park 013 until an unmanaged Windows PC is available; (b) split it: run the platform-neutral checks here now (restart survival with the owned transcript, Clear history + purge) and leave capture size / content protection + docs/checklists/windows.md for the Windows PC; (c) run the capture checks on macOS too (needs Screen Recording granted to the terminal running npm test). Which?",
       "attempts": 0,
       "branch": null,
       "stash": null,

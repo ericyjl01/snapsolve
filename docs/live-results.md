@@ -1,5 +1,25 @@
 # Live results — the system prompt on real `claude` (task 012)
 
+## macOS run — 2026-10-17 (Windows archived, SPEC Amendment 4)
+
+Measured on Eric's Mac (macOS 26.6.2, Node 26.5.0, Claude Code 2.1.302, claude.ai plan login) with `npm run test:live`,
+opus / high, the same four fixtures and checks as below.
+
+| Fixture | Answer line | Checks | Turn time | TTFT | claude duration | Cost |
+|---|---|---|---|---|---|---|
+| algebra | `x = 7` | all pass | 4.3 s | 1.6 s | 3.2 s | $0.024 |
+| rates | `36/7 h ≈ 5.14 h (about 5 h 9 min)` | all pass; **turn time 60.3 s > 60 s limit (test failed)** | 60.3 s | 1.4 s | 34.4 s | $0.028 |
+| code-bug | line 3 `range(1, …)` skips `nums[0]` | all pass | 4.4 s | 3.6 s | 3.6 s | $0.025 |
+| multiple-choice | `C) 29` | all pass | 3.8 s | 3.0 s | 3.0 s | $0.023 |
+
+- **4/4 answers correct** with every format check (answer first, no preamble, ≤ 25 lines, no HTML).
+- The `rates` failure was timing only: claude reported 34.4 s for the turn, and about 26 s more passed between spawn and
+  exit outside the model (the other turns had about 1 s of overhead). A rerun of `rates` alone right after: 5.6 s, TTFT 1.6 s,
+  all checks pass. Not reproduced, so the 60 s limit stays; if it happens again, `logs` + `runner.spawn`/`runner.exit`
+  timestamps show where the time went.
+
+## Windows run — 2026-10-14
+
 Measured 2026-10-14 on Windows 11 with Claude Code 2.1.300 (claude.ai plan login, no API key). `npm run test:live` drives
 the real runner (SPEC §3.1 flags, `prompts/system.md`, effort high) on the four screenshots in `test/fixtures/problems/`;
 the sonnet run sets `SNAPSOLVE_LIVE_MODEL=sonnet`. Turn time is wall clock from enqueue to the end of the turn; TTFT and

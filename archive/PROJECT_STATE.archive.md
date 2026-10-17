@@ -15,3 +15,4 @@
 2026-10-14 · 007 · closed · encodeForModel (2576 long edge, JPEG 85 over 3 MB), capturer (cursor display, source match, mutex, panel hide below Win 10 2004 and on macOS), captureFailed kind, decideAppend (775ec73)
 2026-10-14 · 008 · closed · renderAnswer: markdown-it (no raw HTML) + KaTeX HTML (trust off, maxExpand 1000, maxSize 50) + highlight.js common + DOMPurify (no img/svg/math, http(s) only); KaTeX CSS/fonts + hljs theme copied to dist/renderer (5e477bc)
 2026-10-14 · 017 · blocked · KaTeX SVG symbols stripped by the SPEC §4.4 svg ban — allow svg+path, accept, or steer the model? (-)
+2026-10-14 · 015 · blocked · precondition EPERM: Defender ASR rule 01443614 still blocks electron.exe — IT exclusion or Microsoft submission needed (-)

@@ -2,13 +2,13 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-048, 015 closed: macOS suite green; `npm test` (unit + integration + e2e) is the full gate again.
+048, 015 closed: macOS suite green; `npm test` is the full gate again.
 009 blocked before any code: × / tab click need a renderer→main call the 9-function preload lacks (asked: Amendment 3 togglePanel()).
-- next action: 014 (Electron userData inside the data dir), then whatever `tasks.py next` names
+014 in review on keel/014: userData = <data dir>/electron in every mode; task tests 2/2, `npm test` 601 pass; real launch puts only electron/ in the data dir.
+- next action: reviewer verdict → close 014 → `tasks.py next`
 010/011/013/030 wait on 009. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
 
 ## Log
-2026-10-14 · 015 · blocked · precondition EPERM: Defender ASR rule 01443614 still blocks electron.exe — IT exclusion or Microsoft submission needed (-)
 2026-10-14 · 015 · blocked · parked: finish on a Mac (Eric); ASR rule 01443614 still blocks electron.exe on this PC (-)
 2026-10-14 · 006 · closed · runner: SPEC §3.1 argv, stripped env, stream events, per-thread FIFO under a global cap, timeout kill, resume with fresh-session fallback; spawn errors logged without argv; a new session's transcript adopted after any exit (712edc0)
 2026-10-14 · 012 · closed · prompts/system.md (DESIGN draft, new example, code-bug answer line quotes the faulty line); live test on 4 generated problem PNGs via the real runner: opus/high 4/4 in 5 consecutive runs, sonnet/high 3/4; docs/live-results.md, DESIGN §10 item 5 (3093f03)
@@ -48,3 +48,4 @@ On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip
 2026-10-17 · 048 · closed · macOS suite green: runner integration temp root realpath'd (macOS /var → /private/var), plus a symlinked-data-dir test; realSteps matches claude.exe by win32 basename so Windows paths match on any host (049 folded in) (9893090)
 2026-10-17 · 015 · closed · npm test (unit + integration + e2e) is the full-suite gate again (keel.json, harness test); on Eric's Mac the Electron precondition is ok and the first full run of everything closed under the temporary gate is green (2218b7c)
 2026-10-17 · 009 · blocked · SPEC §4.3 × / tab click vs §4.4 nine-function preload — Amendment 3 togglePanel()? → keel/009 (-)
+2026-10-17 · 014 · closed · Electron userData is <data dir>/electron in every mode (resolveDataDir before ready); e2e covers the override and the platform default (HOME on macOS, LOCALAPPDATA on Windows); stale %APPDATA% cleanup left for the Windows PC (36c02ef)

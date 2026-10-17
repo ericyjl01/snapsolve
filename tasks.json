@@ -360,7 +360,7 @@
     {
       "id": "014",
       "title": "Electron userData inside the data dir",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 1,
       "deps": [
@@ -369,17 +369,22 @@
       ],
       "file": "docs/tasks/014-userdata.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/014",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "36c02ef",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/e2e/userdata.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "775e22fbd7e4d979ae48e2ba92fe5b92ae8e2f3f",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "648f61b20d90f5283378ee53d640a724f54798cb",
+        "reasons": "userdata.e2e (2/2) proves userData = <data>/electron and exists after launch, both with SNAPSOLVE_DATA_DIR and with the default resolveDataDir path (HOME on darwin, LOCALAPPDATA on win32; fails on master, which leaves Electron's default); win32 branch also asserts not under Roaming appData; npm test 601 pass, exit 0; tests unchanged since red 775e22f; Mac data dir holds only electron/",
+        "at": "2026-10-17"
+      }
     },
     {
       "id": "015",

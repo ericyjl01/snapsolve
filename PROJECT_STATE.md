@@ -2,15 +2,13 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-Closed today: 010, 011, 030 (merge ce0a347); keel tidy archived 58 DECISIONS rows.
-Waiting on Eric:
-- 032: run docs/checklists/macos.md (git show keel/032:docs/checklists/macos.md) on this Mac, report each result
-- 013: needs a Windows PC that runs snapsolve — park, split (neutral checks here), or capture checks on macOS? (026 waits on 013)
-Next: whatever `tasks.py next` names (050–052). Backlog: 033, 042, 053.
+050 in progress on keel/050: tests 6a402dd (red accepted), code committed; task tests 76/76, unit 748 passed, errors e2e green.
+- in flight: review (tasks.py brief 050 → fresh Opus reviewer); then close 050
+Waiting on Eric: 032 (run docs/checklists/macos.md on keel/032), 013 (Windows PC: park, split or macOS capture checks?)
+Then 051, 052. Backlog: 033, 042, 053.
 - Windows PC leftovers: stale %APPDATA%\snapsolve (014), ASR exclusion
 
 ## Log
-2026-10-14 · 020 · blocked · M2 signing decision (DESIGN §10 risk 6): unsigned per SPEC non-goals, Authenticode signing, or defer M2 until M1 is finished on the Mac? (-)
 2026-10-14 · 020 · closed · Eric chose (a): M2 ships unsigned, doctor detects the ASR block, real install checked on an unmanaged Windows PC; 015 stays parked for the Mac (-)
 2026-10-14 · keel · planned · M2 — Plugin and installer (Windows) (6 tasks) (-)
 2026-10-14 · 021 · closed · bootstrap/boot.js runs <data>/app/current/main.js (data dir rules in step with paths.ts by a parity test) or shows an error box naming /snapsolve install and exits 1; no Electron access outside Electron; bootstrap/package.json without dependencies (c68294f)
@@ -50,3 +48,4 @@ Next: whatever `tasks.py next` names (050–052). Backlog: 033, 042, 053.
 2026-10-17 · 013 · blocked · needs a Windows PC that runs snapsolve (ASR-blocked work PC; work is on the Mac): park, split neutral checks to run here, or run capture checks on macOS? (-)
 2026-10-17 · 030 · closed · macos.ts: darwinStartup hides the Dock before the tray and merges the login PATH once (warning logged), permission handlers (fixed Screen Recording settings URL, darwin only, args ignored; relaunch + exit), hotkeyLabel in the taken-hotkey notice; preload grows to eleven functions (Amendment 2); a denied capture shows an unsaved permission card in the panel; follow-up 053 (ce0a347)
 2026-10-17 · 032 · blocked · needs Eric to run the macOS checklist and report results → keel/032 (a402d20)
+2026-10-17 · 050 · closed · a Retry is a runner retry request: retryTarget re-runs the last user turn followed only by errored answers as the request that first ran it, without appending it again; resumes the owned transcript or takes the fresh-session fallback; nothing to retry → ok:false, no spawn (749b2df)

@@ -1319,23 +1319,28 @@
     {
       "id": "050",
       "title": "Retry re-runs the failed turn without a duplicate user turn",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 1,
       "deps": [],
       "file": "docs/tasks/050-retry-no-duplicate-turn.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/050",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "749b2df",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/runner.test.ts test/unit/app.test.ts",
-      "tests_commit": null,
+      "tests_commit": "6a402dd46203dd903077987e7faa477a8e0f39f8",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "440ec6c84130ce5e20cdb71a788d271bf120ebd2",
+        "reasons": "runner retry re-runs the failed last user turn in place: follow-up retry leaves thread.json user:why? once then error then answer (fallback and resume paths); failed first screenshot/append retry sends each image once with a fresh session id; bare-user-turn failures retry; app queues {kind:retry} only when retryTarget exists and queues nothing for an answered/empty errored thread. 8 tests fail on pre-change src, no test changes after red; task tests, --project unit and npm test exit 0",
+        "at": "2026-10-17"
+      }
     },
     {
       "id": "051",

@@ -11,6 +11,7 @@ import {
   createPanel,
   isSafeExternalUrl,
   loadWindowBounds,
+  MIN_SIZE,
   OPEN_INSET,
   OPEN_SIZE,
   type PanelDeps,
@@ -364,9 +365,24 @@ class FakeWindow extends EventEmitter {
     super();
     const { x, y, width, height } = options as unknown as Rect;
     this.bounds = { x, y, width, height };
+    this.resizable = options.resizable !== false;
     FakeWindow.last = this;
   }
+  resizable: boolean;
+  minimum: [number, number] = [0, 0];
   setContentProtection() {}
+  setResizable(value: boolean) {
+    this.resizable = value;
+  }
+  isResizable() {
+    return this.resizable;
+  }
+  setMinimumSize(width: number, height: number) {
+    this.minimum = [width, height];
+  }
+  getMinimumSize() {
+    return [...this.minimum];
+  }
   loadURL() {
     return Promise.resolve();
   }
@@ -391,6 +407,11 @@ class FakeWindow extends EventEmitter {
   }
   isFocused() {
     return false;
+  }
+  /** The user drags an edge or corner: the OS resizes it (left/top edges move x/y too), then Electron emits `resized`. */
+  userResize(r: Rect) {
+    this.bounds = { ...r };
+    this.emit("resized");
   }
   /** The user drags the window by its title bar: the OS moves it, then Electron emits `moved`. */
   userMove(x: number, y: number) {
@@ -626,5 +647,134 @@ describe("createPanel: floating window bounds (058)", () => {
     vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
     await vi.runAllTimersAsync();
     expect(log.warnings).toContain("panel.windowStateSaveFailed");
+  });
+});
+
+describe("createPanel: resizing the floating window (059)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("the minimum is 280 × 300", () => {
+    expect(MIN_SIZE).toEqual({ width: 280, height: 300 });
+  });
+
+  it("resizable with a 280 × 300 minimum only while open; the tab is neither resizable nor held to a minimum", () => {
+    const { panel, win, settle } = panelSetup();
+    expect(win.isResizable()).toBe(false);
+    expect(win.getMinimumSize()).toEqual([0, 0]);
+    panel.open();
+    settle();
+    expect(win.isResizable()).toBe(true);
+    expect(win.getMinimumSize()).toEqual([280, 300]);
+    panel.collapse();
+    expect(win.getMinimumSize()).toEqual([0, 0]);
+    expect(win.isResizable()).toBe(false);
+    settle();
+    expect(win.getBounds()).toEqual(computeBounds("tab", DISPLAY_A));
+  });
+
+  it("no saved size uses 360 × 460", () => {
+    const { panel, win, settle } = panelSetup({ saved: { "2": { x: 1500, y: 50, width: 700, height: 800 } } });
+    panel.open();
+    settle();
+    expect(win.getBounds()).toMatchObject({ width: 360, height: 460 });
+  });
+
+  it("resize saves width and height (and the x/y a left or top edge moved) for that display", () => {
+    const { panel, win, settle, saves } = panelSetup();
+    panel.open();
+    settle();
+    const { x, y } = win.getBounds();
+    win.userResize({ x: x - 140, y, width: 500, height: 600 });
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(saves).toEqual([{ "1": { x: x - 140, y, width: 500, height: 600 } }]);
+  });
+
+  it("the resized window reopens at the new size, also after hide + show around a capture", () => {
+    const { panel, win, settle } = panelSetup();
+    panel.open();
+    settle();
+    win.userResize({ x: 400, y: 100, width: 500, height: 600 });
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    panel.collapse();
+    settle();
+    panel.open();
+    settle();
+    expect(win.getBounds()).toEqual({ x: 400, y: 100, width: 500, height: 600 });
+    panel.hide();
+    panel.show();
+    panel.open();
+    settle();
+    expect(win.getBounds()).toEqual({ x: 400, y: 100, width: 500, height: 600 });
+  });
+
+  it("below minimum is clamped: a resize under 280 × 300 is neither applied nor saved", () => {
+    const { panel, win, settle, saves } = panelSetup();
+    panel.open();
+    settle();
+    win.userResize({ x: 500, y: 100, width: 200, height: 250 });
+    expect(win.getBounds()).toEqual({ x: 500, y: 100, width: 280, height: 300 });
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS * 2);
+    expect(saves).toEqual([]);
+  });
+
+  it("a saved size under the minimum (an edited window.json) opens at 280 × 300", () => {
+    const { panel, win, settle } = panelSetup({ saved: { "1": { x: 500, y: 100, width: 100, height: 120 } } });
+    panel.open();
+    settle();
+    expect(win.getBounds()).toEqual({ x: 500, y: 100, width: 280, height: 300 });
+  });
+
+  it("saved size larger than the work area is clamped: a size saved on a big display fits a smaller one", () => {
+    const { panel, win, settle } = panelSetup({ saved: { "1": { x: 100, y: 100, width: 1800, height: 1000 } } });
+    panel.open();
+    settle();
+    expect(win.getBounds()).toEqual({ x: 0, y: 25, width: 1440, height: 875 });
+  });
+
+  it("resize during an animation is not saved (only user resizes are stored)", () => {
+    const { panel, win, saves, settle } = panelSetup({ saved: { "1": { x: 500, y: 300, width: 400, height: 500 } } });
+    panel.open();
+    vi.advanceTimersByTime(TRANSITION_MS / TRANSITION_STEPS);
+    win.emit("resized");
+    settle();
+    win.emit("resized");
+    panel.collapse();
+    vi.advanceTimersByTime(TRANSITION_MS / TRANSITION_STEPS);
+    win.emit("resized");
+    settle();
+    win.emit("resized");
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS * 2);
+    expect(saves).toEqual([]);
+  });
+
+  it("redock keeps a resized window's size when it fits, shrinks it when the display got smaller", () => {
+    const { panel, win, settle } = panelSetup();
+    panel.open();
+    settle();
+    win.userResize({ x: 100, y: 100, width: 700, height: 700 });
+    panel.redock();
+    expect(win.getBounds()).toEqual({ x: 100, y: 100, width: 700, height: 700 });
+    DISPLAY_A.workArea.width = 600;
+    try {
+      panel.redock();
+      expect(win.getBounds()).toEqual({ x: 0, y: 100, width: 600, height: 700 });
+    } finally {
+      DISPLAY_A.workArea.width = 1440;
+    }
+  });
+
+  it("reset also resets the size to 360 × 460", () => {
+    const { panel, win, settle, saves } = panelSetup({ saved: { "1": { x: 100, y: 100, width: 700, height: 700 } } });
+    panel.open();
+    settle();
+    panel.resetPosition();
+    settle();
+    expect(saves).toEqual([{}]);
+    expect(win.getBounds()).toEqual(computeBounds("open", DISPLAY_A));
   });
 });

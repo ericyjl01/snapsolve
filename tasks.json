@@ -384,7 +384,7 @@
     {
       "id": "015",
       "title": "Restore npm test as the full-suite gate and re-run e2e",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 1,
       "deps": [
@@ -392,17 +392,22 @@
       ],
       "file": "docs/tasks/015-restore-full-gate.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/015",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "2218b7c",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/harness.test.ts test/e2e/launch.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "08bb2d476add0c05fa9e3dedb0d4f63068ce8ac1",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "08bb2d476add0c05fa9e3dedb0d4f63068ce8ac1",
+        "reasons": "harness 'sets keel's full-suite command' asserts keel.json test_command === 'npm test' exactly (fails on the temporary 'npx vitest run --project unit'); launch.e2e passes on this Mac, so Electron launches (precondition prints ok); npm test exits 0 including the e2e project (599 pass, 7 win32-only skips that predate the task); test diff is a tightened assertion plus the comment removal, nothing weakened",
+        "at": "2026-10-17"
+      }
     },
     {
       "id": "016",

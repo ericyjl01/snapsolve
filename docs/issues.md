@@ -44,6 +44,7 @@ Cause:   Defender ASR (IT-managed, event 1121) rule 01443614-cd74-433a-b99e-2ecd
 Fix:     none in the repo; needs an ASR exclusion for electron.exe (IT/admin) or the cloud verdict to change. Never work around it (copying/renaming the binary is evading a security control). Avoid find/timeout/tar in Git Bash on this machine.
 Tried:   re-running (blocked every time since 22:41); PowerShell/cmd/node/bash launchers — all blocked.
 Status:  2026-10-14 re-check (015 precondition): still EPERM. Eric: leave it, finish 015 on a Mac (DECISIONS 2026-10-14). Until then nothing that launches Electron (e2e, smoke, 009's panel) can be verified on this PC.
+         2026-10-17: on Eric's Mac the precondition prints `ok` and `npm test` (incl. e2e) is green; 015 restores `npm test` as the gate. The Windows PC still needs the exclusion.
 
 ## 2026-10-14 · task 003 · config create not atomic, unasserted
 tags: config, atomic-write, review, tests

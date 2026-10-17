@@ -2,13 +2,11 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-048 closed (merge 9893090): macOS unit suite green (runner temp realpath; realSteps win32 basename; 049 folded in).
-- next action: 015 (restore `npm test` as the full gate; precondition already `ok` on this Mac)
-After 015: 009 → 010 → 011 → 013 (Windows checklist); 014; M2 026 (approval, waits on 013); M3 030, 032 (Mac). Backlog: 033, 042.
-- Temporary gate (option A): full suite = `npx vitest run --project unit`; 015 restores `npm test`
+015 closed (merge 2218b7c): full gate is `npm test` again (unit + integration + e2e green on macOS).
+- next action: 009 (panel window, preload API and UI)
+After 009: 010 → 011 → 013 (Windows checklist); 014; M2 026 (approval, waits on 013); M3 030, 032 (Mac). Backlog: 033, 042.
 
 ## Log
-2026-10-14 · 008 · closed · renderAnswer: markdown-it (no raw HTML) + KaTeX HTML (trust off, maxExpand 1000, maxSize 50) + highlight.js common + DOMPurify (no img/svg/math, http(s) only); KaTeX CSS/fonts + hljs theme copied to dist/renderer (5e477bc)
 2026-10-14 · 017 · blocked · KaTeX SVG symbols stripped by the SPEC §4.4 svg ban — allow svg+path, accept, or steer the model? (-)
 2026-10-14 · 015 · blocked · precondition EPERM: Defender ASR rule 01443614 still blocks electron.exe — IT exclusion or Microsoft submission needed (-)
 2026-10-14 · 015 · blocked · parked: finish on a Mac (Eric); ASR rule 01443614 still blocks electron.exe on this PC (-)
@@ -48,3 +46,4 @@ After 015: 009 → 010 → 011 → 013 (Windows checklist); 014; M2 026 (approva
 2026-10-15 · 046 · closed · findTranscript stats project dirs concurrently (32 workers, StoreDeps.stat injectable); same newest-mtime result and warnings (eea7d86)
 2026-10-15 · 047 · closed · a failed turn that streamed an answer logs errors/stderr plus 'result: <n> chars omitted' instead of the result text; classification unchanged (473afe1)
 2026-10-17 · 048 · closed · macOS suite green: runner integration temp root realpath'd (macOS /var → /private/var), plus a symlinked-data-dir test; realSteps matches claude.exe by win32 basename so Windows paths match on any host (049 folded in) (9893090)
+2026-10-17 · 015 · closed · npm test (unit + integration + e2e) is the full-suite gate again (keel.json, harness test); on Eric's Mac the Electron precondition is ok and the first full run of everything closed under the temporary gate is green (2218b7c)

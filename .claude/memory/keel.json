@@ -14,6 +14,6 @@
     "ARCHITECTURE.md"
   ],
   "max_attempts": 3,
-  "test_command": "npx vitest run --project unit",
+  "test_command": "npm test",
   "test_timeout": 1800
 }

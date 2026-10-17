@@ -18,7 +18,8 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `onAppend`), the renderer's request handlers, runner events → panel, `resolveClaudeCommand`
   - `hotkeys.ts`: globalShortcut registration, debounce, pause/resume
   - `tray.ts`: tray menu and tooltip
-- `src/preload/preload.ts`: contextBridge exposing exactly the SPEC §4.4 API
+  - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the Screen Recording card's two actions (fixed settings URL, relaunch), hotkey labels per platform
+- `src/preload/preload.ts`: contextBridge exposing exactly the SPEC §4.4 API plus Amendment 2's two functions
 - `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `styles.css`
 - `src/shared/`: `types.ts` (Thread, Turn, Config, events), `ipc.ts` (channel names), `errors.ts` (error kinds + user messages)
 - `prompts/system.md`: the system prompt

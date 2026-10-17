@@ -1,0 +1,41 @@
+{
+  "name": "snapsolve",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Press a hotkey, capture the screen, get a step-by-step solution from Claude in a side panel.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && electron dist/main.js",
+    "smoke": "electron dist/main.js --smoke",
+    "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.ts"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
+    "@types/node": "^26.6.5",
+    "electron": "44.7.2",
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.1.2",
+    "playwright-core": "^1.64.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4"
+  },
+  "allowScripts": {
+    "electron@44.7.2": true,
+    "esbuild@0.28.2": true
+  },
+  "dependencies": {
+    "@electron/packager": "20.3.0",
+    "@vscode/markdown-it-katex": "^1.1.2",
+    "dompurify": "^3.4.17",
+    "highlight.js": "^11.12.0",
+    "katex": "^0.19.0",
+    "markdown-it": "^15.0.2"
+  },
+  "overrides": {
+    "@vscode/markdown-it-katex": {
+      "katex": "$katex"
+    }
+  }
+}

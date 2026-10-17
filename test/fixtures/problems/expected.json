@@ -1,0 +1,39 @@
+{
+  "fixtures": [
+    {
+      "name": "algebra",
+      "file": "algebra.png",
+      "problem": "Solve for x: 3(x − 4) + 2x = 2x + 9",
+      "accepts": "x = 7",
+      "answer": "x\\s*=\\s*([^=\\n]*=\\s*)*7(?![0-9.])"
+    },
+    {
+      "name": "rates",
+      "file": "rates.png",
+      "problem": "Pipes fill in 6 h and 9 h, a drain empties in 12 h; all open on an empty tank — time to fill?",
+      "accepts": "36/7 h (≈ 5.14 h, 5 h 9 min, 5 h 8.57 min)",
+      "answer": "(?<![0-9.])(36\\s*/\\s*7(?![0-9.])|5\\.14(?![0-9])|5\\s*(h|hr|hrs|hours?)\\b[^0-9]{0,12}(9|8\\.\\d+)\\s*(min|minutes?)\\b)|\\\\[dt]?frac\\{36\\}\\{7\\}",
+      "flags": "i"
+    },
+    {
+      "name": "code-bug",
+      "file": "code-bug.png",
+      "problem": "average([4, 8, 6]) prints 4.67 instead of 6.0: `for i in range(1, len(nums))` skips the first element",
+      "accepts": "names line 3 or range(1, len(nums)); shows a fixed ```python block",
+      "answer": "line\\s*3\\b|range\\(1,\\s*len\\(nums\\)\\)",
+      "flags": "i",
+      "fix": {
+        "language": "python",
+        "absent": "range(1,",
+        "present": "range\\(len\\(nums\\)\\)|range\\(0,\\s*len\\(nums\\)\\)|for\\s+\\w+\\s+in\\s+nums\\b|sum\\(nums\\)"
+      }
+    },
+    {
+      "name": "multiple-choice",
+      "file": "multiple-choice.png",
+      "problem": "Which of the following numbers is prime? A) 21 B) 27 C) 29 D) 33",
+      "accepts": "C (29)",
+      "answer": "(^|[^A-Za-z])C([^A-Za-z]|$)"
+    }
+  ]
+}

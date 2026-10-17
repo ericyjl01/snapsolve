@@ -1,0 +1,5 @@
+{
+  "name": "snapsolve",
+  "description": "Press a hotkey, capture the screen, get a step-by-step solution from Claude in a side panel. /snapsolve install sets up the desktop app (Windows).",
+  "author": { "name": "Px6mze9r" }
+}

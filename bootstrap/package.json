@@ -1,0 +1,8 @@
+{
+  "name": "snapsolve",
+  "productName": "snapsolve",
+  "version": "1.0.0",
+  "description": "snapsolve launcher: runs the installed app from the snapsolve data folder.",
+  "main": "boot.js",
+  "private": true
+}

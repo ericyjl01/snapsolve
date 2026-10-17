@@ -1,0 +1,54 @@
+# PROJECT_STATE
+
+## Now
+043, 044, 045 closed (merges 3f74473, 15f92c0, 4baaef1): claudePath symlink on macOS; one compareVersions; commands.mjs reuses steps.mjs fs helpers.
+046 closed (merge eea7d86): transcript scan stats ≤32 project dirs at once (equal-mtime tie order is now arbitrary; readdir order was too).
+047 closed (merge 473afe1): turnFailed logs `result: <n> chars omitted` instead of a result that follows streamed answer text.
+All /code-review tasks (043–047) done; master pushed to origin through 8a43166.
+- next action: queue is all blocked on 015 (finish on a Mac); backlog 033/042 only if Eric pulls them in
+M2 left: 026 (needs Eric's approval, waits on 013). M3: 030 waits on 010/011; 032 Mac. Backlog: 033, 042.
+- 015 blocked (finish on a Mac); 009–014 wait on it
+- Temporary gate (option A): full suite = `npx vitest run --project unit`; 015 restores `npm test`
+- Remote: origin = https://github.com/ericlfd/snapsolve.git (private); master pushed; keel/* branches stay local (all merged)
+
+## Log
+2026-10-14 · 007 · closed · encodeForModel (2576 long edge, JPEG 85 over 3 MB), capturer (cursor display, source match, mutex, panel hide below Win 10 2004 and on macOS), captureFailed kind, decideAppend (775ec73)
+2026-10-14 · 008 · closed · renderAnswer: markdown-it (no raw HTML) + KaTeX HTML (trust off, maxExpand 1000, maxSize 50) + highlight.js common + DOMPurify (no img/svg/math, http(s) only); KaTeX CSS/fonts + hljs theme copied to dist/renderer (5e477bc)
+2026-10-14 · 017 · blocked · KaTeX SVG symbols stripped by the SPEC §4.4 svg ban — allow svg+path, accept, or steer the model? (-)
+2026-10-14 · 015 · blocked · precondition EPERM: Defender ASR rule 01443614 still blocks electron.exe — IT exclusion or Microsoft submission needed (-)
+2026-10-14 · 015 · blocked · parked: finish on a Mac (Eric); ASR rule 01443614 still blocks electron.exe on this PC (-)
+2026-10-14 · 006 · closed · runner: SPEC §3.1 argv, stripped env, stream events, per-thread FIFO under a global cap, timeout kill, resume with fresh-session fallback; spawn errors logged without argv; a new session's transcript adopted after any exit (712edc0)
+2026-10-14 · 012 · closed · prompts/system.md (DESIGN draft, new example, code-bug answer line quotes the faulty line); live test on 4 generated problem PNGs via the real runner: opus/high 4/4 in 5 consecutive runs, sonnet/high 3/4; docs/live-results.md, DESIGN §10 item 5 (3093f03)
+2026-10-14 · 017 · closed · option (a) (Eric): KaTeX's svg+path kept with only KaTeX's attributes — SPEC Amendment 1; render change is 019 (-)
+2026-10-14 · 019 · paused · Eric asked to pause; tests committed and red accepted, implementation not started → keel/019 (4fd7640)
+2026-10-14 · 019 · closed · KaTeX svg+path kept with only KaTeX's attributes (own DOMPurify instance, hooks drop other SVG elements and attributes, geometry URI-safe); sanitize(html) exported; \cancel strike stays out; DESIGN §3.6 updated (ce39fd3)
+2026-10-14 · 020 · blocked · M2 signing decision (DESIGN §10 risk 6): unsigned per SPEC non-goals, Authenticode signing, or defer M2 until M1 is finished on the Mac? (-)
+2026-10-14 · 020 · closed · Eric chose (a): M2 ships unsigned, doctor detects the ASR block, real install checked on an unmanaged Windows PC; 015 stays parked for the Mac (-)
+2026-10-14 · keel · planned · M2 — Plugin and installer (Windows) (6 tasks) (-)
+2026-10-14 · 021 · closed · bootstrap/boot.js runs <data>/app/current/main.js (data dir rules in step with paths.ts by a parity test) or shows an error box naming /snapsolve install and exits 1; no Electron access outside Electron; bootstrap/package.json without dependencies (c68294f)
+2026-10-14 · 027 · blocked · plugin.json version: omit per the claude-skills convention, or set it per DESIGN §5? (-)
+2026-10-14 · 022 · blocked · review failed 3 times: packager 20.3.0 needs Node >= 22.12 vs DESIGN's Node >= 20; node_modules exclusion untested — raise the minimum to 22.12 or pin packager 18.4.4? → keel/022 (2ce8b77)
+2026-10-14 · keel · planned · M3 — macOS (6 tasks: 018 moved in, 028–032; backlog 033 app icons) (-)
+2026-10-14 · 030 · blocked · SPEC §4.4 preload list vs §7.1 macOS card buttons — amend to add openScreenRecordingSettings() and relaunch()? (-)
+2026-10-14 · 018 · closed · a timed-out turn whose claude ignores the first kill gets SIGKILL after the grace period (injectable killGraceMs, runner.sigkill logged); a child that exits on the kill never sees SIGKILL (e5d4490)
+2026-10-14 · 028 · closed · withLoginShellPath (runner.ts): on macOS the login shell's PATH (marked printf, 3 s timeout, SIGKILL) goes first, then the current PATH, Homebrew, /usr/local/bin, ~/.local/bin; failures keep PATH + extras with a warning; other platforms untouched (7141783)
+2026-10-14 · 029 · closed · macOS capture requires the Screen Recording grant: granted → capture; not-determined → one prompting getSources, ScreenRecordingDeniedError(prompted); denied/restricted/unknown → denied, no capture, panel untouched; win32 never asks (de7e6f4)
+2026-10-14 · 022 · closed · release.mjs assembles plugins/snapsolve (plugin/ + app/ payload: built JS, prompts, assets, bootstrap, package.json with main.js, root lockfile), one marketplace entry and README row, same-version refusal, retrying swap that restores the old release; Node floor 22.12 (packager 20.3.0); staged npm ci --omit=dev ok (2900b33)
+2026-10-14 · 023 · closed · installer steps.mjs (plugin scripts, built-ins only): preflight (win32, Node >= 22.12, claude.exe, --version, auth status), staged npm ci --omit=dev --ignore-scripts swapped into <data>/app/<version>, current junction/symlink, bootstrap packaging into Programs + Start-menu shortcut, claudePath with user values kept, launch without CLAUDECODE*, quit-and-wait, ASR check; follow-up 035 (5962f00)
+2026-10-14 · 024 · closed · installer CLI snapsolve.mjs + commands.mjs: install (quit a previous install, package on first install / new Electron / missing exe), start, update (keeps new + previous version), uninstall [--purge] keeps history, doctor (Node, claude, auth, versions, smoke/ASR, claudePath); install.json; real CLI end-to-end test on Windows; follow-up 036 (7b29105)
+2026-10-14 · 025 · closed · SKILL.md for /snapsolve: subcommand from $ARGUMENTS, one section per subcommand with its full snapsolve.mjs command, winget offer only after a yes, ASR/login/proxy/AltGr/Pro-plan notes, doctor hotkey question, --purge only after an explicit yes; frontmatter made valid YAML; DESIGN risk 1 resolved; follow-up 037 (0608462)
+2026-10-14 · 027 · closed · released plugin.json carries no version (claude-skills convention, Eric's answer); app/package.json keeps the app version for installer updates and the same-version refusal; DESIGN §5 updated; backlog 038 (4446bb5)
+2026-10-14 · 031 · closed · macOS installer branch: ~/Applications/snapsolve.app (LSUIElement) packaged and ad-hoc signed once per packaging, open -a launch, pgrep -x quit, current symlink, uninstall removes the .app; Screen Recording re-prompt warning on an Electron change; SKILL.md brew/Screen Recording notes; follow-up 039 (52041e5)
+2026-10-14 · 035 · closed · packageBootstrap returns warnings naming a previous launcher (Programs dir or .app) it could not remove, win32 and darwin, via an injectable rm; quitAndWait's default win32 isRunning tested (tasklist on the exe's basename, --quit only when listed, tasklist failure propagates); backlog 040 (5f8b828)
+2026-10-14 · 036 · closed · a step failing after install/update quit the app restarts the previous version while current still resolves to it and its exe exists (warn: after the fail:); otherwise a fail: names the command to run; CLI hook wiring in realSteps.mjs, inert unless SNAPSOLVE_TEST=1; backlog 041 (0de5582)
+2026-10-14 · 037 · closed · SKILL.md doctor names the data folder's files: hotkeys.capture in %LOCALAPPDATA%/snapsolve/config.json for the hotkey question, the log at %LOCALAPPDATA%/snapsolve/logs/snapsolve.log (both on Windows); test derives them from resolveDataDir + dataPaths (1743d47)
+2026-10-14 · 039 · closed · doctor shows the Defender ASR text for a blocked smoke check only on Windows; on macOS the fail: names the EPERM and uninstall + install; SKILL.md doctor names the Mac config and log next to the Windows ones (6280d31)
+2026-10-14 · 040 · closed · the three win32 quitAndWait default-isRunning tests use the shared advancing fake clock, so a processRunning regression fails in ms with the still-running error instead of an OOM worker crash (556ea59)
+2026-10-15 · 041 · closed · a failed install/update whose previous exe is gone now says to run /snapsolve install (start only when the exe is there but fails to launch) (a91a53e)
+2026-10-15 · 038 · closed · release.test.ts: the source plugin.json test is titled "names snapsolve and has no version" (assertions unchanged) (570c5ba)
+2026-10-15 · 034 · closed · runner tests: a timed-out turn whose claude never closes settles at the SIGKILL (timeout + retry, queue moves on); a close after that settle emits nothing; found 042 (b7800f2)
+2026-10-15 · 043 · closed · macOS config.json claudePath stores the resolved symlink (after realpath confirms it resolves) so Claude Code auto-updates do not break it; win32 keeps realpath; install passes platform (3f74473)
+2026-10-15 · 044 · closed · one SemVer compareVersions exported from steps.mjs (pre-release below release, build metadata ignored, null when unparsable) used by preflight, doctor and update; doctor warns it cannot compare unparsable versions (15f92c0)
+2026-10-15 · 045 · closed · steps.mjs exports renameRetrying, readJson, exists (follows links) and linkExists (dangling link counts); commands.mjs imports them and drops its copies; uninstall targets use linkExists (4baaef1)
+2026-10-15 · 046 · closed · findTranscript stats project dirs concurrently (32 workers, StoreDeps.stat injectable); same newest-mtime result and warnings (eea7d86)
+2026-10-15 · 047 · closed · a failed turn that streamed an answer logs errors/stderr plus 'result: <n> chars omitted' instead of the result text; classification unchanged (473afe1)

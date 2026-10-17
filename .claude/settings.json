@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "for p in python3 python 'py -3'; do $p -c '' </dev/null >/dev/null 2>&1 && exec $p \"${CLAUDE_PROJECT_DIR}/.claude/memory/hooks.py\" session-start; done; echo '[keel] hook error: no working python3, python or py -3 on PATH' >&2; exit 1"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "for p in python3 python 'py -3'; do $p -c '' </dev/null >/dev/null 2>&1 && exec $p \"${CLAUDE_PROJECT_DIR}/.claude/memory/hooks.py\" post-tool-use; done; echo '[keel] hook error: no working python3, python or py -3 on PATH' >&2; exit 1"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "for p in python3 python 'py -3'; do $p -c '' </dev/null >/dev/null 2>&1 && exec $p \"${CLAUDE_PROJECT_DIR}/.claude/memory/hooks.py\" stop; done; echo '[keel] hook error: no working python3, python or py -3 on PATH' >&2; exit 1"
+          }
+        ]
+      }
+    ]
+  }
+}

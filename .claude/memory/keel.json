@@ -1,0 +1,19 @@
+{
+  "caps": {
+    "CLAUDE.md": 200,
+    "PROJECT_STATE.md#Now": 12,
+    "PROJECT_STATE.md#Log": 40,
+    "ARCHITECTURE.md": 300,
+    "SPEC.md": 300,
+    "docs/tasks/*.md": 80,
+    "DECISIONS.md": 100
+  },
+  "stop_enforced": [
+    "PROJECT_STATE.md#Now",
+    "PROJECT_STATE.md#Log",
+    "ARCHITECTURE.md"
+  ],
+  "max_attempts": 3,
+  "test_command": "npx vitest run --project unit",
+  "test_timeout": 1800
+}

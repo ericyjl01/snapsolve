@@ -1,0 +1,9 @@
+.claude/memory/.session-start
+.claude/memory/.touched
+.claude/memory/.last-block
+.claude/memory/.lock
+TASKS.md
+node_modules/
+dist/
+coverage/
+*.log

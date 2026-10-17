@@ -25,3 +25,5 @@
 2026-10-14 · 020 · blocked · M2 signing decision (DESIGN §10 risk 6): unsigned per SPEC non-goals, Authenticode signing, or defer M2 until M1 is finished on the Mac? (-)
 2026-10-14 · 020 · closed · Eric chose (a): M2 ships unsigned, doctor detects the ASR block, real install checked on an unmanaged Windows PC; 015 stays parked for the Mac (-)
 2026-10-14 · keel · planned · M2 — Plugin and installer (Windows) (6 tasks) (-)
+2026-10-14 · 021 · closed · bootstrap/boot.js runs <data>/app/current/main.js (data dir rules in step with paths.ts by a parity test) or shows an error box naming /snapsolve install and exits 1; no Electron access outside Electron; bootstrap/package.json without dependencies (c68294f)
+2026-10-14 · 027 · blocked · plugin.json version: omit per the claude-skills convention, or set it per DESIGN §5? (-)

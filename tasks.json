@@ -350,7 +350,7 @@
     {
       "id": "013",
       "title": "Windows end-to-end verification and checklist",
-      "status": "blocked",
+      "status": "dropped",
       "priority": 5,
       "milestone": 1,
       "deps": [
@@ -359,13 +359,13 @@
         "012"
       ],
       "file": "docs/tasks/013-windows-verify.md",
-      "blocked_on": "013 needs a Windows machine that runs snapsolve (real desktopCapturer, Windows content protection, the Windows checklist); the work PC is ASR-blocked and work moved to the Mac, where a win32-only e2e would just skip (red refuses green). Options: (a) park 013 until an unmanaged Windows PC is available; (b) split it: run the platform-neutral checks here now (restart survival with the owned transcript, Clear history + purge) and leave capture size / content protection + docs/checklists/windows.md for the Windows PC; (c) run the capture checks on macOS too (needs Screen Recording granted to the terminal running npm test). Which?",
+      "blocked_on": null,
       "attempts": 0,
       "branch": null,
       "stash": null,
-      "closed_at": null,
+      "closed_at": "2026-10-17",
       "commit": null,
-      "notes": "",
+      "notes": "dropped: Windows archived: Mac only from 2026-10-17 (Eric, chat); see archive/windows/README.md",
       "kind": "task",
       "test_cmd": "npx vitest run test/e2e/windows.e2e.test.ts",
       "tests_commit": null,
@@ -690,7 +690,7 @@
     {
       "id": "026",
       "title": "Windows install verification and first release",
-      "status": "open",
+      "status": "dropped",
       "priority": 5,
       "milestone": 2,
       "deps": [
@@ -703,9 +703,9 @@
       "attempts": 0,
       "branch": null,
       "stash": null,
-      "closed_at": null,
+      "closed_at": "2026-10-17",
       "commit": null,
-      "notes": "",
+      "notes": "dropped: Windows archived: Mac only from 2026-10-17 (Eric, chat); the first release moves to a macOS task",
       "kind": "task",
       "test_cmd": null,
       "tests_commit": null,
@@ -862,7 +862,8 @@
         "015",
         "018",
         "030",
-        "031"
+        "031",
+        "055"
       ],
       "file": "docs/tasks/032-macos-checklist.md",
       "blocked_on": "needs Eric: run docs/checklists/macos.md (on keel/032) on the Mac and report each item's result — pass, or what you saw; each fail becomes a follow-up task and the results are recorded in the file",
@@ -880,7 +881,7 @@
     },
     {
       "id": "033",
-      "title": "App icons for the packaged app (icon.ico, icon.icns)",
+      "title": "App icon for the packaged macOS app (icon.icns)",
       "status": "open",
       "priority": 5,
       "milestone": null,
@@ -1434,6 +1435,27 @@
       "test_cmd": "npx vitest run test/unit/app.test.ts",
       "tests_commit": null,
       "no_tests": null,
+      "review": null
+    },
+    {
+      "id": "055",
+      "title": "First release into the claude-skills marketplace and install on this Mac",
+      "status": "blocked",
+      "priority": 5,
+      "milestone": 3,
+      "deps": [],
+      "file": "docs/tasks/055-first-release-into-the-claude-skills-mar.md",
+      "blocked_on": "needs approval: run node scripts/release.mjs --target ~/claude-setup/plugins/claude-skills (writes the snapsolve plugin, a marketplace.json entry and a README row into your claude-skills marketplace; not a git repo, so it cannot be rolled back), then claude plugin install snapsolve@claude-skills. OK to do it?",
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": null,
+      "tests_commit": null,
+      "no_tests": "one approved release run plus a manual install; release.mjs and the installer are tested in 022-025, 031",
       "review": null
     }
   ]

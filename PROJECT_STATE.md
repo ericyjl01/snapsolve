@@ -3,13 +3,12 @@
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
 macOS only from 2026-10-17 (SPEC Amendment 4): Windows archived (archive/windows/README.md); 013 and 026 dropped.
-050–052 closed today. Queue is all blocked on Eric:
-- 055: approve the first release into ~/claude-setup/plugins/claude-skills, then install on this Mac
-- 032: run docs/checklists/macos.md (on keel/032) once 055 is done
+Local only (DECISIONS 055): no claude-skills release. macOS live run: 4/4 correct (docs/live-results.md).
+- next: 055 local install (release into ~/dev/snapsolve-local, add it to Claude Code as snapsolve-local)
+- then 032: Eric runs docs/checklists/macos.md (on keel/032), starting with /snapsolve install
 Backlog: 033 (macOS icon), 042, 053, 054.
 
 ## Log
-2026-10-14 · 022 · blocked · review failed 3 times: packager 20.3.0 needs Node >= 22.12 vs DESIGN's Node >= 20; node_modules exclusion untested — raise the minimum to 22.12 or pin packager 18.4.4? → keel/022 (2ce8b77)
 2026-10-14 · keel · planned · M3 — macOS (6 tasks: 018 moved in, 028–032; backlog 033 app icons) (-)
 2026-10-14 · 030 · blocked · SPEC §4.4 preload list vs §7.1 macOS card buttons — amend to add openScreenRecordingSettings() and relaunch()? (-)
 2026-10-14 · 018 · closed · a timed-out turn whose claude ignores the first kill gets SIGKILL after the grace period (injectable killGraceMs, runner.sigkill logged); a child that exits on the kill never sees SIGKILL (e5d4490)
@@ -49,3 +48,4 @@ Backlog: 033 (macOS icon), 042, 053, 054.
 2026-10-17 · 052 · closed · recoverBusyThreads runs before the panel and hotkeys: threads an earlier run left new/queued/running become error with Retry (done when already answered), logged; unreadable threads untouched; follow-up 054 (backlog) (ad247a9)
 2026-10-17 · 013 · dropped · Windows archived (Amendment 4): Mac only from now on (-)
 2026-10-17 · 026 · dropped · Windows archived (Amendment 4); the first release moves to 055 on the Mac (-)
+2026-10-17 · adhoc · macOS live run: opus/high 4/4 correct; rates once 60.3 s (claude 34.4 s), rerun 5.6 s (-)

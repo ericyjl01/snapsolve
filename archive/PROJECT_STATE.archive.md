@@ -27,3 +27,4 @@
 2026-10-14 · keel · planned · M2 — Plugin and installer (Windows) (6 tasks) (-)
 2026-10-14 · 021 · closed · bootstrap/boot.js runs <data>/app/current/main.js (data dir rules in step with paths.ts by a parity test) or shows an error box naming /snapsolve install and exits 1; no Electron access outside Electron; bootstrap/package.json without dependencies (c68294f)
 2026-10-14 · 027 · blocked · plugin.json version: omit per the claude-skills convention, or set it per DESIGN §5? (-)
+2026-10-14 · 022 · blocked · review failed 3 times: packager 20.3.0 needs Node >= 22.12 vs DESIGN's Node >= 20; node_modules exclusion untested — raise the minimum to 22.12 or pin packager 18.4.4? → keel/022 (2ce8b77)

@@ -1665,6 +1665,29 @@
       "tests_commit": null,
       "no_tests": null,
       "review": null
+    },
+    {
+      "id": "065",
+      "title": "threads: capture continues the chat, + button starts a new one, no append key",
+      "status": "open",
+      "priority": 5,
+      "milestone": 3,
+      "deps": [
+        "061"
+      ],
+      "file": "docs/tasks/065-capture-continues-plus-new-chat.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "Eric 2026-10-17 (DECISIONS conversation-model row).",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/unit/capture.test.ts test/unit/app.test.ts test/unit/config.test.ts test/unit/hotkeys.test.ts test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

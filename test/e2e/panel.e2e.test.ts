@@ -222,6 +222,47 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
+  it("the continued note shows while the seeded thread's answer is still pending, not only once it is done (057)", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    const projects = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-projects-"));
+    const scenarioFile = path.join(projects, "scenario");
+    writeFileSync(scenarioFile, "ok");
+    writeFileSync(path.join(dataDir, "config.json"), JSON.stringify({ maxScreenshotsPerThread: 1 }));
+    const launched = await launchApp({
+      dataDir,
+      env: {
+        SNAPSOLVE_TEST_CLAUDE: FAKE,
+        SNAPSOLVE_TEST_PROJECTS: projects,
+        FAKE_PROJECTS: projects,
+        FAKE_CLAUDE_SCENARIO_FILE: scenarioFile,
+        // The seeded turn's answer is held back for ~20 s, far past the note's wait.
+        FAKE_DELAY_MS: "20000",
+      },
+    });
+    try {
+      const page = await launched.app.firstWindow();
+      await page.waitForLoadState("domcontentloaded");
+      const first = await capture(launched.app);
+      await page.locator(`${card(first)} .answer`).first().waitFor({ state: "visible", timeout: 20_000 });
+
+      writeFileSync(scenarioFile, "slow");
+      const next = await launched.app.evaluate(
+        (_electron, png) =>
+          (globalThis as unknown as { snapsolveTest: { appendFromFile(p: string): Promise<string> } }).snapsolveTest.appendFromFile(png),
+        PROBLEM,
+      );
+      expect(next).not.toBe(first);
+      const note = page.locator(`${card(next)} .note`);
+      await note.waitFor({ state: "visible", timeout: 5_000 });
+      expect(await note.textContent()).toBe(CONTINUED_NOTE);
+      expect(await page.locator(`${card(next)} .answer:not(.streaming)`).count()).toBe(0);
+    } finally {
+      await launched.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      rmSync(projects, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 90_000);
+
   it("a thread left running by an earlier run is listed errored with Retry at startup, and its thread.json says error (052)", async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
     const id = "7d0c5a1e-2b3f-4c6d-8e9f-0a1b2c3d4e5f";

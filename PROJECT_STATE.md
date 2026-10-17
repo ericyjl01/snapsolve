@@ -12,6 +12,7 @@ Backlog: 033 (macOS icon), 042, 053, 054, 056 (README row + plugin.json still sa
 Redesign (Eric chose mockup A2, canvas https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH): 058 floating window, 059 resize,
   060 show/hide ⌃⌥X with no tab, 061 native restyle + no Copy, 062 voice engine (blocked: Eric's pick), 063 voice ⌃⌥V start/stop,
   064 capture default ⌃⌥C (Eric's own config.json already set). Open: is append (⌃⌥⇧Q) still wanted?
+- Queue (Eric: "begin working on these changes"): 064 → 058 → 059 → 060 → 061 in M3; 063 waits on 062.
 
 ## Log
 2026-10-14 · 022 · closed · release.mjs assembles plugins/snapsolve (plugin/ + app/ payload: built JS, prompts, assets, bootstrap, package.json with main.js, root lockfile), one marketplace entry and README row, same-version refusal, retrying swap that restores the old release; Node floor 22.12 (packager 20.3.0); staged npm ci --omit=dev ok (2900b33)

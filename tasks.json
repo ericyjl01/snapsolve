@@ -1514,8 +1514,8 @@
       "id": "058",
       "title": "window: free-floating note-size window, drag to move, position remembered",
       "status": "open",
-      "priority": 5,
-      "milestone": null,
+      "priority": 1,
+      "milestone": 3,
       "deps": [],
       "file": "docs/tasks/058-panel-drag-to-move.md",
       "blocked_on": null,
@@ -1535,8 +1535,8 @@
       "id": "059",
       "title": "window: resize from any edge or corner, size remembered",
       "status": "open",
-      "priority": 5,
-      "milestone": null,
+      "priority": 2,
+      "milestone": 3,
       "deps": [
         "058"
       ],
@@ -1558,8 +1558,8 @@
       "id": "060",
       "title": "window: show/hide hotkey (Ctrl+Option+X); hidden leaves nothing on screen",
       "status": "open",
-      "priority": 5,
-      "milestone": null,
+      "priority": 3,
+      "milestone": 3,
       "deps": [
         "058"
       ],
@@ -1581,8 +1581,8 @@
       "id": "061",
       "title": "panel restyle: native macOS look (mockup A2), remove the Copy button",
       "status": "open",
-      "priority": 5,
-      "milestone": null,
+      "priority": 4,
+      "milestone": 3,
       "deps": [
         "058"
       ],
@@ -1649,8 +1649,8 @@
       "id": "064",
       "title": "hotkeys: capture default Control+Alt+C (was Control+Alt+Q)",
       "status": "open",
-      "priority": 5,
-      "milestone": null,
+      "priority": 0,
+      "milestone": 3,
       "deps": [],
       "file": "docs/tasks/064-capture-hotkey-ctrl-opt-c.md",
       "blocked_on": null,

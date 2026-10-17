@@ -149,7 +149,13 @@ describe("panel (e2e)", () => {
       expect(await p.page.locator('button.close, [aria-label*="close" i], [title*="close" i]').count()).toBe(0);
 
       await p.page.locator(`${card(id)} .answer`).first().click();
-      await p.page.keyboard.press("Escape");
+      // A real key press reaches main's before-input-event; Playwright's keyboard (CDP) bypasses it, so the key is
+      // delivered the way the OS delivers it to the focused window.
+      await p.app.evaluate(({ BrowserWindow }) => {
+        const { webContents } = BrowserWindow.getAllWindows()[0];
+        webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+        webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+      });
       await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(8);
       const { bounds, workArea, visible } = await windowInfo(p.app);
       expect(visible).toBe(true);

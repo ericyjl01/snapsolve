@@ -1455,7 +1455,7 @@
       "kind": "task",
       "test_cmd": null,
       "tests_commit": null,
-      "no_tests": "one approved release run plus a manual install; release.mjs and the installer are tested in 022-025, 031",
+      "no_tests": "a local release into ~/dev/snapsolve-local and plugin registration; release.mjs and the installer are tested in 022-025, 031",
       "review": null
     }
   ]

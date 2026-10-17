@@ -192,7 +192,8 @@ describe("panel (e2e)", () => {
       const page = await launched.app.firstWindow();
       await page.waitForLoadState("domcontentloaded");
       const first = await capture(launched.app);
-      await page.locator(`${card(first)} .answer`).first().waitFor({ state: "visible", timeout: 20_000 });
+      // The saved answer, not the streaming node (also `.answer`): an append before it is saved seeds nothing (051).
+      await page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       expect(await page.locator(`${card(first)} .note`).count()).toBe(0);
 
       const next = await launched.app.evaluate(
@@ -243,7 +244,8 @@ describe("panel (e2e)", () => {
       const page = await launched.app.firstWindow();
       await page.waitForLoadState("domcontentloaded");
       const first = await capture(launched.app);
-      await page.locator(`${card(first)} .answer`).first().waitFor({ state: "visible", timeout: 20_000 });
+      // The saved answer, not the streaming node (also `.answer`): an append before it is saved seeds nothing (051).
+      await page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
 
       writeFileSync(scenarioFile, "slow");
       const next = await launched.app.evaluate(

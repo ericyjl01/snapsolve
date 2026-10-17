@@ -3,17 +3,37 @@ import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, protocol, screen, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  desktopCapturer,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeImage,
+  Notification,
+  powerMonitor,
+  protocol,
+  screen,
+  shell,
+  systemPreferences,
+  Tray,
+} from "electron";
 import { SnapsolveError, userMessage } from "../shared/errors";
 import { IPC } from "../shared/ipc";
-import { createApp, resolveClaudeCommand } from "./app";
+import { createApp, resolveClaudeCommand, type Shot } from "./app";
+import { createCapturer } from "./capture";
 import { loadConfig } from "./config";
 import { encodeForModel } from "./encode";
-import { createLogger } from "./log";
+import { createHotkeys } from "./hotkeys";
+import { createLogger, type Logger } from "./log";
 import { createPanel, resolveSnapsolveUrl, SCHEME } from "./panel";
 import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
 import { createStore } from "./store";
+import { createTray, drawTrayIcon, type TrayControl } from "./tray";
 
 // `electron dist/main.js` does not read package.json, so name and version are injected at build time.
 app.setName(__APP_NAME__);
@@ -34,8 +54,17 @@ if (process.argv.includes("--smoke")) {
     process.stdout.write(`snapsolve smoke ok ${__APP_VERSION__}\n`);
     app.exit(0);
   });
+} else if (!app.requestSingleInstanceLock()) {
+  // SPEC §1.2: the running instance gets `second-instance` (opens the panel, or quits on --quit); this one leaves.
+  app.quit();
+} else if (process.argv.includes("--quit")) {
+  // Nothing else is running, so there is nothing to quit; never start the app for --quit.
+  app.quit();
 } else {
-  // Hotkeys, tray and single instance are wired by task 010; until then the panel opens on a (test) capture.
+  app.on("second-instance", (_event, argv) => {
+    if (argv.includes("--quit")) app.quit();
+    else openPanel?.();
+  });
   void app.whenReady().then(start).catch((e: unknown) => {
     const kind = e instanceof SnapsolveError ? e.kind : "internal";
     process.stderr.write(`snapsolve: ${e instanceof Error ? e.message : String(e)}\n`);
@@ -43,6 +72,11 @@ if (process.argv.includes("--smoke")) {
     app.exit(1);
   });
 }
+
+/** Set once the panel exists; a second launch before that is ignored (the app is still starting). */
+let openPanel: (() => void) | null = null;
+/** Module-level so the tray is never garbage-collected. */
+let tray: TrayControl | null = null;
 
 async function start(): Promise<void> {
   const home = os.homedir();
@@ -105,7 +139,8 @@ async function start(): Promise<void> {
     clipboard,
     openExternal: (url) => shell.openExternal(url),
     confirmClearHistory: async () => {
-      const { response } = await dialog.showMessageBox(panel.window, {
+      // No parent window: the tray asks too, and a sheet on the 8 px tab would be lost.
+      const { response } = await dialog.showMessageBox({
         type: "warning",
         buttons: ["Clear history", "Cancel"],
         defaultId: 1,
@@ -126,13 +161,81 @@ async function start(): Promise<void> {
     [IPC.historyClear]: core.handlers.clearHistory,
   });
 
+  const notify = (body: string) => {
+    if (Notification.isSupported()) new Notification({ title: "snapsolve", body }).show();
+    else log.warn("app.notifyUnsupported", {});
+  };
+  const capturer = createCapturer({
+    desktopCapturer,
+    screen,
+    panel,
+    mediaAccess: systemPreferences,
+    platform: process.platform,
+    osRelease: os.release(),
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  });
+  /** Hotkey press → capture → pipeline; a failed capture is logged and shown as a notification. */
+  const captureInto = (into: (shot: Shot) => Promise<string>) => () =>
+    void capturer
+      .capture()
+      .then(into)
+      .catch((e: unknown) => {
+        log.warn("app.captureFailed", { error: e });
+        notify(userMessage(e instanceof SnapsolveError ? e.kind : "internal"));
+      });
+  const hotkeys = createHotkeys({
+    globalShortcut,
+    config,
+    onCapture: captureInto(core.onCapture),
+    onAppend: captureInto(core.onAppend),
+    notify,
+    log,
+  });
+  hotkeys.start();
+  app.on("will-quit", () => globalShortcut.unregisterAll());
+
+  tray = createTray({
+    Tray,
+    Menu,
+    image: trayImage(process.platform),
+    onOpenPanel: () => panel.toggle(),
+    onPause: () => hotkeys.pause(),
+    onResume: () => hotkeys.resume(),
+    onOpenHistory: () => void openFolder(paths.threads, log),
+    onClearHistory: () => void core.handlers.clearHistory().catch((e: unknown) => log.error("app.clearFailed", { error: e })),
+    onQuit: () => app.quit(),
+  });
+
+  openPanel = () => panel.open();
+  powerMonitor.on("resume", () => hotkeys.reRegisterIfLost());
+  for (const event of ["display-added", "display-removed", "display-metrics-changed"] as const) {
+    screen.on(event as "display-added", () => panel.redock());
+  }
+
   if (test) {
     (globalThis as { snapsolveTest?: unknown }).snapsolveTest = {
       /** Feeds a PNG file through the same path as a capture; resolves with the new thread's id. */
       captureFromFile: async (png: string) => core.onCapture({ png: readImage(png).toPNG() }),
+      /** The same through the append path (the most recent capture's thread). */
+      appendFromFile: async (png: string) => core.onAppend({ png: readImage(png).toPNG() }),
+      hotkeyStatus: () => hotkeys.status(),
     };
   }
   log.info("app.ready", { version: __APP_VERSION__, platform: process.platform, test });
+}
+
+/** The tray icon, drawn in code: a black template image on macOS (the menu bar tints it), blue on Windows. */
+function trayImage(platform: NodeJS.Platform): Electron.NativeImage {
+  const rgb = platform === "darwin" ? ([0, 0, 0] as const) : ([9, 105, 218] as const);
+  const image = nativeImage.createFromBitmap(drawTrayIcon(32, rgb), { width: 32, height: 32, scaleFactor: 2 });
+  if (platform === "darwin") image.setTemplateImage(true);
+  return image;
+}
+
+/** Tray "Open history folder": the threads/ dir (created if missing) in Explorer / Finder. */
+async function openFolder(dir: string, log: Logger): Promise<void> {
+  const error = await shell.openPath(dir);
+  if (error) log.warn("app.openFolderFailed", { dir, error });
 }
 
 /** prompts/system.md beside main.js (the released app/) or one level up (dev: dist/main.js). */

@@ -1556,7 +1556,7 @@
     },
     {
       "id": "060",
-      "title": "window: show/hide hotkey (Ctrl+Option+Z); hidden leaves nothing on screen",
+      "title": "window: show/hide hotkey (Ctrl+Option+X); hidden leaves nothing on screen",
       "status": "open",
       "priority": 5,
       "milestone": null,
@@ -1570,7 +1570,7 @@
       "stash": null,
       "closed_at": null,
       "commit": null,
-      "notes": "Eric 2026-10-17: the collapsed 8x72 tab must go; hidden = nothing visible. hotkeys.toggle = Control+Alt+Z (DECISIONS 2026-10-17 hotkeys).",
+      "notes": "Eric 2026-10-17: the collapsed 8x72 tab must go; hidden = nothing visible. hotkeys.toggle = Control+Alt+X (DECISIONS 2026-10-17, supersedes Z).",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/panel.test.ts test/unit/hotkeys.test.ts test/unit/config.test.ts test/e2e/panel.e2e.test.ts",
       "tests_commit": null,

@@ -10,7 +10,7 @@ On Eric's Mac at /Users/ericli/dev/snapsolve-master (no remote). macOS only (Ame
 - e2e on this Mac: keep it awake (`caffeinate -dims`); with the lid closed tests hang 150–900 s.
 Backlog: 033 (macOS icon), 042, 053, 054, 056 (README row + plugin.json still say Windows).
 Redesign (Eric chose mockup A2, canvas https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH): 058 floating window, 059 resize,
-  060 show/hide ⌃⌥Z with no tab, 061 native restyle + no Copy, 062 voice engine (blocked: Eric's pick), 063 voice ⌃⌥V start/stop,
+  060 show/hide ⌃⌥X with no tab, 061 native restyle + no Copy, 062 voice engine (blocked: Eric's pick), 063 voice ⌃⌥V start/stop,
   064 capture default ⌃⌥C (Eric's own config.json already set). Open: is append (⌃⌥⇧Q) still wanted?
 
 ## Log

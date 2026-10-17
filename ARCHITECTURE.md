@@ -57,6 +57,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
 - logging: `log.ts` JSON lines (`ts`, `level`, `event`, fields); never image bytes, base64, answer text or prompts
 - async: `fs/promises`; atomic JSON writes via `store.writeJsonAtomic` (temp + rename)
 - platform branches: `process.platform` checked only in `paths.ts`, `capture.ts`, `panel.ts`, `main.ts`, and passed in as a parameter elsewhere (tests cover both branches)
+- decisions: rows of closed tasks 001–029 live in `archive/DECISIONS.archive.md` (moved by /keel tidy, 2026-10-17); grep it as well as DECISIONS.md before a choice
 - test layout: one test file per module; e2e tests launch `dist/main.js` with `SNAPSOLVE_TEST=1`, a temp data dir (`SNAPSOLVE_DATA_DIR`) and the fake claude
 
 ## Exemplars

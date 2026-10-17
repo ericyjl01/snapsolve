@@ -119,7 +119,7 @@ function setup(options: Options = {}) {
     }),
     writeClaudePath: vi.fn(async ({ configFile, claudePath }: { configFile: string; claudePath: string }) => {
       calls.push("claudePath");
-      const existing = existsSync(configFile) ? readJson(configFile) : { hotkeys: { capture: "Control+Alt+Q" } };
+      const existing = existsSync(configFile) ? readJson(configFile) : { hotkeys: { capture: "Control+Alt+C" } };
       write(configFile, JSON.stringify({ ...existing, claudePath }));
       return { claudePath, warning: null };
     }),
@@ -180,8 +180,18 @@ describe("install", () => {
     const { ctx } = setup();
     const r = await install(ctx);
     const text = r.lines.join("\n");
-    expect(text).toContain("Ctrl+Alt+Q");
+    expect(text).toContain("Ctrl+Alt+C");
     expect(text).toMatch(/AltGr/);
+  });
+
+  it("a user's existing capture value is kept: the old Control+Alt+Q stays in config.json and is the one shown", async () => {
+    const { ctx, paths } = setup();
+    write(paths.config, JSON.stringify({ hotkeys: { capture: "Control+Alt+Q" } }));
+    const r = await install(ctx);
+    expect(readJson(paths.config).hotkeys).toEqual({ capture: "Control+Alt+Q" });
+    const text = r.lines.join("\n");
+    expect(text).toContain("Ctrl+Alt+Q");
+    expect(text).not.toContain("Ctrl+Alt+C");
   });
 
   it("a hotkey without Ctrl+Alt → shown as configured, no AltGr note", async () => {
@@ -633,7 +643,7 @@ describe("doctor", () => {
 });
 
 describe("macOS (M3, task 031)", () => {
-  it("install: same flow; launch and quit get the platform; Ctrl+Option+Q, Screen Recording + Relaunch, no AltGr note", async () => {
+  it("install: same flow; launch and quit get the platform; Ctrl+Option+C, Screen Recording + Relaunch, no AltGr note", async () => {
     const { ctx, calls, paths, steps } = setup({ platform: "darwin" });
     const r = await install(ctx);
     expect(r.code, r.lines.join("\n")).toBe(0);
@@ -644,7 +654,7 @@ describe("macOS (M3, task 031)", () => {
     expect(steps.launch).toHaveBeenCalledWith(expect.objectContaining({ exe: paths.exe, platform: "darwin" }));
     expect(steps.writeClaudePath).toHaveBeenCalledWith(expect.objectContaining({ configFile: paths.config, platform: "darwin" }));
     const text = r.lines.join("\n");
-    expect(text).toContain("Ctrl+Option+Q");
+    expect(text).toContain("Ctrl+Option+C");
     expect(text).toMatch(/Screen Recording/);
     expect(text).toMatch(/Relaunch/);
     expect(text).not.toMatch(/AltGr/);

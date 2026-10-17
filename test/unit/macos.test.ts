@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/main/app";
+import { DEFAULTS } from "../../src/main/config";
 import { createHotkeys } from "../../src/main/hotkeys";
 import type { Logger } from "../../src/main/log";
 import { createPermissionHandlers, darwinStartup, hotkeyLabel, SCREEN_RECORDING_SETTINGS_URL } from "../../src/main/macos";
@@ -192,6 +193,20 @@ describe("hotkey label", () => {
     expect(hotkeyLabel("CommandOrControl+Shift+X", "darwin")).toBe("Cmd+Shift+X");
     expect(hotkeyLabel("CommandOrControl+Shift+X", "win32")).toBe("Ctrl+Shift+X");
     expect(hotkeyLabel("Super+F1", "darwin")).toBe("Cmd+F1");
+  });
+
+  it("the taken-hotkey notification names the default capture key as Ctrl+Option+C (064)", () => {
+    const notify = vi.fn();
+    const keys = createHotkeys({
+      globalShortcut: { register: () => false, unregister() {}, isRegistered: () => false },
+      config: { hotkeys: DEFAULTS.hotkeys },
+      onCapture() {},
+      onAppend() {},
+      notify,
+      label: (accelerator) => hotkeyLabel(accelerator, "darwin"),
+    });
+    keys.start();
+    expect(notify).toHaveBeenCalledWith("Ctrl+Option+C is taken by another app. Change hotkeys.capture in config.json.");
   });
 
   it("the taken-hotkey notification uses the label", () => {

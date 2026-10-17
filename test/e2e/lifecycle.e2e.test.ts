@@ -111,7 +111,7 @@ describe("app lifecycle (e2e)", () => {
       const status = await first.app.evaluate(() => (globalThis as unknown as { snapsolveTest: TestHooks }).snapsolveTest.hotkeyStatus());
       expect(status).toEqual({ capture: true, append: true, paused: false });
       const registered = await first.app.evaluate(({ globalShortcut }) => [
-        globalShortcut.isRegistered("Control+Alt+Q"),
+        globalShortcut.isRegistered("Control+Alt+C"),
         globalShortcut.isRegistered("Control+Alt+Shift+Q"),
       ]);
       expect(registered).toEqual([true, true]);

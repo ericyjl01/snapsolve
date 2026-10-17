@@ -21,6 +21,8 @@ interface TrayLike {
   setContextMenu(menu: never): void;
   setToolTip(text: string): void;
   destroy(): void;
+  /** Windows only (Electron's `Tray.displayBalloon`). */
+  displayBalloon?(options: { title: string; content: string }): void;
 }
 
 export interface TrayDeps<Image, Menu> {
@@ -40,6 +42,8 @@ export interface TrayControl {
   setPaused(paused: boolean): void;
   /** Usage text (`5h N% · 7d M%`); "" shows the bare name. */
   setTooltip(usage: string): void;
+  /** A tray notification on Windows (SPEC §1.1); main uses `Notification` on macOS. */
+  balloon(message: string): void;
   destroy(): void;
 }
 
@@ -74,8 +78,32 @@ export function createTray<Image, Menu>(deps: TrayDeps<Image, Menu>): TrayContro
       build();
     },
     setTooltip: (usage) => tray.setToolTip(usage ? `${TOOLTIP} · ${usage}` : TOOLTIP),
+    balloon: (message) => tray.displayBalloon?.({ title: TOOLTIP, content: message }),
     destroy: () => tray.destroy(),
   };
+}
+
+/**
+ * Tray "Open history folder": `dir` is created first (clear history deletes threads/, and opening a missing folder
+ * fails silently), then shown in Explorer / Finder. Failures are logged, never thrown.
+ */
+export async function openHistoryFolder(
+  dir: string,
+  deps: {
+    mkdir: (dir: string, options: { recursive: true }) => Promise<unknown>;
+    /** Electron's `shell.openPath`: resolves with an error message, "" on success. */
+    openPath: (dir: string) => Promise<string>;
+    log: { warn(event: string, fields?: Record<string, unknown>): void };
+  },
+): Promise<void> {
+  try {
+    await deps.mkdir(dir, { recursive: true });
+  } catch (e) {
+    deps.log.warn("tray.openFolderFailed", { dir, error: e });
+    return;
+  }
+  const error = await deps.openPath(dir);
+  if (error) deps.log.warn("tray.openFolderFailed", { dir, error });
 }
 
 /**

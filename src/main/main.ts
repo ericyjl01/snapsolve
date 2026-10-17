@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -33,7 +33,7 @@ import { createPanel, resolveSnapsolveUrl, SCHEME } from "./panel";
 import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
 import { createStore } from "./store";
-import { createTray, drawTrayIcon, type TrayControl } from "./tray";
+import { createTray, drawTrayIcon, openHistoryFolder, type TrayControl } from "./tray";
 
 // `electron dist/main.js` does not read package.json, so name and version are injected at build time.
 app.setName(__APP_NAME__);
@@ -161,8 +161,10 @@ async function start(): Promise<void> {
     [IPC.historyClear]: core.handlers.clearHistory,
   });
 
+  // SPEC §1.1 "tray notification": a balloon on the Windows tray icon; a system notification on macOS.
   const notify = (body: string) => {
-    if (Notification.isSupported()) new Notification({ title: "snapsolve", body }).show();
+    if (process.platform === "win32" && tray) tray.balloon(body);
+    else if (Notification.isSupported()) new Notification({ title: "snapsolve", body }).show();
     else log.warn("app.notifyUnsupported", {});
   };
   const capturer = createCapturer({
@@ -183,7 +185,20 @@ async function start(): Promise<void> {
         log.warn("app.captureFailed", { error: e });
         notify(userMessage(e instanceof SnapsolveError ? e.kind : "internal"));
       });
-  const hotkeys = createHotkeys({
+  tray = createTray({
+    Tray,
+    Menu,
+    image: trayImage(process.platform),
+    onOpenPanel: () => panel.toggle(),
+    // Created before the hotkeys register (their failure notification is a balloon on it); clicks come later.
+    onPause: () => keys.pause(),
+    onResume: () => keys.resume(),
+    onOpenHistory: () => void openHistoryFolder(paths.threads, { mkdir, openPath: (dir) => shell.openPath(dir), log }),
+    onClearHistory: () => void core.handlers.clearHistory().catch((e: unknown) => log.error("app.clearFailed", { error: e })),
+    onQuit: () => app.quit(),
+  });
+
+  const keys = createHotkeys({
     globalShortcut,
     config,
     onCapture: captureInto(core.onCapture),
@@ -191,23 +206,11 @@ async function start(): Promise<void> {
     notify,
     log,
   });
-  hotkeys.start();
+  keys.start();
   app.on("will-quit", () => globalShortcut.unregisterAll());
 
-  tray = createTray({
-    Tray,
-    Menu,
-    image: trayImage(process.platform),
-    onOpenPanel: () => panel.toggle(),
-    onPause: () => hotkeys.pause(),
-    onResume: () => hotkeys.resume(),
-    onOpenHistory: () => void openFolder(paths.threads, log),
-    onClearHistory: () => void core.handlers.clearHistory().catch((e: unknown) => log.error("app.clearFailed", { error: e })),
-    onQuit: () => app.quit(),
-  });
-
   openPanel = () => panel.open();
-  powerMonitor.on("resume", () => hotkeys.reRegisterIfLost());
+  powerMonitor.on("resume", () => keys.reRegisterIfLost());
   for (const event of ["display-added", "display-removed", "display-metrics-changed"] as const) {
     screen.on(event as "display-added", () => panel.redock());
   }
@@ -218,7 +221,7 @@ async function start(): Promise<void> {
       captureFromFile: async (png: string) => core.onCapture({ png: readImage(png).toPNG() }),
       /** The same through the append path (the most recent capture's thread). */
       appendFromFile: async (png: string) => core.onAppend({ png: readImage(png).toPNG() }),
-      hotkeyStatus: () => hotkeys.status(),
+      hotkeyStatus: () => keys.status(),
     };
   }
   log.info("app.ready", { version: __APP_VERSION__, platform: process.platform, test });
@@ -230,12 +233,6 @@ function trayImage(platform: NodeJS.Platform): Electron.NativeImage {
   const image = nativeImage.createFromBitmap(drawTrayIcon(32, rgb), { width: 32, height: 32, scaleFactor: 2 });
   if (platform === "darwin") image.setTemplateImage(true);
   return image;
-}
-
-/** Tray "Open history folder": the threads/ dir (created if missing) in Explorer / Finder. */
-async function openFolder(dir: string, log: Logger): Promise<void> {
-  const error = await shell.openPath(dir);
-  if (error) log.warn("app.openFolderFailed", { dir, error });
 }
 
 /** prompts/system.md beside main.js (the released app/) or one level up (dev: dist/main.js). */

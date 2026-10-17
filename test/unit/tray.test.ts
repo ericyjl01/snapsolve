@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTray, drawTrayIcon, TRAY_LABELS } from "../../src/main/tray";
+import { createTray, drawTrayIcon, openHistoryFolder, TRAY_LABELS } from "../../src/main/tray";
 
 interface Item {
   label: string;
@@ -113,5 +113,67 @@ describe("drawTrayIcon", () => {
     // Colour is stored as B, G, R.
     const i = buf.findIndex((_, k) => k % 4 === 3 && buf[k] === 255) - 3;
     expect([buf[i], buf[i + 1], buf[i + 2]]).toEqual([218, 105, 9]);
+  });
+});
+
+describe("openHistoryFolder", () => {
+  it("creates the folder first (clear history deletes it), then opens it", async () => {
+    const calls: string[] = [];
+    const mkdir = vi.fn(async (dir: string) => void calls.push(`mkdir ${dir}`));
+    const openPath = vi.fn(async (dir: string) => {
+      calls.push(`open ${dir}`);
+      return "";
+    });
+    const warn = vi.fn();
+    await openHistoryFolder("/data/threads", { mkdir, openPath, log: { warn } });
+    expect(calls).toEqual(["mkdir /data/threads", "open /data/threads"]);
+    expect(mkdir).toHaveBeenCalledWith("/data/threads", { recursive: true });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("an openPath error or a failed mkdir is logged, never thrown", async () => {
+    const warn = vi.fn();
+    await openHistoryFolder("/d", { mkdir: async () => undefined, openPath: async () => "Failed to open path", log: { warn } });
+    expect(warn).toHaveBeenCalledWith("tray.openFolderFailed", expect.objectContaining({ dir: "/d", error: "Failed to open path" }));
+    const openPath = vi.fn(async () => "");
+    await expect(
+      openHistoryFolder("/d", {
+        mkdir: async () => {
+          throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+        },
+        openPath,
+        log: { warn },
+      }),
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(openPath).not.toHaveBeenCalled();
+  });
+});
+
+describe("tray balloon (Windows tray notification)", () => {
+  it("balloon shows the message on the tray icon", () => {
+    const balloons: unknown[] = [];
+    class BalloonTray {
+      setContextMenu() {}
+      setToolTip() {}
+      destroy() {}
+      displayBalloon(options: unknown) {
+        balloons.push(options);
+      }
+    }
+    const noop = () => undefined;
+    const tray = createTray({
+      Tray: BalloonTray,
+      Menu: { buildFromTemplate: (t: unknown) => t },
+      image: {},
+      onOpenPanel: noop,
+      onPause: noop,
+      onResume: noop,
+      onOpenHistory: noop,
+      onClearHistory: noop,
+      onQuit: noop,
+    });
+    tray.balloon("Control+Alt+Q is taken by another app. Change hotkeys.capture in config.json.");
+    expect(balloons).toEqual([{ title: "snapsolve", content: "Control+Alt+Q is taken by another app. Change hotkeys.capture in config.json." }]);
   });
 });

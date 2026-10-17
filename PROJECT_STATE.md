@@ -2,10 +2,9 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-010 in progress on keel/010: tests d2d356c (red accepted), code committed; task tests + unit suite green; npm start log clean.
-- not verifiable here: tray icon by eye and a real Ctrl+Option+Q capture (needs a human + Screen Recording grant) → 013/032 checklists
-- in flight: review PASS recorded at f71b417 (after fail 1 fixed); next: python3 .claude/memory/tasks.py close 010
-Then 011, 050–052, 013, 030. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
+010 closed (merge f2a5903): hotkeys, tray, single instance, power/screen events, capture wiring.
+- not verified here: tray icon by eye and a real Ctrl+Option+Q capture → 013/032 checklists
+Next: 011 (error states, auth, usage), then 050, 051, 052, 013, 030. M2 026 (approval, waits on 013); M3 032 (Mac). Backlog: 033, 042.
 - Windows PC leftovers: delete stale %APPDATA%\snapsolve (014); ASR exclusion still needed there
 
 ## Log

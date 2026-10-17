@@ -24,3 +24,4 @@
 2026-10-14 · 019 · closed · KaTeX svg+path kept with only KaTeX's attributes (own DOMPurify instance, hooks drop other SVG elements and attributes, geometry URI-safe); sanitize(html) exported; \cancel strike stays out; DESIGN §3.6 updated (ce39fd3)
 2026-10-14 · 020 · blocked · M2 signing decision (DESIGN §10 risk 6): unsigned per SPEC non-goals, Authenticode signing, or defer M2 until M1 is finished on the Mac? (-)
 2026-10-14 · 020 · closed · Eric chose (a): M2 ships unsigned, doctor detects the ASR block, real install checked on an unmanaged Windows PC; 015 stays parked for the Mac (-)
+2026-10-14 · keel · planned · M2 — Plugin and installer (Windows) (6 tasks) (-)

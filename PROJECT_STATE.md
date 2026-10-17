@@ -2,14 +2,13 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master: fresh git repo from the zip (baseline 45ffe22, no remote).
-051 closed (merge 09c9d4f): an append past the screenshot limit seeds the new thread; the card says so.
-- next action: start 052
+052 closed (merge ad247a9): busy threads from an earlier run get Retry at startup. 050–052 done today.
+- next action: tasks.py next (M1/M3 open work is waiting on Eric)
 Waiting on Eric: 032 (run docs/checklists/macos.md on keel/032), 013 (Windows PC: park, split or macOS capture checks?)
-Backlog: 033, 042, 053.
+Backlog: 033, 042, 053, 054.
 - Windows PC leftovers: stale %APPDATA%\snapsolve (014), ASR exclusion
 
 ## Log
-2026-10-14 · keel · planned · M2 — Plugin and installer (Windows) (6 tasks) (-)
 2026-10-14 · 021 · closed · bootstrap/boot.js runs <data>/app/current/main.js (data dir rules in step with paths.ts by a parity test) or shows an error box naming /snapsolve install and exits 1; no Electron access outside Electron; bootstrap/package.json without dependencies (c68294f)
 2026-10-14 · 027 · blocked · plugin.json version: omit per the claude-skills convention, or set it per DESIGN §5? (-)
 2026-10-14 · 022 · blocked · review failed 3 times: packager 20.3.0 needs Node >= 22.12 vs DESIGN's Node >= 20; node_modules exclusion untested — raise the minimum to 22.12 or pin packager 18.4.4? → keel/022 (2ce8b77)
@@ -49,3 +48,4 @@ Backlog: 033, 042, 053.
 2026-10-17 · 032 · blocked · needs Eric to run the macOS checklist and report results → keel/032 (a402d20)
 2026-10-17 · 050 · closed · a Retry is a runner retry request: retryTarget re-runs the last user turn followed only by errored answers as the request that first ran it, without appending it again; resumes the owned transcript or takes the fresh-session fallback; nothing to retry → ok:false, no spawn (749b2df)
 2026-10-17 · 051 · closed · an append past maxScreenshotsPerThread starts a thread seeded with the previous thread's last successful answer (seed on the first screenshot turn: image + seededQuestion, kept on retry, first of the earlier answers in a fallback); the card shows CONTINUED_NOTE; no answer → plain new thread (09c9d4f)
+2026-10-17 · 052 · closed · recoverBusyThreads runs before the panel and hotkeys: threads an earlier run left new/queued/running become error with Retry (done when already answered), logged; unreadable threads untouched; follow-up 054 (backlog) (ad247a9)

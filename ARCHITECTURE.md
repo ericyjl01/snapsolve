@@ -49,6 +49,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
 - markdown: `markdown-it`; math: `katex` + `@vscode/markdown-it-katex`; code: `highlight.js`; sanitizing: `dompurify`
 - packaging (M2): `@electron/packager`
 - types: `@types/node`, `@types/markdown-it`
+- speech (063, macOS only): Apple `Speech` + `AVFoundation` frameworks, used only from a small Swift helper binary compiled with `swiftc` (DECISIONS 2026-10-17 speech-to-text); no npm package
 - everything else: Node/Electron built-ins (`crypto.randomUUID`, `fs/promises`, `child_process`, `nativeImage`, `desktopCapturer`, `globalShortcut`, `Tray`, `protocol`)
 
 ## Conventions

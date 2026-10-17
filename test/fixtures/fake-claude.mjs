@@ -1,6 +1,9 @@
 // Scriptable stand-in for `claude -p --input-format stream-json --output-format stream-json` (tests only).
-// Run as `node fake-claude.mjs <claude args>`. Behavior per FAKE_CLAUDE_SCENARIO:
-//   ok (default) · slow · hang · crash · no-conversation · not-logged-in · api-key · rate-limited
+// Run as `node fake-claude.mjs <claude args>`. Behavior per FAKE_CLAUDE_SCENARIO (or the contents of the file
+// FAKE_CLAUDE_SCENARIO_FILE, read at every start, so a running app can switch scenarios):
+//   ok (default) · slow · hang · crash · error · no-conversation · not-logged-in · api-key · rate-limited
+// `auth status` prints Claude Code's JSON (identity fields included) without reading stdin: logged in, or logged
+// out (exit 1) for not-logged-in or FAKE_AUTH=logged-out; FAKE_AUTH=malformed prints text that is not JSON.
 // Writes transcripts like claude: `--session-id <sid>` → $FAKE_PROJECTS/<encoded cwd>/<sid>.jsonl, `--resume <path>`
 // → appends to <path> (missing or unparsable → "No conversation found"). Logs start/end, argv, env names, cwd and
 // stdin as JSON lines to $FAKE_LOG. FAKE_ANSWER_SUFFIX is appended to every answer (e.g. math for the panel e2e).
@@ -8,12 +11,18 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const argv = process.argv.slice(2);
-const scenario = process.env.FAKE_CLAUDE_SCENARIO || "ok";
+const scenario = scenarioName();
 const delayMs = Number(process.env.FAKE_DELAY_MS || 400);
 
 function flag(name) {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : undefined;
+}
+
+function scenarioName() {
+  const file = process.env.FAKE_CLAUDE_SCENARIO_FILE;
+  if (file && existsSync(file)) return readFileSync(file, "utf8").trim() || "ok";
+  return process.env.FAKE_CLAUDE_SCENARIO || "ok";
 }
 
 function log(entry) {
@@ -40,7 +49,23 @@ function noConversation(sid) {
   finish(1);
 }
 
+function authStatus() {
+  log({ event: "auth", argv, env: Object.keys(process.env).sort() });
+  const auth = process.env.FAKE_AUTH || (scenario === "not-logged-in" ? "logged-out" : "ok");
+  if (auth === "malformed") {
+    process.stdout.write("Logged in as fake@example.com (Fake Org)\n");
+    return finish(0);
+  }
+  if (auth === "logged-out") {
+    emit({ loggedIn: false, authMethod: "none", apiProvider: "firstParty" });
+    return finish(1);
+  }
+  emit({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", email: "fake@example.com", orgId: "org-fake", orgName: "Fake Org", subscriptionType: "pro" });
+  return finish(0);
+}
+
 async function main() {
+  if (argv[0] === "auth" && argv[1] === "status") return authStatus();
   let stdin = "";
   for await (const chunk of process.stdin) stdin += chunk;
   const message = JSON.parse(stdin.trim());
@@ -72,6 +97,11 @@ async function main() {
   }
 
   emit({ type: "system", subtype: "init", session_id: sid, apiKeySource: scenario === "api-key" ? "ANTHROPIC_API_KEY" : "none", model: flag("--model"), tools: [] });
+
+  if (scenario === "error") {
+    emit({ type: "result", subtype: "success", is_error: true, result: "API Error: 401 authentication_error", session_id: sid, duration_ms: 15, duration_api_ms: 0, total_cost_usd: 0 });
+    return finish(1);
+  }
 
   if (scenario === "rate-limited") {
     emit({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: 1791996600, rateLimitType: "five_hour", unifiedWindows: { five_hour: { utilization: 1, resetsAt: 1791996600 }, seven_day: { utilization: 0.4, resetsAt: 1792530000 } } } });

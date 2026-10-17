@@ -235,7 +235,7 @@
     {
       "id": "009",
       "title": "Panel window, preload API and UI",
-      "status": "open",
+      "status": "blocked",
       "priority": 5,
       "milestone": 1,
       "deps": [
@@ -245,9 +245,9 @@
         "015"
       ],
       "file": "docs/tasks/009-panel.md",
-      "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "blocked_on": "SPEC §4.3 needs × and tab click (renderer events) to collapse/open the panel, but §4.4 fixes the preload at 9 functions with none for that. Recommended: SPEC Amendment 3 adds one no-arg togglePanel() (main collapses if open, opens if tab; Esc stays main-side via before-input-event). Approve, or prefer another way?",
+      "attempts": 1,
+      "branch": "keel/009",
       "stash": null,
       "closed_at": null,
       "commit": null,

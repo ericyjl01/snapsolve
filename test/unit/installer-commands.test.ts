@@ -194,6 +194,19 @@ describe("install", () => {
     expect(text).not.toContain("Ctrl+Alt+C");
   });
 
+  it.each([
+    ["win32", "Ctrl+Alt+C"],
+    ["darwin", "Ctrl+Option+C"],
+  ] as const)("config.json without hotkeys.capture → the installer's own default is shown (%s: %s)", async (platform, label) => {
+    const { ctx, paths } = setup({ platform });
+    write(paths.config, JSON.stringify({ model: "sonnet" }));
+    const r = await install(ctx);
+    expect(readJson(paths.config)).not.toHaveProperty("hotkeys");
+    const text = r.lines.join("\n");
+    expect(text).toContain(label);
+    expect(text).not.toMatch(/\+Q\b/);
+  });
+
   it("a hotkey without Ctrl+Alt → shown as configured, no AltGr note", async () => {
     const { ctx, paths } = setup();
     write(paths.config, JSON.stringify({ hotkeys: { capture: "Control+Shift+F9" } }));

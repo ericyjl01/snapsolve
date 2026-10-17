@@ -70,9 +70,7 @@ describe("test harness", () => {
 
   it("sets keel's full-suite command and keeps keel caps within limits", () => {
     const keel = JSON.parse(readFileSync(path.join(repoRoot, ".claude", "memory", "keel.json"), "utf8"));
-    // Temporary (DECISIONS 2026-10-13, user-approved): Defender ASR blocks electron.exe on Eric's PC, so the gate
-    // runs unit + integration only. Task 015 restores "npm test" here and in keel.json.
-    expect(keel.test_command).toBe("npx vitest run --project unit");
+    expect(keel.test_command).toBe("npm test");
     const caps = spawnSync("python3", [".claude/memory/check.py", "caps"], { cwd: repoRoot, encoding: "utf8" });
     expect(caps.status, caps.stdout + caps.stderr).toBe(0);
   });

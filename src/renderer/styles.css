@@ -1,1 +1,178 @@
-/* Panel styles are added by task 009. */
+/* Panel styles (SPEC §4.2). The window is either an 8 × 72 tab or the open panel; the same page renders both. */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #656d76;
+  --line: #d0d7de;
+  --card: #f6f8fa;
+  --accent: #0969da;
+  --error: #cf222e;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #8d96a0;
+    --line: #30363d;
+    --card: #161b22;
+    --accent: #4493f8;
+    --error: #f85149;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* The collapsed tab: a strip of accent colour along the edge. */
+  border-left: 4px solid var(--accent);
+}
+
+#threads {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.empty {
+  margin: 24px 16px;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+  object-position: left;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.question {
+  margin: 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--accent);
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+
+.answer,
+.partial {
+  overflow-wrap: anywhere;
+}
+
+.answer > :first-child,
+.partial > :first-child {
+  margin-top: 0;
+}
+
+.answer > :last-child,
+.partial > :last-child {
+  margin-bottom: 0;
+}
+
+.partial {
+  opacity: 0.7;
+}
+
+.answer pre {
+  overflow-x: auto;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.answer .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.answer a {
+  color: var(--accent);
+}
+
+.thinking {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.error,
+.note {
+  margin: 0;
+}
+
+.error {
+  color: var(--error);
+}
+
+.note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions:not(:has(button:not([hidden]))) {
+  display: none;
+}
+
+button {
+  font: inherit;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+button[hidden] {
+  display: none;
+}
+
+.follow-up {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}

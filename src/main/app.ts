@@ -260,6 +260,39 @@ export function createApp(deps: AppDeps): App {
   };
 }
 
+const BUSY: ReadonlySet<Thread["status"]> = new Set(["new", "queued", "running"]);
+
+/**
+ * At startup, before the panel's first listing: a thread an earlier run left `new`, `queued` or `running` (quit or
+ * crash mid-turn) becomes `error`, so its card offers Retry instead of "Thinking…" forever; one whose last turn is
+ * already a successful answer becomes `done`. Unreadable threads are skipped (the store never rewrites them). Returns
+ * the ids it changed; never throws.
+ */
+export async function recoverBusyThreads(deps: { store: Pick<Store, "listThreads" | "updateThread">; log: Logger }): Promise<string[]> {
+  const { store, log } = deps;
+  let threads: Thread[];
+  try {
+    threads = await store.listThreads();
+  } catch (e) {
+    log.warn("app.staleThreadsUnlisted", { error: e });
+    return [];
+  }
+  const recovered: string[] = [];
+  for (const thread of threads) {
+    if (!BUSY.has(thread.status)) continue;
+    const last = thread.turns.at(-1);
+    const status = last?.role === "assistant" && !last.isError ? "done" : "error";
+    try {
+      await store.updateThread(thread.id, { status });
+      recovered.push(thread.id);
+      log.warn("app.staleThreadRecovered", { threadId: thread.id, was: thread.status, now: status });
+    } catch (e) {
+      log.warn("app.staleThreadNotRecovered", { threadId: thread.id, error: e });
+    }
+  }
+  return recovered;
+}
+
 /**
  * SPEC §6.1: `claudePath` from config, else the first `claude` on PATH, else `~/.local/bin`. On Windows only
  * `claude.exe` counts (the app spawns without a shell, so npm's `claude.cmd` cannot run; DECISIONS 023). Nothing

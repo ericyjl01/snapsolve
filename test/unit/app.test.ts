@@ -1,9 +1,9 @@
 import { existsSync, readdirSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createApp, resolveClaudeCommand, type AppDeps } from "../../src/main/app";
+import { createApp, recoverBusyThreads, resolveClaudeCommand, type AppDeps } from "../../src/main/app";
 import type { Logger } from "../../src/main/log";
 import type { RunnerEvent, TurnRequest } from "../../src/main/runner";
 import { createStore, type Store } from "../../src/main/store";
@@ -341,6 +341,99 @@ describe("IPC handlers", () => {
     expect(await createApp(deps).handlers.clearHistory()).toBe(true);
     expect(await store.listThreads()).toEqual([]);
     expect(sent(IPC.threadsChanged)).toContainEqual([]);
+  });
+});
+
+describe("recoverBusyThreads (052): threads left busy by an earlier run", () => {
+  async function threadWith(status: Thread["status"], turns: Thread["turns"]): Promise<Thread> {
+    const t = await store.createThread({ model: "opus", effort: "high" });
+    await store.saveScreenshot(t.id, PNG);
+    for (const turn of turns) await store.appendTurn(t.id, turn);
+    return store.updateThread(t.id, { status });
+  }
+  const asked: Thread["turns"] = [{ role: "user", kind: "screenshot", file: "001.png" }];
+  const logged = () => {
+    const warn = vi.fn();
+    return { log: { ...quietLog, warn }, warn };
+  };
+
+  it("new, queued and running threads become error; done and error threads are untouched; the recovered ids are returned and logged", async () => {
+    const busy = await Promise.all((["new", "queued", "running"] as const).map((s) => threadWith(s, asked)));
+    const done = await threadWith("done", [...asked, answer("x = 4")]);
+    const errored = await threadWith("error", [...asked, errorTurn]);
+    const doneBefore = await readFile(path.join(root, "data", "threads", done.id, "thread.json"), "utf8");
+    const errorBefore = await readFile(path.join(root, "data", "threads", errored.id, "thread.json"), "utf8");
+    const { log, warn } = logged();
+
+    const recovered = await recoverBusyThreads({ store, log });
+
+    expect([...recovered].sort()).toEqual(busy.map((t) => t.id).sort());
+    for (const t of busy) {
+      const after = await store.getThread(t.id);
+      expect(after.status).toBe("error");
+      expect(after.turns).toEqual(t.turns);
+    }
+    expect(await readFile(path.join(root, "data", "threads", done.id, "thread.json"), "utf8")).toBe(doneBefore);
+    expect(await readFile(path.join(root, "data", "threads", errored.id, "thread.json"), "utf8")).toBe(errorBefore);
+    const ids = warn.mock.calls.filter((c) => c[0] === "app.staleThreadRecovered").map((c) => (c[1] as { threadId: string }).threadId);
+    expect(ids.sort()).toEqual(busy.map((t) => t.id).sort());
+  });
+
+  it("a recovered thread accepts Retry: its last user request is re-queued as a retry", async () => {
+    const running = await threadWith("running", asked);
+    const followUp = await threadWith("running", [...asked, answer("x = 4"), { role: "user", kind: "text", text: "why?" }]);
+    await recoverBusyThreads({ store, log: quietLog });
+    const app = createApp(deps);
+    await app.handlers.retry(running.id);
+    await app.handlers.retry(followUp.id);
+    expect(deps.runner.enqueue.mock.calls).toStrictEqual([
+      [running.id, { kind: "retry" }],
+      [followUp.id, { kind: "retry" }],
+    ]);
+  });
+
+  it("the first listing after recovery shows them errored, not busy", async () => {
+    const running = await threadWith("running", asked);
+    await recoverBusyThreads({ store, log: quietLog });
+    const listed = await createApp(deps).handlers.listThreads();
+    expect(listed.find((t) => t.id === running.id)?.status).toBe("error");
+  });
+
+  it("a busy thread whose last turn is already a successful answer becomes done (nothing to retry)", async () => {
+    const answered = await threadWith("running", [...asked, answer("x = 4")]);
+    const recovered = await recoverBusyThreads({ store, log: quietLog });
+    expect(recovered).toEqual([answered.id]);
+    expect((await store.getThread(answered.id)).status).toBe("done");
+  });
+
+  it("unreadable threads are skipped and never rewritten; the readable ones are still recovered", async () => {
+    const running = await threadWith("running", asked);
+    const bad = await threadWith("running", asked);
+    const file = path.join(root, "data", "threads", bad.id, "thread.json");
+    const torn = '{"id":"' + bad.id + '","status":"running","turns":[';
+    await writeFile(file, torn);
+    expect(await recoverBusyThreads({ store, log: quietLog })).toEqual([running.id]);
+    expect(await readFile(file, "utf8")).toBe(torn);
+    expect((await store.getThread(running.id)).status).toBe("error");
+  });
+
+  it("one thread that cannot be updated is logged and the others are still recovered; it never throws", async () => {
+    const a = await threadWith("running", asked);
+    const b = await threadWith("queued", asked);
+    const failing: Store = {
+      ...store,
+      updateThread: (id, patch) => (id === a.id ? Promise.reject(new Error("disk full")) : store.updateThread(id, patch)),
+    };
+    const { log, warn } = logged();
+    expect(await recoverBusyThreads({ store: failing, log })).toEqual([b.id]);
+    expect((await store.getThread(b.id)).status).toBe("error");
+    expect(warn.mock.calls.some((c) => c[0] === "app.staleThreadNotRecovered" && (c[1] as { threadId: string }).threadId === a.id)).toBe(true);
+  });
+
+  it("no threads at all, or a listing that fails → [] without throwing", async () => {
+    expect(await recoverBusyThreads({ store, log: quietLog })).toEqual([]);
+    const broken: Store = { ...store, listThreads: () => Promise.reject(new Error("EACCES")) };
+    expect(await recoverBusyThreads({ store: broken, log: quietLog })).toEqual([]);
   });
 });
 

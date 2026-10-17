@@ -24,7 +24,7 @@ import {
 } from "electron";
 import { SnapsolveError, userMessage } from "../shared/errors";
 import { IPC } from "../shared/ipc";
-import { createApp, resolveClaudeCommand, type Shot } from "./app";
+import { createApp, recoverBusyThreads, resolveClaudeCommand, type Shot } from "./app";
 import { checkAuth } from "./auth";
 import { createCapturer, ScreenRecordingDeniedError } from "./capture";
 import { loadConfig } from "./config";
@@ -157,6 +157,8 @@ async function start(): Promise<void> {
     return new Response(await readFile(hit.path), { headers: { "content-type": hit.mime } });
   });
 
+  // Before the panel's first listing and before any hotkey: threads an earlier run left busy get Retry (task 052).
+  await recoverBusyThreads({ store, log });
   const panel = createPanel({
     BrowserWindow,
     screen,

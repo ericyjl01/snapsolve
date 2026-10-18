@@ -87,3 +87,26 @@ export function hotkeyLabel(accelerator: string, platform: NodeJS.Platform): str
     .map((key) => names[key.toLowerCase()] ?? key)
     .join("+");
 }
+
+const MAC_SYMBOLS: Record<string, string> = {
+  control: "⌃",
+  ctrl: "⌃",
+  alt: "⌥",
+  option: "⌥",
+  shift: "⇧",
+  command: "⌘",
+  cmd: "⌘",
+  commandorcontrol: "⌘",
+  cmdorctrl: "⌘",
+  super: "⌘",
+  meta: "⌘",
+};
+
+/** The menu-bar form of an accelerator: "Control+Alt+X" → "⌃⌥X" on macOS; `hotkeyLabel` elsewhere. */
+export function hotkeySymbols(accelerator: string, platform: NodeJS.Platform): string {
+  if (platform !== "darwin") return hotkeyLabel(accelerator, platform);
+  return accelerator
+    .split("+")
+    .map((key) => MAC_SYMBOLS[key.toLowerCase()] ?? key)
+    .join("");
+}

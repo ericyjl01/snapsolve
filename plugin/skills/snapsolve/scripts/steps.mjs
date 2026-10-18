@@ -27,7 +27,7 @@ const pathFor = (platform) => (platform === "win32" ? path.win32 : path.posix);
 /** The app's config.json defaults; mirrors DEFAULTS in src/main/config.ts (test/unit/installer-steps.test.ts). */
 function defaultConfig() {
   return {
-    hotkeys: { capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q" },
+    hotkeys: { capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" },
     model: "opus",
     effort: "high",
     panelWidth: 420,

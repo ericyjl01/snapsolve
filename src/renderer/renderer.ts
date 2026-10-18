@@ -1,7 +1,7 @@
 // The panel UI (SPEC §4.2): one card per thread, newest first — thumbnail, the conversation with rendered answers,
 // "Thinking…" until the first text arrives, the streamed answer, Copy (Markdown), Retry on error, a follow-up box
 // and a status line. Talks to main only through `window.snapsolve` (SPEC §4.4); model output goes through render.ts.
-// No × button and no clickable tab: Esc in main collapses the panel (SPEC Amendment 3). On macOS a missing Screen
+// No × button yet (061): Esc in main hides the window (SPEC Amendments 3 and 8). On macOS a missing Screen
 // Recording grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings /
 // Relaunch, nothing else.
 import { continuedNote, screenRecordingCard, userMessage } from "../shared/errors";

@@ -152,7 +152,7 @@ describe("panel (e2e)", () => {
     }
   }, 60_000);
 
-  it("stays open 2 s after the answer with autoHideSec 0, has no × button, and Esc after clicking in collapses it to the tab", async () => {
+  it("stays open 2 s after the answer with autoHideSec 0, has no × button, and Esc after clicking in hides it with nothing left on screen", async () => {
     const p = await launchPanel();
     try {
       const id = await capture(p.app);
@@ -172,10 +172,8 @@ describe("panel (e2e)", () => {
         webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
         webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
       });
-      await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(8);
-      const { bounds, workArea, visible } = await windowInfo(p.app);
-      expect(visible).toBe(true);
-      expect(bounds).toEqual({ x: workArea.x + workArea.width - 8, y: workArea.y + Math.round((workArea.height - 72) / 2), width: 8, height: 72 });
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
+      expect(await p.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(0);
     } finally {
       await p.close();
     }
@@ -343,7 +341,7 @@ describe("panel (e2e)", () => {
           webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
           webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
         });
-        await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(8);
+        await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
         await capture(p.app);
         await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual({ ...target, width: 360, height: 460 });
       } finally {
@@ -407,21 +405,45 @@ describe("panel (e2e)", () => {
         win.emit("resized");
       }, target);
 
-      // Collapse (the tab: not resizable, no minimum), then the next capture reopens at the saved size.
+      // Hide (Esc), then the next capture reopens at the saved size.
       await p.page.locator("#threads").click();
       await p.app.evaluate(({ BrowserWindow }) => {
         const { webContents } = BrowserWindow.getAllWindows()[0];
         webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
         webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
       });
-      await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(8);
-      expect(await p.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isResizable())).toBe(false);
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
       await capture(p.app);
       await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual(target);
     } finally {
       await p.close();
     }
   }, 120_000);
+
+  it("toggle hides with nothing visible, then restores at the same bounds without taking focus (060)", async () => {
+    const p = await launchPanel();
+    const toggle = () => p.app.evaluate(() => (globalThis as unknown as { snapsolveTest: { toggle(): void } }).snapsolveTest.toggle());
+    try {
+      expect((await windowInfo(p.app)).visible).toBe(false);
+      await toggle();
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
+      const shown = await windowInfo(p.app);
+      expect(shown.focused).toBe(false);
+      expect(shown.bounds).toEqual({ x: shown.workArea.x + shown.workArea.width - 24 - 360, y: shown.workArea.y + 24, width: 360, height: 460 });
+
+      await toggle();
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
+      expect(await p.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(0);
+
+      await toggle();
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
+      const again = await windowInfo(p.app);
+      expect(again.bounds).toEqual(shown.bounds);
+      expect(again.focused).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
 
   it("a denied Screen Recording capture shows the permission card with its buttons and no Retry", async () => {
     const p = await launchPanel();

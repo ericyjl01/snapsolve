@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/main/app";
 import { createHotkeys } from "../../src/main/hotkeys";
 import type { Logger } from "../../src/main/log";
-import { createPermissionHandlers, darwinStartup, hotkeyLabel, SCREEN_RECORDING_SETTINGS_URL } from "../../src/main/macos";
+import { createPermissionHandlers, darwinStartup, hotkeyLabel, hotkeySymbols, SCREEN_RECORDING_SETTINGS_URL } from "../../src/main/macos";
 import { isSafeExternalUrl } from "../../src/main/panel";
 import { screenRecordingCard, userMessage } from "../../src/shared/errors";
 import { IPC } from "../../src/shared/ipc";
@@ -194,19 +194,28 @@ describe("hotkey label", () => {
     expect(hotkeyLabel("Super+F1", "darwin")).toBe("Cmd+F1");
   });
 
+  it("hotkeySymbols: the menu-bar form on macOS (⌃⌥⇧⌘), the label elsewhere (060 tray item)", () => {
+    expect(hotkeySymbols("Control+Alt+X", "darwin")).toBe("⌃⌥X");
+    expect(hotkeySymbols("Control+Alt+Shift+Q", "darwin")).toBe("⌃⌥⇧Q");
+    expect(hotkeySymbols("CommandOrControl+Option+F9", "darwin")).toBe("⌘⌥F9");
+    expect(hotkeySymbols("Control+Alt+X", "win32")).toBe("Ctrl+Alt+X");
+  });
+
   it("the taken-hotkey notification uses the label", () => {
     const notify = vi.fn();
     const keys = createHotkeys({
       globalShortcut: { register: () => false, unregister() {}, isRegistered: () => false },
-      config: { hotkeys: { capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q" } },
+      config: { hotkeys: { capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" } },
       onCapture() {},
       onAppend() {},
+      onToggle() {},
       notify,
       label: (accelerator) => hotkeyLabel(accelerator, "darwin"),
     });
     keys.start();
     expect(notify).toHaveBeenCalledWith("Ctrl+Option+Q is taken by another app. Change hotkeys.capture in config.json.");
     expect(notify).toHaveBeenCalledWith("Ctrl+Option+Shift+Q is taken by another app. Change hotkeys.append in config.json.");
+    expect(notify).toHaveBeenCalledWith("Ctrl+Option+X is taken by another app. Change hotkeys.toggle in config.json.");
   });
 });
 

@@ -257,6 +257,11 @@ button[hidden] {
   border-radius: 4px;
 }
 
+/* `display` above beats the UA's `[hidden]`, so a hidden thumbnail needs its own rule (as `.card-body` does). */
+.thumb[hidden] {
+  display: none;
+}
+
 /* A follow-up question: the user's bubble, on the right. */
 .question {
   align-self: flex-end;

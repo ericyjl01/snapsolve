@@ -1644,7 +1644,7 @@
     {
       "id": "063",
       "title": "voice follow-up: Ctrl+Option+V starts, Ctrl+Option+V again sends to the newest thread",
-      "status": "open",
+      "status": "blocked",
       "priority": 6,
       "milestone": 3,
       "deps": [
@@ -1652,7 +1652,7 @@
         "058"
       ],
       "file": "docs/tasks/063-voice-follow-up.md",
-      "blocked_on": null,
+      "blocked_on": "063 cannot be worked in this Linux cloud session: its core is a Swift helper (native/speech/, SpeechAnalyzer/SpeechTranscriber with an SFSpeechRecognizer fallback) built by swiftc in npm run build on macOS, and there is no swiftc here — I would be writing Swift that is never compiled, let alone run, and its Done-when (the Mac dictation check) is yours. The mic/Info.plist permission paths are macOS-only too. Work 063 on your Mac, or shall I write only the platform-independent half here (hotkeys.voice validation, the listening-bar renderer, the fake-helper tests) as a separate task and leave the helper for the Mac?",
       "attempts": 0,
       "branch": null,
       "stash": null,

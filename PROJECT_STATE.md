@@ -3,18 +3,17 @@
 ## Now
 Origin: https://github.com/ericyjl01/snapsolve.git (cloud session). macOS only (Amendment 4); app install local (055).
 Cloud e2e works: `git fetch origin keel/<id>` first, hand-unzip Electron, then `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a
-npm test` → 876/878 (docs/issues.md 2026-10-18).
+npm test` → 876/878 (docs/issues.md 2026-10-18). ALL BLOCKED — three questions, all for Eric.
 - 065 BLOCKED on keel/065 (caa71ef), work finished: tests db814a5, code c0f97ed, 5ac3136 (`.thumb[hidden]` fixed the
-  "+ button" e2e), f518147 (SKILL.md "One chat"), + a master merge for memory files. SPEC Amendment 10, 5 DECISIONS
-  rows and the ARCHITECTURE preload line (twelve, `newThread`) are in this commit.
-- Blocking question (Eric): the only two red tests are macOS-only — panel.e2e content protection and userdata.e2e
-  "without the override". (a) platform-gate both (task 071, written and ready) and close 065 here, or (b) close 065 on
-  your Mac? Also: keep or drop the old append hotkey ⌃⌥⇧Q?
-- Queue: 063 (voice) is M3's remainder; 032 waits for your Mac hand check. settings.off.json excluded locally.
-- Backlog 033, 042, 053, 054, 056, 066–070.
+  "+ button" e2e), f518147 (SKILL.md "One chat"), + a master merge. SPEC Amendment 10, 5 DECISIONS rows and the
+  ARCHITECTURE preload line (twelve, `newThread`) are committed. Only close's full-suite gate stands in the way.
+- Q1 (065): the two red tests are macOS-only — panel.e2e content protection, userdata.e2e "without the override".
+  (a) platform-gate both (071, written) and close 065 here, or (b) close 065 on your Mac? Also: keep or drop ⌃⌥⇧Q?
+- Q2 (071): blocked on Q1's answer — 071 *is* option (a), so it waits rather than me answering my own question.
+- Q3 (063): voice needs swiftc and your Mac; work it there, or split out the platform-independent half here?
+- 032 still waits for your Mac hand check. Backlog 033, 042, 053, 054, 056, 066–070.
 
 ## Log
-2026-10-15 · 041 · closed · a failed install/update whose previous exe is gone now says to run /snapsolve install (start only when the exe is there but fails to launch) (a91a53e)
 2026-10-15 · 038 · closed · release.test.ts: the source plugin.json test is titled "names snapsolve and has no version" (assertions unchanged) (570c5ba)
 2026-10-15 · 034 · closed · runner tests: a timed-out turn whose claude never closes settles at the SIGKILL (timeout + retry, queue moves on); a close after that settle emits nothing; found 042 (b7800f2)
 2026-10-15 · 043 · closed · macOS config.json claudePath stores the resolved symlink (after realpath confirms it resolves) so Claude Code auto-updates do not break it; win32 keeps realpath; install passes platform (3f74473)
@@ -54,3 +53,4 @@ npm test` → 876/878 (docs/issues.md 2026-10-18).
 2026-10-18 · 065 · paused · parked on keel/065 for the cloud session: code c0f97ed, unit/integration green, panel e2e 18/19 (the new + button test fails); next: fix it, SPEC Amendment 10 + DECISIONS rows, npm test, review, close (c0f97ed)
 2026-10-18 · 065 · blocked · two macOS-only e2e assertions (content protection; userdata without the override) cannot pass in a Linux cloud session, so Done-when and close's full-suite gate cannot be met: platform-gate them (071) or close on the Mac? → keel/065 (caa71ef)
 2026-10-18 · 071 · blocked · platform-gating the two macOS-only e2e assertions is 065's own block question (option a), so it waits for Eric rather than me answering it myself → not started (-)
+2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)

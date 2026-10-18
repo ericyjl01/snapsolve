@@ -1,4 +1,4 @@
-/* Panel styles (SPEC §4.2): the floating window (058), shown or hidden (060). */
+/* Panel styles (SPEC §4.2). The window is either an 8 × 72 tab or the floating window (058); the same page renders both. */
 :root {
   color-scheme: light dark;
   --bg: #ffffff;
@@ -41,6 +41,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* The collapsed tab: a strip of accent colour along the edge. */
+  border-left: 4px solid var(--accent);
 }
 
 /* The floating window is dragged by this bar (frameless window); anything clickable in it must be no-drag. */
@@ -81,6 +83,14 @@ body {
   height: 10px;
   pointer-events: none;
   background: linear-gradient(135deg, transparent 0 50%, var(--line) 50% 58%, transparent 58% 70%, var(--line) 70% 78%, transparent 78%);
+}
+
+/* The 8 px tab shows only its accent strip. */
+@media (max-width: 40px) {
+  .titlebar,
+  .grip {
+    display: none;
+  }
 }
 
 #threads {

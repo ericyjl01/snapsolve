@@ -1,13 +1,11 @@
-// Global hotkeys (SPEC §1.1): capture, append and show/hide (task 060) from config, capture debounced at 400 ms, a
-// notification naming the key and its config field when registration fails, pause/resume, and re-registration after
-// system resume.
+// Global hotkeys (SPEC §1.1): capture and append from config, capture debounced at 400 ms, a notification naming
+// the key and its config field when registration fails, pause/resume, and re-registration after system resume.
 import type { Hotkeys } from "../shared/types";
 import type { Logger } from "./log";
 
 export const CAPTURE_DEBOUNCE_MS = 400;
 
 type Name = keyof Hotkeys;
-const NAMES: readonly Name[] = ["capture", "append", "toggle"];
 
 export interface HotkeysDeps {
   /** Electron's `globalShortcut`. */
@@ -19,8 +17,6 @@ export interface HotkeysDeps {
   config: { hotkeys: Hotkeys };
   onCapture: () => void;
   onAppend: () => void;
-  /** Shows or hides the window. */
-  onToggle: () => void;
   /** Shows a tray notification. */
   notify: (message: string) => void;
   /** How an accelerator is named to the user (macos.ts `hotkeyLabel`); default: as configured. */
@@ -32,14 +28,13 @@ export interface HotkeysDeps {
 export interface HotkeyStatus {
   capture: boolean;
   append: boolean;
-  toggle: boolean;
   paused: boolean;
 }
 
 export interface HotkeysControl {
-  /** Registers the keys; a failure notifies once per key and leaves the others working. */
+  /** Registers both keys; a failure notifies once per key and leaves the other working. */
   start(): void;
-  /** Unregisters them (only snapsolve's own keys). */
+  /** Unregisters both (only snapsolve's own keys). */
   pause(): void;
   resume(): void;
   /** After system resume: registers any key that is not registered (unless paused). Never notifies. */
@@ -61,7 +56,6 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
       run("capture", deps.onCapture);
     },
     append: () => run("append", deps.onAppend),
-    toggle: () => run("toggle", deps.onToggle),
   };
 
   function run(name: Name, fn: () => void): void {
@@ -93,7 +87,7 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
   }
 
   function registerAll(notify: boolean): void {
-    for (const name of NAMES) {
+    for (const name of ["capture", "append"] as const) {
       if (isRegistered(name)) continue;
       if (!register(name) && notify) {
         const key = deps.label ? deps.label(config.hotkeys[name]) : config.hotkeys[name];
@@ -106,7 +100,7 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
     start: () => registerAll(true),
     pause() {
       paused = true;
-      for (const name of NAMES) {
+      for (const name of ["capture", "append"] as const) {
         try {
           globalShortcut.unregister(config.hotkeys[name]);
         } catch (e) {
@@ -121,11 +115,6 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
     reRegisterIfLost() {
       if (!paused) registerAll(false);
     },
-    status: () => ({
-      capture: !paused && isRegistered("capture"),
-      append: !paused && isRegistered("append"),
-      toggle: !paused && isRegistered("toggle"),
-      paused,
-    }),
+    status: () => ({ capture: !paused && isRegistered("capture"), append: !paused && isRegistered("append"), paused }),
   };
 }

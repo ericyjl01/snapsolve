@@ -6,7 +6,7 @@ import type { Config, Effort, Hotkeys } from "../shared/types";
 import type { Logger } from "./log";
 
 export const DEFAULTS: Readonly<Config> = Object.freeze({
-  hotkeys: Object.freeze({ capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" }),
+  hotkeys: Object.freeze({ capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q" }),
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -130,30 +130,24 @@ function validate(raw: unknown): { config: Config; warnings: string[] } {
 function validateHotkeys(raw: unknown, warnings: string[]): Hotkeys {
   const hotkeys = { ...DEFAULTS.hotkeys };
   if (!isObject(raw)) {
-    warnings.push(invalid("hotkeys", "an object with capture, append and toggle", raw, DEFAULTS.hotkeys));
+    warnings.push(invalid("hotkeys", "an object with capture and append", raw, DEFAULTS.hotkeys));
     return hotkeys;
   }
   for (const [key, value] of Object.entries(raw)) {
-    if (!HOTKEY_NAMES.includes(key as keyof Hotkeys)) {
+    if (key !== "capture" && key !== "append") {
       warnings.push(`unknown key "hotkeys.${key}" ignored`);
     } else if (typeof value === "string" && normalizeAccelerator(value) !== null) {
-      hotkeys[key as keyof Hotkeys] = value;
+      hotkeys[key] = value;
     } else {
-      warnings.push(invalid(`hotkeys.${key}`, 'an Electron accelerator such as "Control+Alt+Q"', value, DEFAULTS.hotkeys[key as keyof Hotkeys]));
+      warnings.push(invalid(`hotkeys.${key}`, 'an Electron accelerator such as "Control+Alt+Q"', value, DEFAULTS.hotkeys[key]));
     }
   }
-  for (const [i, a] of HOTKEY_NAMES.entries()) {
-    for (const b of HOTKEY_NAMES.slice(i + 1)) {
-      if (normalizeAccelerator(hotkeys[a]) === normalizeAccelerator(hotkeys[b])) {
-        warnings.push(`"hotkeys.${a}" and "hotkeys.${b}" are the same key ("${hotkeys[a]}"); using defaults for all hotkeys`);
-        return { ...DEFAULTS.hotkeys };
-      }
-    }
+  if (normalizeAccelerator(hotkeys.capture) === normalizeAccelerator(hotkeys.append)) {
+    warnings.push(`"hotkeys.capture" and "hotkeys.append" are the same key ("${hotkeys.capture}"); using defaults for both`);
+    return { ...DEFAULTS.hotkeys };
   }
   return hotkeys;
 }
-
-const HOTKEY_NAMES: readonly (keyof Hotkeys)[] = ["capture", "append", "toggle"];
 
 // Electron accelerator grammar (https://www.electronjs.org/docs/latest/api/accelerator), case-insensitive.
 const MODIFIERS: Record<string, string> = {

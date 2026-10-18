@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IPC, PRELOAD_CHANNELS } from "../../src/shared/ipc";
 
 describe("IPC contract", () => {
-  it("maps exactly the eleven preload functions (SPEC §4.4 + Amendment 2)", () => {
+  it("maps exactly the eleven preload functions (SPEC §4.4 + Amendments 2 and 9)", () => {
     expect(Object.keys(PRELOAD_CHANNELS).sort()).toEqual(
       [
         "onDelta",
@@ -11,13 +11,20 @@ describe("IPC contract", () => {
         "listThreads",
         "followUp",
         "retry",
-        "copy",
+        "hide",
         "openExternal",
         "clearHistory",
         "openScreenRecordingSettings",
         "relaunch",
       ].sort(),
     );
+  });
+
+  it("Copy is gone and the × hides the window instead (061)", () => {
+    expect(Object.keys(PRELOAD_CHANNELS)).not.toContain("copy");
+    expect(Object.values(IPC)).not.toContain("clipboard:copy");
+    expect(Object.keys(PRELOAD_CHANNELS)).toContain("hide");
+    expect(Object.values(IPC)).toContain("panel:hide");
   });
 
   it("channel names are area:verb and unique", () => {

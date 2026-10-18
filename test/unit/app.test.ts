@@ -338,6 +338,8 @@ describe("IPC handlers", () => {
   it("listThreads returns every thread, newest first", async () => {
     const app = createApp(deps);
     const a = await app.onCapture({ png: PNG });
+    // A second capture would join the first thread (065): "+" first.
+    await app.handlers.newThread();
     const b = await app.onCapture({ png: PNG });
     const list = await app.handlers.listThreads();
     expect(list.map((t) => t.id).sort()).toEqual([a, b].sort());

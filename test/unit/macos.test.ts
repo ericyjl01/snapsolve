@@ -208,7 +208,6 @@ describe("hotkey label", () => {
       globalShortcut: { register: () => false, unregister() {}, isRegistered: () => false },
       config: { hotkeys: DEFAULTS.hotkeys },
       onCapture() {},
-      onAppend() {},
       onToggle() {},
       notify,
       label: (accelerator) => hotkeyLabel(accelerator, "darwin"),
@@ -221,17 +220,17 @@ describe("hotkey label", () => {
     const notify = vi.fn();
     const keys = createHotkeys({
       globalShortcut: { register: () => false, unregister() {}, isRegistered: () => false },
-      config: { hotkeys: { capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" } },
+      // Shift is labelled too (the append key that showed it is gone, 065).
+      config: { hotkeys: { capture: "Control+Alt+Q", toggle: "Control+Alt+Shift+X" } },
       onCapture() {},
-      onAppend() {},
       onToggle() {},
       notify,
       label: (accelerator) => hotkeyLabel(accelerator, "darwin"),
     });
     keys.start();
     expect(notify).toHaveBeenCalledWith("Ctrl+Option+Q is taken by another app. Change hotkeys.capture in config.json.");
-    expect(notify).toHaveBeenCalledWith("Ctrl+Option+Shift+Q is taken by another app. Change hotkeys.append in config.json.");
-    expect(notify).toHaveBeenCalledWith("Ctrl+Option+X is taken by another app. Change hotkeys.toggle in config.json.");
+    expect(notify).toHaveBeenCalledWith("Ctrl+Option+Shift+X is taken by another app. Change hotkeys.toggle in config.json.");
+    expect(notify).toHaveBeenCalledTimes(2);
   });
 });
 

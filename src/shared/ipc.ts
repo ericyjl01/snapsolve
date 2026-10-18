@@ -1,4 +1,4 @@
-// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4) that maps 1:1 onto them.
+// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2 and 9) that maps 1:1 onto them.
 import type { AnswerDelta, AnswerDone, Thread } from "./types";
 
 export const IPC = {
@@ -10,9 +10,10 @@ export const IPC = {
   threadsList: "threads:list",
   threadFollowUp: "thread:followUp",
   threadRetry: "thread:retry",
-  clipboardCopy: "clipboard:copy",
   externalOpen: "external:open",
   historyClear: "history:clear",
+  // SPEC Amendment 9 (task 061): the title bar's ×; no argument.
+  panelHide: "panel:hide",
   // SPEC Amendment 2 (macOS Screen Recording card); neither takes an argument.
   screenRecordingSettingsOpen: "settings:openScreenRecording",
   appRelaunch: "app:relaunch",
@@ -28,7 +29,7 @@ export const PRELOAD_CHANNELS = {
   listThreads: IPC.threadsList,
   followUp: IPC.threadFollowUp,
   retry: IPC.threadRetry,
-  copy: IPC.clipboardCopy,
+  hide: IPC.panelHide,
   openExternal: IPC.externalOpen,
   clearHistory: IPC.historyClear,
   openScreenRecordingSettings: IPC.screenRecordingSettingsOpen,
@@ -47,7 +48,7 @@ export interface IpcRequests {
   [IPC.threadsList]: { args: []; result: Thread[] };
   [IPC.threadFollowUp]: { args: [threadId: string, text: string]; result: void };
   [IPC.threadRetry]: { args: [threadId: string]; result: void };
-  [IPC.clipboardCopy]: { args: [text: string]; result: void };
+  [IPC.panelHide]: { args: []; result: void };
   [IPC.externalOpen]: { args: [url: string]; result: void };
   [IPC.historyClear]: { args: []; result: boolean };
   [IPC.screenRecordingSettingsOpen]: { args: []; result: void };
@@ -62,7 +63,8 @@ export interface SnapsolveApi {
   listThreads(): Promise<Thread[]>;
   followUp(threadId: string, text: string): Promise<void>;
   retry(threadId: string): Promise<void>;
-  copy(text: string): Promise<void>;
+  /** Hides the window, as Esc does (the title bar's ×). */
+  hide(): Promise<void>;
   openExternal(url: string): Promise<void>;
   /** Resolves false if the user cancelled the confirm dialog. */
   clearHistory(): Promise<boolean>;

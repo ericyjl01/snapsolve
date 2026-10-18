@@ -275,9 +275,19 @@ export function createPanel(deps: PanelDeps): Panel {
     fullscreenable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    backgroundColor: "#ffffff",
     title: "snapsolve",
-    ...(deps.platform === "darwin" ? { type: "panel", hiddenInMissionControl: true, acceptFirstMouse: true } : {}),
+    // macOS (061, mockup A2): the OS's blur behind a transparent window, kept while inactive (the window is shown
+    // with showInactive); elsewhere an opaque window.
+    ...(deps.platform === "darwin"
+      ? {
+          type: "panel",
+          hiddenInMissionControl: true,
+          acceptFirstMouse: true,
+          vibrancy: "under-window",
+          visualEffectState: "active",
+          backgroundColor: "#00000000",
+        }
+      : { backgroundColor: "#ffffff" }),
     webPreferences: {
       preload: deps.preloadPath,
       contextIsolation: true,

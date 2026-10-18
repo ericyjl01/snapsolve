@@ -1,9 +1,11 @@
-// The panel UI (SPEC §4.2): one card per thread, newest first — thumbnail, the conversation with rendered answers,
-// "Thinking…" until the first text arrives, the streamed answer, Copy (Markdown), Retry on error, a follow-up box
-// and a status line. Talks to main only through `window.snapsolve` (SPEC §4.4); model output goes through render.ts.
-// No × button yet (061): Esc in main hides the window (SPEC Amendments 3 and 8). On macOS a missing Screen
-// Recording grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings /
-// Relaunch, nothing else.
+// The panel UI (SPEC §4.2, Amendment 9: mockup A2): one card per thread, newest first. Each card has a header row
+// (thumbnail, title, time); the newest thread's card is open below it — the conversation with rendered answers,
+// "Thinking…" until the first text arrives, the streamed answer, Retry on error and a status line — and older
+// threads are one-line rows that open in place on click. One composer pinned at the bottom of the window sends
+// follow-ups to the newest thread, and the title bar's × hides the window (as Esc does in main). Talks to main only
+// through `window.snapsolve` (SPEC §4.4); model output goes through render.ts. On macOS a missing Screen Recording
+// grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings / Relaunch,
+// nothing else.
 import { continuedNote, screenRecordingCard, userMessage } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
 import type { AssistantTurn, Thread } from "../shared/types";
@@ -18,17 +20,23 @@ declare global {
 interface Card {
   kind: "thread";
   root: HTMLElement;
+  header: HTMLButtonElement;
+  title: HTMLElement;
+  time: HTMLElement;
+  body: HTMLElement;
   turns: HTMLElement;
   live: HTMLElement;
   retry: HTMLButtonElement;
-  copy: HTMLButtonElement;
-  box: HTMLTextAreaElement;
   status: HTMLElement;
 }
 
 const api = window.snapsolve;
 const list = document.getElementById("threads") as HTMLElement;
 const empty = document.getElementById("empty") as HTMLElement;
+const box = document.getElementById("follow-up") as HTMLTextAreaElement;
+const send = document.getElementById("send") as HTMLButtonElement;
+/** At most this tall before the composer scrolls (about five lines). */
+const COMPOSER_MAX_PX = 120;
 
 interface PermissionCard {
   kind: "permission";
@@ -43,6 +51,10 @@ const cards = new Map<string, Card | PermissionCard>();
 const streams = new Map<string, string>();
 /** Threads with a follow-up or retry sent whose turn has not ended yet. */
 const pending = new Set<string>();
+/** Older threads the user opened (the newest is always open). */
+const opened = new Set<string>();
+/** The newest thread that takes follow-ups: the composer's target; null with no threads. */
+let newest: string | null = null;
 
 const BUSY = new Set<Thread["status"]>(["new", "queued", "running"]);
 const isBusy = (t: Thread) => BUSY.has(t.status) || pending.has(t.id);
@@ -70,23 +82,29 @@ function answerNode(className: string, markdown: string): HTMLElement {
 function createCard(thread: Thread): Card {
   const root = el("article", "card");
   root.dataset.threadId = thread.id;
+  const header = el("button", "card-header");
+  header.type = "button";
+  const title = el("span", "card-title");
+  const time = el("span", "card-time");
+  const text = el("span", "card-text");
+  text.append(title, time);
+  header.append(thumbnail(thread.id, 1), text);
+  const body = el("div", "card-body");
   const turns = el("div", "turns");
   const live = el("div", "live");
   const actions = el("div", "actions");
-  const copy = el("button", "copy", "Copy");
-  copy.type = "button";
   const retry = el("button", "retry", "Retry");
   retry.type = "button";
-  actions.append(copy, retry);
-  const box = el("textarea", "follow-up");
-  box.rows = 2;
-  box.placeholder = "Ask a follow-up (Enter to send, Shift+Enter for a new line)";
+  actions.append(retry);
   const status = el("p", "status");
-  root.append(thumbnail(thread.id, 1), turns, live, actions, box, status);
+  body.append(turns, live, actions, status);
+  root.append(header, body);
 
-  copy.addEventListener("click", () => {
-    const answer = lastAnswer(threads.get(thread.id));
-    if (answer) void api.copy(answer.text).then(() => flash(copy, "Copied"), () => flash(copy, "Copy failed"));
+  header.addEventListener("click", () => {
+    if (thread.id === newest) return;
+    if (opened.has(thread.id)) opened.delete(thread.id);
+    else opened.add(thread.id);
+    update(thread.id);
   });
   retry.addEventListener("click", () => {
     pending.add(thread.id);
@@ -96,21 +114,7 @@ function createCard(thread: Thread): Card {
       update(thread.id);
     });
   });
-  box.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-    event.preventDefault();
-    const text = box.value.trim();
-    if (!text) return;
-    box.value = "";
-    pending.add(thread.id);
-    update(thread.id);
-    api.followUp(thread.id, text).catch(() => {
-      box.value = text;
-      pending.delete(thread.id);
-      update(thread.id);
-    });
-  });
-  return { kind: "thread", root, turns, live, retry, copy, box, status };
+  return { kind: "thread", root, header, title, time, body, turns, live, retry, status };
 }
 
 function createPermissionCard(thread: Thread): PermissionCard {
@@ -145,8 +149,26 @@ function flash(button: HTMLButtonElement, text: string): void {
   setTimeout(() => (button.textContent = label), 1200);
 }
 
-function lastAnswer(thread: Thread | undefined): AssistantTurn | undefined {
-  return thread?.turns.filter((t): t is AssistantTurn => t.role === "assistant" && !t.isError).at(-1);
+/** The thread's own title, else the first line of its first answer as plain text, else "Screenshot". */
+function titleOf(thread: Thread): string {
+  if (thread.title.trim()) return thread.title.trim();
+  const answer = thread.turns.find((t): t is AssistantTurn => t.role === "assistant" && !t.isError);
+  const line = answer?.text
+    .split("\n")
+    .map((l) => l.replace(/[*_`#>$\\]/g, "").trim())
+    .find(Boolean);
+  return line || "Screenshot";
+}
+
+/** "Just now", "5 min ago", a time today, else the date and time. */
+function timeOf(thread: Thread, now = Date.now()): string {
+  const created = new Date(thread.createdAt);
+  const minutes = Math.floor((now - created.getTime()) / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const clock = created.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (created.toDateString() === new Date(now).toDateString()) return clock;
+  return `${created.toLocaleDateString([], { month: "short", day: "numeric" })}, ${clock}`;
 }
 
 function renderTurns(card: Card, thread: Thread): void {
@@ -199,6 +221,13 @@ function update(threadId: string): void {
     updatePermission(card, thread.permission?.prompted ?? false);
     return;
   }
+  const open = thread.id === newest || opened.has(thread.id);
+  card.root.classList.toggle("older", thread.id !== newest);
+  card.root.classList.toggle("collapsed", !open);
+  card.header.setAttribute("aria-expanded", String(open));
+  card.body.hidden = !open;
+  card.title.textContent = titleOf(thread);
+  card.time.textContent = timeOf(thread);
   renderTurns(card, thread);
   renderLive(card, thread);
   const busy = isBusy(thread);
@@ -208,8 +237,12 @@ function update(threadId: string): void {
   if (!busy && thread.status === "error" && !(last?.role === "assistant" && last.isError)) {
     card.live.replaceChildren(el("p", "error", userMessage("internal")));
   }
-  card.copy.hidden = !lastAnswer(thread);
   card.status.textContent = statusLine(thread);
+}
+
+function updateComposer(): void {
+  box.disabled = newest === null;
+  send.disabled = newest === null || box.value.trim() === "";
 }
 
 /** Puts the cards in newest-first order, moving only those out of place (a moved node would lose focus). */
@@ -223,6 +256,8 @@ function layout(): void {
       cards.delete(id);
     }
   }
+  newest = order.find((t) => !t.permission)?.id ?? null;
+  for (const id of [...opened]) if (!threads.has(id) || id === newest) opened.delete(id);
   let previous: Element | null = null;
   for (const thread of order) {
     let card = cards.get(thread.id);
@@ -236,6 +271,7 @@ function layout(): void {
     update(thread.id);
   }
   empty.hidden = threads.size > 0;
+  updateComposer();
 }
 
 function setThreads(next: Thread[]): void {
@@ -258,6 +294,45 @@ api.onDone(({ threadId, thread }) => {
   threads.set(threadId, thread);
   layout();
 });
+
+function sendFollowUp(): void {
+  const threadId = newest;
+  const text = box.value.trim();
+  if (!threadId || !text) return;
+  box.value = "";
+  fitComposer();
+  pending.add(threadId);
+  update(threadId);
+  api.followUp(threadId, text).catch(() => {
+    box.value = text;
+    fitComposer();
+    pending.delete(threadId);
+    update(threadId);
+  });
+}
+
+/** Grows the composer with its text, up to COMPOSER_MAX_PX. */
+function fitComposer(): void {
+  box.style.height = "auto";
+  box.style.height = `${Math.min(box.scrollHeight, COMPOSER_MAX_PX)}px`;
+  updateComposer();
+}
+
+box.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  sendFollowUp();
+});
+box.addEventListener("input", fitComposer);
+send.addEventListener("click", sendFollowUp);
+(document.getElementById("hide") as HTMLButtonElement).addEventListener("click", () => void api.hide().catch(() => undefined));
+// Relative times ("5 min ago") move on while the window is up.
+setInterval(() => {
+  for (const [id, card] of cards) {
+    const thread = threads.get(id);
+    if (thread && card.kind === "thread") card.time.textContent = timeOf(thread);
+  }
+}, 60_000);
 
 // Links in answers open in the browser, via main's http(s) check; the panel itself never navigates.
 document.addEventListener("click", (event) => {

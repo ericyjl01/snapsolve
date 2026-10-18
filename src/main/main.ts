@@ -7,7 +7,6 @@ import { promisify } from "node:util";
 import {
   app,
   BrowserWindow,
-  clipboard,
   desktopCapturer,
   dialog,
   globalShortcut,
@@ -178,7 +177,6 @@ async function start(): Promise<void> {
     panel,
     config,
     log,
-    clipboard,
     openExternal: (url) => shell.openExternal(url),
     confirmClearHistory: async () => {
       // No parent window: the tray asks too, and a sheet on a hidden window would be lost.
@@ -206,7 +204,8 @@ async function start(): Promise<void> {
     [IPC.threadsList]: core.handlers.listThreads,
     [IPC.threadFollowUp]: core.handlers.followUp,
     [IPC.threadRetry]: core.handlers.retry,
-    [IPC.clipboardCopy]: core.handlers.copy,
+    // The title bar's × hides as Esc does (SPEC Amendment 9).
+    [IPC.panelHide]: async () => panel.close(),
     [IPC.externalOpen]: core.handlers.openExternal,
     [IPC.historyClear]: core.handlers.clearHistory,
     [IPC.screenRecordingSettingsOpen]: permissionHandlers.openScreenRecordingSettings,

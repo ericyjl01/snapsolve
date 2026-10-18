@@ -6,6 +6,8 @@ export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 export interface Hotkeys {
   capture: string;
   append: string;
+  /** Shows or hides the window (task 060). */
+  toggle: string;
 }
 
 /** `<data>/config.json` (SPEC §6.1). Loaded and validated by `src/main/config.ts`. */

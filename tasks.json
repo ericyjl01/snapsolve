@@ -1567,7 +1567,7 @@
     {
       "id": "060",
       "title": "window: show/hide hotkey (Ctrl+Option+X); hidden leaves nothing on screen",
-      "status": "open",
+      "status": "closed",
       "priority": 3,
       "milestone": 3,
       "deps": [
@@ -1575,17 +1575,22 @@
       ],
       "file": "docs/tasks/060-window-toggle-hotkey.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/060",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "1ba1151",
       "notes": "Eric 2026-10-17: the collapsed 8x72 tab must go; hidden = nothing visible. hotkeys.toggle = Control+Alt+X (DECISIONS 2026-10-17, supersedes Z).",
       "kind": "task",
-      "test_cmd": "npx vitest run test/unit/panel.test.ts test/unit/hotkeys.test.ts test/unit/config.test.ts test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "test_cmd": "npx vitest run test/unit/panel.test.ts test/unit/hotkeys.test.ts test/unit/config.test.ts test/unit/tray.test.ts test/unit/macos.test.ts test/unit/skill.test.ts test/e2e/panel.e2e.test.ts",
+      "tests_commit": "e952ab9edd906782f315665ba79f98be861bd04c",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "eea3d1f8f7da39b096e87b524dfbd589986baf4f",
+        "reasons": "panel.test proves close() calls win.hide() with no sub-minimum (8x72) bounds ever set, start hidden, toggle shows at saved/just-moved bounds via showInactive only, capture/open shows a hidden window, Esc hides; hotkeys.test proves toggle registered/paused/re-registered and taken key names hotkeys.toggle; config.test proves Control+Alt+X default, bad value -> default+warning, clash with capture/append -> all defaults+warning; tray.test proves Show/Hide snapsolve (⌃⌥X) toggles; macos.test proves hotkeySymbols; e2e proves hide leaves 0 visible windows and re-show keeps bounds unfocused, and Control+Alt+X registered at startup. Test-file changes only drop tab/transition tests for removed behavior; task tests and npm test (847 pass) exit 0. Mac physical keypress item covered by e2e toggle hook + registration check, not hand-verified.",
+        "at": "2026-10-17"
+      }
     },
     {
       "id": "061",
@@ -1744,6 +1749,27 @@
       "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
       "tests_commit": null,
       "no_tests": null,
+      "review": null
+    },
+    {
+      "id": "068",
+      "title": "docs: DESIGN.md still describes the tab and Open panel (060)",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [],
+      "file": "docs/tasks/068-docs-design-md-still-describes-the-tab-a.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": null,
+      "tests_commit": null,
+      "no_tests": "documentation only: DESIGN.md text",
       "review": null
     }
   ]

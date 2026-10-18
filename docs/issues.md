@@ -221,3 +221,10 @@ tags: e2e, flaky, panel, thinking, fake claude, slow scenario, cold start
 Symptom: `test/e2e/panel.e2e.test.ts` first test: `expect(… .answer count).toBe(0)` got 1 (1974 ms, first test right after `npm run build`); 3 isolated reruns passed.
 Cause:   (suspected) the slow fake emits its first text piece `FAKE_DELAY_MS / 3` = 500 ms after spawn; when the first window is slow to show "Thinking…", the answer node already exists by the time the check runs. Not from 059 (no renderer timing change).
 Note:    backlog task (see tasks.py list): check the order (Thinking… before any .answer) from a renderer-side record, or raise the first piece's delay in that test.
+
+## 2026-10-17 · task 060 · `tasks.py set --test-cmd` after red cleared red (code already in)
+tags: keel, red, test_cmd, set, revert, process
+Symptom: after adding a SKILL.md test and widening 060's test command, `tasks.py brief 060` showed `git show -`: no red commit; `red` runs at HEAD, where the code already passed.
+Cause:   `set --test-cmd` invalidates red (and review) by design.
+Fix:     reverted the implementation (e952ab9), ran red there (failing, recorded), reverted the revert (identical tree to 715a2a9). No history rewritten.
+Note:    settle the test command before `red`; a test added later rides the existing command or goes in a file the command already runs.

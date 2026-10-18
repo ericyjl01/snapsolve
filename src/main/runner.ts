@@ -13,7 +13,8 @@ import type { Store } from "./store";
 import { createLineSplitter, parseEvent, type RateWindow, type StreamEvent } from "./stream";
 
 export const NEW_TEXT = "Solve the problem on this screen.";
-export const APPEND_TEXT = "Here is the next part.";
+// Every capture continues the current thread (065), so the screenshot may be a new problem.
+export const APPEND_TEXT = "Here is another screenshot. If it is unrelated to the earlier problem, treat it as a new question.";
 export const EARLIER_HEADER = "Earlier answers in this thread:";
 export const SEED_HEADER = "The previous thread's last answer:";
 

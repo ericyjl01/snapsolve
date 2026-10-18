@@ -1,6 +1,7 @@
-// The capture → store → runner → panel pipeline (SPEC §2.1, §3.5, §4.2): a capture becomes a new thread whose
-// screenshot is saved and whose card is on screen before claude is spawned; an append joins the most recent
-// capture's thread; runner events and the renderer's requests (SPEC §4.4) are relayed between runner and panel.
+// The capture → store → runner → panel pipeline (SPEC §2.1, §3.5, §4.2, Amendment 10): a capture joins the current
+// thread (the newest; after a restart the newest on disk) and starts a new one when there is none, after "+"
+// (`newThread`) or past the screenshot limit; its screenshot is saved and its card is on screen before claude is
+// spawned. Runner events and the renderer's requests (SPEC §4.4) are relayed between runner and panel.
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { screenRecordingCard, SnapsolveError } from "../shared/errors";
@@ -38,15 +39,18 @@ export type AppHandlers = {
   listThreads(): Promise<Thread[]>;
   followUp(threadId: string, text: string): Promise<void>;
   retry(threadId: string): Promise<void>;
+  /** "+": no text → the next capture or question starts a new thread; text → a new text thread with it now. */
+  newThread(text?: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   clearHistory(): Promise<boolean>;
 };
 
 export interface App {
-  /** SPEC §3.5: always a new thread. Resolves with its id once the card is shown and the turn is queued. */
+  /**
+   * Joins the current thread; a new thread when there is none, after "+", or when it is full (SPEC §2.3, seeded).
+   * Resolves with the thread's id once the card is shown and the turn is queued.
+   */
   onCapture(shot: Shot): Promise<string>;
-  /** Joins the most recent capture's thread; a new thread when there is none or it is full (SPEC §2.3). */
-  onAppend(shot: Shot): Promise<string>;
   /**
    * macOS: a capture refused for want of the Screen Recording grant (SPEC §7.1). Opens the panel on one unsaved card
    * that says what to do; a later denial updates it, the next capture that works removes it.
@@ -58,7 +62,10 @@ export interface App {
 
 export function createApp(deps: AppDeps): App {
   const { store, runner, panel, config, log } = deps;
-  let current: string | null = null;
+  /** The thread a capture joins; undefined until known (then the newest on disk), null when there is none. */
+  let current: string | null | undefined;
+  /** "+" was clicked: the next capture or question starts a new thread. */
+  let fresh = false;
   // The threads as the renderer should see them: disk at first listing, then every change in event order. Re-reading
   // disk after an event could deliver a snapshot older than an answer:done already sent.
   const known = new Map<string, Thread>();
@@ -74,7 +81,7 @@ export function createApp(deps: AppDeps): App {
   }
 
   function snapshot(): Thread[] {
-    return [...known.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.id.localeCompare(b.id));
+    return byNewest([...known.values()]);
   }
 
   /** Applies `patch` to a thread this app has seen; one it has not is read from disk first. */
@@ -157,6 +164,21 @@ export function createApp(deps: AppDeps): App {
     return thread.id;
   }
 
+  /** The thread a capture joins, or null for a new one. */
+  async function currentThread(): Promise<Thread | null> {
+    if (fresh) return null;
+    if (current === undefined) {
+      try {
+        current = byNewest(await store.listThreads())[0]?.id ?? null;
+      } catch (e) {
+        log.warn("app.threadsUnlisted", { error: e });
+        current = null;
+      }
+    }
+    if (current === null) return null;
+    return store.getThread(current).catch(() => null);
+  }
+
   async function threadOf(threadId: unknown): Promise<Thread> {
     if (!isUuid(threadId)) throw new SnapsolveError("threadNotFound", "invalid thread id");
     return store.getThread(threadId);
@@ -188,6 +210,22 @@ export function createApp(deps: AppDeps): App {
       start(thread.id, { kind: "retry" });
     },
 
+    async newThread(text) {
+      if (text === undefined) {
+        fresh = true;
+        return;
+      }
+      if (typeof text !== "string" || text.trim() === "") throw new SnapsolveError("internal", "empty question");
+      const thread = await store.createThread({ model: config.model, effort: config.effort });
+      current = thread.id;
+      fresh = false;
+      remember(thread);
+      panel.open();
+      broadcast();
+      // The runner takes a follow-up as an empty thread's first turn: a new session with the text alone.
+      start(thread.id, { kind: "followUp", text });
+    },
+
     async openExternal(url) {
       if (!isSafeExternalUrl(url)) {
         log.warn("app.externalRefused", { scheme: schemeOf(url) });
@@ -201,6 +239,7 @@ export function createApp(deps: AppDeps): App {
       const result = await store.clearHistory();
       if (!result.ok) log.error("app.clearFailed", { error: result.error });
       current = null;
+      fresh = false;
       known.clear();
       broadcast();
       return true;
@@ -208,11 +247,9 @@ export function createApp(deps: AppDeps): App {
   };
 
   return {
-    onCapture: (shot) => newThread(shot),
-
-    async onAppend(shot) {
-      let target: Thread | null = null;
-      if (current) target = await store.getThread(current).catch(() => null);
+    async onCapture(shot) {
+      const target = await currentThread();
+      fresh = false;
       if (!target) return newThread(shot);
       if (decideAppend(target, config.maxScreenshotsPerThread) === "newThread") return newThread(shot, lastAnswerText(target));
       const saved = await store.saveScreenshot(target.id, shot.png);
@@ -255,6 +292,11 @@ export function createApp(deps: AppDeps): App {
 
     handlers,
   };
+}
+
+/** Newest first: createdAt, then id (the panel's order). */
+function byNewest(threads: Thread[]): Thread[] {
+  return threads.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.id.localeCompare(b.id));
 }
 
 const BUSY: ReadonlySet<Thread["status"]> = new Set(["new", "queued", "running"]);

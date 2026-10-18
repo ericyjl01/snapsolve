@@ -6,7 +6,7 @@ import type { Config, Effort, Hotkeys } from "../shared/types";
 import type { Logger } from "./log";
 
 export const DEFAULTS: Readonly<Config> = Object.freeze({
-  hotkeys: Object.freeze({ capture: "Control+Alt+C", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" }),
+  hotkeys: Object.freeze({ capture: "Control+Alt+C", toggle: "Control+Alt+X" }),
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -130,11 +130,14 @@ function validate(raw: unknown): { config: Config; warnings: string[] } {
 function validateHotkeys(raw: unknown, warnings: string[]): Hotkeys {
   const hotkeys = { ...DEFAULTS.hotkeys };
   if (!isObject(raw)) {
-    warnings.push(invalid("hotkeys", "an object with capture, append and toggle", raw, DEFAULTS.hotkeys));
+    warnings.push(invalid("hotkeys", "an object with capture and toggle", raw, DEFAULTS.hotkeys));
     return hotkeys;
   }
   for (const [key, value] of Object.entries(raw)) {
-    if (!HOTKEY_NAMES.includes(key as keyof Hotkeys)) {
+    if (key === "append") {
+      // 065: a capture continues the current chat; an old config keeps loading.
+      warnings.push(`"hotkeys.append" is no longer used (a capture continues the current chat); ignored`);
+    } else if (!HOTKEY_NAMES.includes(key as keyof Hotkeys)) {
       warnings.push(`unknown key "hotkeys.${key}" ignored`);
     } else if (typeof value === "string" && normalizeAccelerator(value) !== null) {
       hotkeys[key as keyof Hotkeys] = value;
@@ -153,7 +156,7 @@ function validateHotkeys(raw: unknown, warnings: string[]): Hotkeys {
   return hotkeys;
 }
 
-const HOTKEY_NAMES: readonly (keyof Hotkeys)[] = ["capture", "append", "toggle"];
+const HOTKEY_NAMES: readonly (keyof Hotkeys)[] = ["capture", "toggle"];
 
 // Electron accelerator grammar (https://www.electronjs.org/docs/latest/api/accelerator), case-insensitive.
 const MODIFIERS: Record<string, string> = {

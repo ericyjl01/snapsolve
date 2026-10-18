@@ -1,4 +1,4 @@
-// Global hotkeys (SPEC §1.1): capture, append and show/hide (task 060) from config, capture debounced at 400 ms, a
+// Global hotkeys (SPEC §1.1, Amendment 10): capture and show/hide (task 060) from config, capture debounced at 400 ms, a
 // notification naming the key and its config field when registration fails, pause/resume, and re-registration after
 // system resume.
 import type { Hotkeys } from "../shared/types";
@@ -7,7 +7,7 @@ import type { Logger } from "./log";
 export const CAPTURE_DEBOUNCE_MS = 400;
 
 type Name = keyof Hotkeys;
-const NAMES: readonly Name[] = ["capture", "append", "toggle"];
+const NAMES: readonly Name[] = ["capture", "toggle"];
 
 export interface HotkeysDeps {
   /** Electron's `globalShortcut`. */
@@ -18,7 +18,6 @@ export interface HotkeysDeps {
   };
   config: { hotkeys: Hotkeys };
   onCapture: () => void;
-  onAppend: () => void;
   /** Shows or hides the window. */
   onToggle: () => void;
   /** Shows a tray notification. */
@@ -31,7 +30,6 @@ export interface HotkeysDeps {
 
 export interface HotkeyStatus {
   capture: boolean;
-  append: boolean;
   toggle: boolean;
   paused: boolean;
 }
@@ -60,7 +58,6 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
       lastCapture = t;
       run("capture", deps.onCapture);
     },
-    append: () => run("append", deps.onAppend),
     toggle: () => run("toggle", deps.onToggle),
   };
 
@@ -123,7 +120,6 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
     },
     status: () => ({
       capture: !paused && isRegistered("capture"),
-      append: !paused && isRegistered("append"),
       toggle: !paused && isRegistered("toggle"),
       paused,
     }),

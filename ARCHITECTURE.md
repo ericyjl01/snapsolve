@@ -19,7 +19,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `hotkeys.ts`: globalShortcut registration, debounce, pause/resume
   - `tray.ts`: tray menu and tooltip
   - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the Screen Recording card's two actions (fixed settings URL, relaunch), hotkey labels per platform
-- `src/preload/preload.ts`: contextBridge exposing exactly the eleven functions of SPEC §4.4 as amended by Amendments 2 and 9 (`copy` → `hide`)
+- `src/preload/preload.ts`: contextBridge exposing exactly the twelve functions of SPEC §4.4 as amended by Amendments 2, 9 and 10 (`copy` → `hide`; `newThread` added)
 - `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `styles.css`
 - `src/shared/`: `types.ts` (Thread, Turn, Config, events), `ipc.ts` (channel names), `errors.ts` (error kinds + user messages)
 - `prompts/system.md`: the system prompt

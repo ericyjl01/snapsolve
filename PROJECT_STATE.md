@@ -1,18 +1,19 @@
 # PROJECT_STATE
 
 ## Now
-Origin: https://github.com/ericyjl01/snapsolve.git (all branches pushed 2026-10-18; work moves to a cloud session).
-macOS only (Amendment 4); the app install stays local (DECISIONS 055). e2e needs macOS + Electron (cloud may lack it).
-- 061 closed (A2 restyle, × hides, Copy gone, Amendment 9); Mac hand check → 032; found 070 (dark hljs theme).
-- 065 PAUSED on keel/065: tests db814a5 (red ok), fixes b4d1f18/d548bd7, code c0f97ed (capture joins current =
-  newest thread; "+" = preload `newThread(text?)` on `thread:new`; text thread = followUp on an empty thread;
-  hotkeys.append removed + warned; neutral APPEND_TEXT). Unit/integration green; e2e 18/19: new "+ button" test fails.
-- Resume: `tasks.py start 065` → debug that test → Amendment 10 + DECISIONS rows → `npm test` → review → close.
-- Ask Eric: keep ⌃⌥⇧Q append? (065 removes it per DECISIONS 065 row). settings.off.json excluded locally.
-- Backlog 033, 042, 053, 054, 056, 066–070. 032 waits for the redesign. e2e: keep the Mac awake (`caffeinate -dims`).
+Origin: https://github.com/ericyjl01/snapsolve.git (cloud session). macOS only (Amendment 4); app install local (055).
+Cloud e2e works: `git fetch origin keel/<id>` first, hand-unzip Electron, then `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a
+npm test` → 876/878 (docs/issues.md 2026-10-18).
+- 065 BLOCKED on keel/065 (caa71ef), work finished: tests db814a5, code c0f97ed, 5ac3136 (`.thumb[hidden]` fixed the
+  "+ button" e2e), f518147 (SKILL.md "One chat"), + a master merge for memory files. SPEC Amendment 10, 5 DECISIONS
+  rows and the ARCHITECTURE preload line (twelve, `newThread`) are in this commit.
+- Blocking question (Eric): the only two red tests are macOS-only — panel.e2e content protection and userdata.e2e
+  "without the override". (a) platform-gate both (task 071, written and ready) and close 065 here, or (b) close 065 on
+  your Mac? Also: keep or drop the old append hotkey ⌃⌥⇧Q?
+- Queue: 063 (voice) is M3's remainder; 032 waits for your Mac hand check. settings.off.json excluded locally.
+- Backlog 033, 042, 053, 054, 056, 066–070.
 
 ## Log
-2026-10-14 · 039 · closed · doctor shows the Defender ASR text for a blocked smoke check only on Windows; on macOS the fail: names the EPERM and uninstall + install; SKILL.md doctor names the Mac config and log next to the Windows ones (6280d31)
 2026-10-14 · 040 · closed · the three win32 quitAndWait default-isRunning tests use the shared advancing fake clock, so a processRunning regression fails in ms with the still-running error instead of an OOM worker crash (556ea59)
 2026-10-15 · 041 · closed · a failed install/update whose previous exe is gone now says to run /snapsolve install (start only when the exe is there but fails to launch) (a91a53e)
 2026-10-15 · 038 · closed · release.test.ts: the source plugin.json test is titled "names snapsolve and has no version" (assertions unchanged) (570c5ba)
@@ -52,3 +53,4 @@ macOS only (Amendment 4); the app install stays local (DECISIONS 055). e2e needs
 2026-10-17 · 064 · closed · capture default Control+Alt+C (⌃⌥C) in config DEFAULTS, the installer's default config.json and DEFAULT_HOTKEY, SKILL.md (install, doctor, AltGr) and DESIGN D9; existing hotkeys.capture values kept, never migrated; reopened after Eric's OK for the one missing test (skill.test.ts asserts the doctor's 'On a Mac, say Ctrl+Option+C' line and that the section no longer names ⌃⌥Q); master merged into the parked branch keeping ⌃⌥C and 060's toggle ⌃⌥X together; found 069 (0f21ca5)
 2026-10-18 · 061 · closed · native macOS restyle (mockup A2): vibrancy behind a transparent window on macOS, 36 px title bar with mark and × (preload hide on panel:hide replaces copy, SPEC Amendment 9), newest thread open with older threads as one-line rows, one composer pinned at the bottom for the newest thread, Retry only on error; Mac hand check → 032; follow-up 070 (f9e2c87)
 2026-10-18 · 065 · paused · parked on keel/065 for the cloud session: code c0f97ed, unit/integration green, panel e2e 18/19 (the new + button test fails); next: fix it, SPEC Amendment 10 + DECISIONS rows, npm test, review, close (c0f97ed)
+2026-10-18 · 065 · blocked · two macOS-only e2e assertions (content protection; userdata without the override) cannot pass in a Linux cloud session, so Done-when and close's full-suite gate cannot be met: platform-gate them (071) or close on the Mac? → keel/065 (caa71ef)

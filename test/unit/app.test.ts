@@ -103,35 +103,117 @@ describe("onCapture", () => {
   });
 });
 
-describe("onAppend", () => {
-  it("adds the screenshot to the most recent capture's thread", async () => {
+// 065: a capture continues the current thread (the newest one) until "+" (newThread) or the screenshot limit.
+describe("onCapture continues the current thread (065)", () => {
+  it("capture with a current thread appends: the second screenshot joins the same thread as an append turn", async () => {
     const app = createApp(deps);
     const first = await app.onCapture({ png: PNG });
-    const second = await app.onCapture({ png: PNG });
-    const target = await app.onAppend({ png: PNG2 });
-    expect(target).toBe(second);
-    expect(target).not.toBe(first);
-    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(second, { kind: "append", screenshot: "002.png" });
-    expect(await readFile(store.screenshotPath(second, 2))).toEqual(Buffer.from(PNG2));
+    const second = await app.onCapture({ png: PNG2 });
+    expect(second).toBe(first);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(first, { kind: "append", screenshot: "002.png" });
+    expect(await readFile(store.screenshotPath(first, 2))).toEqual(Buffer.from(PNG2));
+    expect(deps.panel.open).toHaveBeenCalledTimes(2);
   });
 
-  it("with no capture yet starts a new thread", async () => {
+  it("capture with no thread starts one", async () => {
     const app = createApp(deps);
-    const id = await app.onAppend({ png: PNG });
+    const id = await app.onCapture({ png: PNG });
     expect(deps.runner.enqueue).toHaveBeenCalledWith(id, { kind: "new", screenshot: "001.png" });
+    expect(app).not.toHaveProperty("onAppend");
   });
 
-  it("at maxScreenshotsPerThread starts a new thread", async () => {
-    deps.config.maxScreenshotsPerThread = 1;
+  it("new chat makes the next capture start a new thread, and only the next one", async () => {
     const app = createApp(deps);
     const first = await app.onCapture({ png: PNG });
-    await store.appendTurn(first, { role: "user", kind: "screenshot", file: "001.png" });
-    const next = await app.onAppend({ png: PNG2 });
+    await app.handlers.newThread();
+    // Nothing is created or queued by the click itself.
+    expect(deps.runner.enqueue).toHaveBeenCalledTimes(1);
+    expect((await store.listThreads()).length).toBe(1);
+    const second = await app.onCapture({ png: PNG2 });
+    expect(second).not.toBe(first);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(second, { kind: "new", screenshot: "001.png" });
+    const third = await app.onCapture({ png: PNG });
+    expect(third).toBe(second);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(second, { kind: "append", screenshot: "002.png" });
+  });
+
+  it("new chat twice in a row is still one new thread at the next capture", async () => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await app.handlers.newThread();
+    await app.handlers.newThread();
+    const second = await app.onCapture({ png: PNG2 });
+    expect(second).not.toBe(first);
+    expect(await app.onCapture({ png: PNG })).toBe(second);
+  });
+
+  it("new chat then a typed question starts a new text thread, which the next capture continues", async () => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await app.handlers.newThread();
+    await app.handlers.newThread("What is 2 + 2?");
+    const threads = await store.listThreads();
+    expect(threads).toHaveLength(2);
+    const text = threads.find((t) => t.id !== first) as Thread;
+    expect(text).toMatchObject({ model: "opus", effort: "high" });
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(text.id, { kind: "followUp", text: "What is 2 + 2?" });
+    expect((sent(IPC.threadsChanged).at(-1) as Thread[]).map((t) => t.id)).toContain(text.id);
+    expect(deps.panel.open).toHaveBeenCalled();
+    // The text thread is now the current one: no "new chat" left over.
+    expect(await app.onCapture({ png: PNG2 })).toBe(text.id);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(text.id, { kind: "append", screenshot: "001.png" });
+  });
+
+  it("a typed question with no thread at all starts a text thread", async () => {
+    const app = createApp(deps);
+    await app.handlers.newThread("hello");
+    const [thread] = await store.listThreads();
+    expect(deps.runner.enqueue).toHaveBeenCalledWith(thread.id, { kind: "followUp", text: "hello" });
+  });
+
+  it.each([["   "], [""], [42], [{}]])("newThread(%j) is refused and changes nothing", async (text) => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await expect(app.handlers.newThread(text as unknown as string)).rejects.toThrow();
+    expect((await store.listThreads()).length).toBe(1);
+    expect(deps.runner.enqueue).toHaveBeenCalledTimes(1);
+    // A refused question does not mark "new chat" either.
+    expect(await app.onCapture({ png: PNG2 })).toBe(first);
+  });
+
+  it("current thread after restart is the newest on disk", async () => {
+    const older = await store.createThread({ model: "opus", effort: "high" });
+    await new Promise((r) => setTimeout(r, 5));
+    const newest = await store.createThread({ model: "opus", effort: "high" });
+    await store.saveScreenshot(newest.id, PNG);
+    await store.appendTurn(newest.id, { role: "user", kind: "screenshot", file: "001.png" });
+    const app = createApp(deps);
+    const id = await app.onCapture({ png: PNG2 });
+    expect(id).toBe(newest.id);
+    expect(id).not.toBe(older.id);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(newest.id, { kind: "append", screenshot: "002.png" });
+  });
+
+  it("after Clear history the next capture starts a new thread", async () => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await app.handlers.clearHistory();
+    const next = await app.onCapture({ png: PNG2 });
     expect(next).not.toBe(first);
     expect(deps.runner.enqueue).toHaveBeenLastCalledWith(next, { kind: "new", screenshot: "001.png" });
   });
 
-  it("at the cap: the new thread's turn is seeded with the previous thread's last answer (051)", async () => {
+  it("7th screenshot still rolls over: at maxScreenshotsPerThread the capture starts a new thread", async () => {
+    deps.config.maxScreenshotsPerThread = 1;
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await store.appendTurn(first, { role: "user", kind: "screenshot", file: "001.png" });
+    const next = await app.onCapture({ png: PNG2 });
+    expect(next).not.toBe(first);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(next, { kind: "new", screenshot: "001.png" });
+  });
+
+  it("at the cap: the new thread's turn is seeded with the previous thread's last answer (051), and it becomes current", async () => {
     deps.config.maxScreenshotsPerThread = 2;
     const app = createApp(deps);
     const first = await app.onCapture({ png: PNG });
@@ -143,12 +225,11 @@ describe("onAppend", () => {
     ] as Thread["turns"]) {
       await store.appendTurn(first, turn);
     }
-    const next = await app.onAppend({ png: PNG2 });
+    const next = await app.onCapture({ png: PNG2 });
     expect(next).not.toBe(first);
     expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "new", screenshot: "001.png", seed: "x = 4, so y = 2." }]);
     expect(await readFile(store.screenshotPath(next, 1))).toEqual(Buffer.from(PNG2));
-    // The new thread becomes the append target.
-    await app.onAppend({ png: PNG });
+    await app.onCapture({ png: PNG });
     expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "append", screenshot: "002.png" }]);
   });
 
@@ -164,7 +245,7 @@ describe("onAppend", () => {
     ] as Thread["turns"]) {
       await store.appendTurn(first, turn);
     }
-    const next = await app.onAppend({ png: PNG2 });
+    const next = await app.onCapture({ png: PNG2 });
     expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "new", screenshot: "001.png", seed: "x = 4" }]);
   });
 
@@ -175,17 +256,18 @@ describe("onAppend", () => {
     for (const turn of [{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn, answer("")] as Thread["turns"]) {
       await store.appendTurn(first, turn);
     }
-    const next = await app.onAppend({ png: PNG2 });
+    const next = await app.onCapture({ png: PNG2 });
     expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "new", screenshot: "001.png" }]);
   });
 
-  it("a capture (not an append) never seeds, even when the previous thread is full", async () => {
+  it("new chat never seeds: a full current thread then + then a capture is a plain new thread", async () => {
     deps.config.maxScreenshotsPerThread = 1;
     const app = createApp(deps);
     const first = await app.onCapture({ png: PNG });
     for (const turn of [{ role: "user", kind: "screenshot", file: "001.png" }, answer("x = 4")] as Thread["turns"]) {
       await store.appendTurn(first, turn);
     }
+    await app.handlers.newThread();
     const next = await app.onCapture({ png: PNG2 });
     expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([next, { kind: "new", screenshot: "001.png" }]);
   });
@@ -333,10 +415,10 @@ describe("IPC handlers", () => {
   });
 
   // The Copy button and `copy` handler are gone with the restyle (061): nothing writes to the clipboard.
-  it("exposes exactly the five renderer handlers, none of them copy (061)", () => {
+  it("exposes exactly the six renderer handlers, none of them copy (061), newThread added (065)", () => {
     const app = createApp(deps);
     expect(Object.keys(app.handlers).sort()).toEqual(
-      ["listThreads", "followUp", "retry", "openExternal", "clearHistory"].sort(),
+      ["listThreads", "followUp", "retry", "openExternal", "clearHistory", "newThread"].sort(),
     );
   });
 

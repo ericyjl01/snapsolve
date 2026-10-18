@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULTS, loadConfig } from "../../src/main/config";
 
 const SPEC_DEFAULTS = {
-  hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" },
+  // No append key (065): a capture continues the current thread.
+  hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+X" },
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -44,7 +45,7 @@ describe("DEFAULTS", () => {
 
   it("default capture hotkey is Control+Alt+C (064)", () => {
     expect(DEFAULTS.hotkeys.capture).toBe("Control+Alt+C");
-    expect(DEFAULTS.hotkeys.append).toBe("Control+Alt+Shift+Q");
+    expect(DEFAULTS.hotkeys).not.toHaveProperty("append");
   });
 
   it("autoHideSec is 0 and allowApiKey is false", () => {
@@ -59,7 +60,7 @@ describe("loadConfig", () => {
     const before = await snapshot();
     const r = await loadConfig(file);
     expect(r.warnings).toEqual([]);
-    expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" });
+    expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+Q", toggle: "Control+Alt+X" });
     expect(await snapshot()).toEqual(before);
   });
 
@@ -108,7 +109,7 @@ describe("loadConfig", () => {
 
   it("a valid file is honored and left untouched", async () => {
     const custom = {
-      hotkeys: { capture: "CommandOrControl+Shift+Space", append: "Ctrl+Alt+num5", toggle: "Alt+F8" },
+      hotkeys: { capture: "CommandOrControl+Shift+Space", toggle: "Alt+F8" },
       model: "claude-opus-5-5[1m]",
       effort: "max",
       panelWidth: 500,
@@ -127,14 +128,14 @@ describe("loadConfig", () => {
   });
 
   it("a partial file takes defaults for missing fields, without warnings", async () => {
-    await writeConfig({ model: "sonnet", hotkeys: { append: "Control+Alt+Shift+W" } });
+    await writeConfig({ model: "sonnet", hotkeys: { toggle: "Control+Alt+T" } });
     const before = await snapshot();
     const r = await loadConfig(file);
     expect(r.warnings).toEqual([]);
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       model: "sonnet",
-      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+W", toggle: "Control+Alt+X" },
+      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -171,7 +172,7 @@ describe("loadConfig", () => {
       model: 5,
       maxConcurrent: 0,
       timeoutSec: -1,
-      hotkeys: { capture: "Control+Alt+Nope", append: "Control+Alt+Shift+W" },
+      hotkeys: { capture: "Control+Alt+Nope", toggle: "Control+Alt+T" },
       panelWidth: 500,
     });
     const before = await snapshot();
@@ -180,7 +181,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       panelWidth: 500,
-      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+W", toggle: "Control+Alt+X" },
+      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -218,15 +219,20 @@ describe("loadConfig", () => {
     },
   );
 
-  it("identical capture and append (case and aliases ignored) → both defaults + one warning", async () => {
-    await writeConfig({ hotkeys: { capture: "Control+Alt+W", append: "alt+ctrl+w" } });
-    const before = await snapshot();
-    const r = await loadConfig(file);
-    expect(r.config.hotkeys).toEqual(SPEC_DEFAULTS.hotkeys);
-    expect(r.warnings).toHaveLength(1);
-    expect(r.warnings[0]).toContain("hotkeys");
-    expect(await snapshot()).toEqual(before);
-  });
+  // 065: the append hotkey is gone; a user's old config keeps working.
+  // The same key as capture is no clash: append is never registered.
+  it.each(["Control+Alt+Shift+Q", "Control+Alt+W", "not a key"])(
+    "hotkeys.append %j (065) is ignored with one warning that it is no longer used; the other keys are kept, file untouched",
+    async (append) => {
+      await writeConfig({ hotkeys: { capture: "Control+Alt+W", append } });
+      const before = await snapshot();
+      const r = await loadConfig(file);
+      expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+W", toggle: "Control+Alt+X" });
+      expect(r.config.hotkeys).not.toHaveProperty("append");
+      expect(r.warnings).toEqual([expect.stringMatching(/hotkeys\.append.*no longer used/)]);
+      expect(await snapshot()).toEqual(before);
+    },
+  );
 
   it("hotkeys.toggle default is Control+Alt+X; a good value is honored (060)", async () => {
     expect(DEFAULTS.hotkeys.toggle).toBe("Control+Alt+X");
@@ -248,7 +254,6 @@ describe("loadConfig", () => {
 
   it.each([
     [{ capture: "Control+Alt+W", toggle: "alt+ctrl+w" }, "hotkeys.capture", "hotkeys.toggle"],
-    [{ append: "Control+Alt+W", toggle: "Ctrl+Option+W" }, "hotkeys.append", "hotkeys.toggle"],
   ])("toggle the same key as another hotkey %j → defaults for all + one warning naming both", async (hotkeys, a, b) => {
     await writeConfig({ hotkeys });
     const r = await loadConfig(file);
@@ -281,7 +286,7 @@ describe("loadConfig", () => {
     await writeConfig({
       model: "sonnet",
       colour: "blue",
-      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+Q", extra: "x" },
+      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+X", extra: "x" },
     });
     const before = await snapshot();
     const r = await loadConfig(file);

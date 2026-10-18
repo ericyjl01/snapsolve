@@ -12,7 +12,8 @@ const PROBLEM = path.join(fixturesDir, "problems", "algebra.png");
 const CSP =
   "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' snapsolve:; " +
   "connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
-// SPEC §4.4's nine plus Amendment 2's two (task 030), with `copy` replaced by `hide` (Amendment 9, task 061).
+// SPEC §4.4's nine plus Amendment 2's two (task 030), with `copy` replaced by `hide` (Amendment 9, task 061), plus
+// `newThread` (Amendment 10, task 065).
 const PRELOAD_NAMES = [
   "onDelta",
   "onDone",
@@ -20,6 +21,7 @@ const PRELOAD_NAMES = [
   "listThreads",
   "followUp",
   "retry",
+  "newThread",
   "hide",
   "openExternal",
   "clearHistory",
@@ -81,6 +83,11 @@ function capture(app: ElectronApplication): Promise<string> {
 }
 
 const card = (id: string) => `[data-thread-id="${id}"]`;
+
+/** The title bar's "+" (065). */
+async function newChat(page: Page): Promise<void> {
+  await page.locator("#titlebar").getByRole("button", { name: "New chat" }).click();
+}
 
 describe("panel (e2e)", () => {
   it("captureFromFile opens the panel unfocused with Thinking…, streams a rendered answer, and a follow-up adds a second answer", async () => {
@@ -144,7 +151,7 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the eleven preload functions", async () => {
+  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the twelve preload functions", async () => {
     const p = await launchPanel();
     try {
       expect((await windowInfo(p.app)).contentProtected).toBe(true);
@@ -217,6 +224,8 @@ describe("panel (e2e)", () => {
     try {
       const older = await capture(p.app);
       await p.page.locator(`${card(older)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      // A capture continues the current thread (065): "New chat" first.
+      await newChat(p.page);
       const newest = await capture(p.app);
       await p.page.locator(`${card(newest)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
 
@@ -244,6 +253,55 @@ describe("panel (e2e)", () => {
       await p.close();
     }
   }, 120_000);
+
+  it("+ button starts a fresh card: captures continue the chat, + then a capture or a typed question starts a new one (065)", async () => {
+    const p = await launchPanel();
+    const ids = () => p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId));
+    const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
+    try {
+      const first = await capture(p.app);
+      await expect.poll(() => answers(first), { timeout: 20_000 }).toBe(1);
+      expect(await capture(p.app)).toBe(first);
+      await expect.poll(() => answers(first), { timeout: 20_000 }).toBe(2);
+      expect(await ids()).toEqual([first]);
+      // The appended screenshot shows in the card where it joined.
+      expect(await p.page.locator(`${card(first)} .turns img.thumb`).getAttribute("src")).toBe(`snapsolve://thread/${first}/2.png`);
+
+      const plus = p.page.locator("#titlebar").getByRole("button", { name: "New chat" });
+      expect(await plus.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("no-drag");
+      // Before the ×, at the top right.
+      expect(await p.page.locator("#titlebar button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).toEqual(["New chat", "Hide window"]);
+      await plus.click();
+      // The current card moves into the history list.
+      await expect.poll(() => p.page.locator(`${card(first)} .answer`).first().isVisible(), { timeout: 5_000 }).toBe(false);
+      expect(await p.page.locator(`${card(first)}.collapsed`).count()).toBe(1);
+
+      // + then a typed question: a new text thread, no thumbnail.
+      const box = p.page.locator("#composer textarea");
+      await box.fill("What is 2 + 2?");
+      await box.press("Enter");
+      await expect.poll(async () => (await ids()).length, { timeout: 10_000 }).toBe(2);
+      const text = (await ids())[0] as string;
+      expect(text).not.toBe(first);
+      await expect.poll(() => answers(text), { timeout: 20_000 }).toBe(1);
+      expect(await p.page.locator(`${card(text)} .question`).allInnerTexts()).toEqual(["What is 2 + 2?"]);
+      expect(await p.page.locator(`${card(text)} .answer`).first().innerText()).toContain("saw 0 image(s)");
+      expect(await p.page.locator(`${card(text)} .card-header img.thumb`).isVisible()).toBe(false);
+      // The old thread got nothing.
+      expect(await answers(first)).toBe(2);
+      expect(await p.page.locator(`${card(first)} .question`).count()).toBe(0);
+
+      // + then a capture: a new screenshot card; the one after continues it.
+      await newChat(p.page);
+      const third = await capture(p.app);
+      expect([first, text]).not.toContain(third);
+      await expect.poll(() => answers(third), { timeout: 20_000 }).toBe(1);
+      expect(await ids()).toEqual([third, text, first]);
+      expect(await capture(p.app)).toBe(third);
+    } finally {
+      await p.close();
+    }
+  }, 150_000);
 
   it("Retry shows only on an errored turn (061)", async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
@@ -273,7 +331,7 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("an append past maxScreenshotsPerThread opens a new card that says it continues the previous thread, its claude given the last answer (051)", async () => {
+  it("a capture past maxScreenshotsPerThread opens a new card that says it continues the previous thread, its claude given the last answer (051)", async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
     const projects = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-projects-"));
     const fakeLog = path.join(projects, "fake.log");
@@ -290,11 +348,8 @@ describe("panel (e2e)", () => {
       await page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       expect(await page.locator(`${card(first)} .note`).count()).toBe(0);
 
-      const next = await launched.app.evaluate(
-        (_electron, png) =>
-          (globalThis as unknown as { snapsolveTest: { appendFromFile(p: string): Promise<string> } }).snapsolveTest.appendFromFile(png),
-        PROBLEM,
-      );
+      // A capture continues the current thread (065); past maxScreenshotsPerThread it starts a seeded one.
+      const next = await capture(launched.app);
       expect(next).not.toBe(first);
       const note = page.locator(`${card(next)} .note`);
       await note.waitFor({ state: "visible", timeout: 10_000 });
@@ -342,11 +397,8 @@ describe("panel (e2e)", () => {
       await page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
 
       writeFileSync(scenarioFile, "slow");
-      const next = await launched.app.evaluate(
-        (_electron, png) =>
-          (globalThis as unknown as { snapsolveTest: { appendFromFile(p: string): Promise<string> } }).snapsolveTest.appendFromFile(png),
-        PROBLEM,
-      );
+      // A capture continues the current thread (065); past maxScreenshotsPerThread it starts a seeded one.
+      const next = await capture(launched.app);
       expect(next).not.toBe(first);
       const note = page.locator(`${card(next)} .note`);
       await note.waitFor({ state: "visible", timeout: 5_000 });

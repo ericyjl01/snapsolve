@@ -1,17 +1,17 @@
 # PROJECT_STATE
 
 ## Now
-On Eric's Mac at /Users/ericli/dev/snapsolve-master (no remote). macOS only (Amendment 4); local only (DECISIONS 055).
-- 061 closed: A2 restyle (vibrancy on macOS, title bar mark + × = hide via preload `hide`/`panel:hide`, newest card
-  open, older threads one-line rows, one composer for the newest thread), Copy gone (SPEC Amendment 9). Mac
-  side-by-side hand check → 032. Found 070 (dark highlight.js theme).
-- `.claude/settings.off.json` (Eric's, API key) excluded locally in .git/info/exclude (DECISIONS 2026-10-18).
-- Queue: 065 → 063 in M3; backlog 066 (panelWidth), 067, 068, 069, 070. 032 waits for the redesign.
-- e2e on this Mac: keep it awake (`caffeinate -dims`); with the lid closed tests hang 150–900 s.
-Backlog: 033 (macOS icon), 042, 053, 054, 056. Canvas (A2): https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH
+Origin: https://github.com/ericyjl01/snapsolve.git (all branches pushed 2026-10-18; work moves to a cloud session).
+macOS only (Amendment 4); the app install stays local (DECISIONS 055). e2e needs macOS + Electron (cloud may lack it).
+- 061 closed (A2 restyle, × hides, Copy gone, Amendment 9); Mac hand check → 032; found 070 (dark hljs theme).
+- 065 PAUSED on keel/065: tests db814a5 (red ok), fixes b4d1f18/d548bd7, code c0f97ed (capture joins current =
+  newest thread; "+" = preload `newThread(text?)` on `thread:new`; text thread = followUp on an empty thread;
+  hotkeys.append removed + warned; neutral APPEND_TEXT). Unit/integration green; e2e 18/19: new "+ button" test fails.
+- Resume: `tasks.py start 065` → debug that test → Amendment 10 + DECISIONS rows → `npm test` → review → close.
+- Ask Eric: keep ⌃⌥⇧Q append? (065 removes it per DECISIONS 065 row). settings.off.json excluded locally.
+- Backlog 033, 042, 053, 054, 056, 066–070. 032 waits for the redesign. e2e: keep the Mac awake (`caffeinate -dims`).
 
 ## Log
-2026-10-14 · 037 · closed · SKILL.md doctor names the data folder's files: hotkeys.capture in %LOCALAPPDATA%/snapsolve/config.json for the hotkey question, the log at %LOCALAPPDATA%/snapsolve/logs/snapsolve.log (both on Windows); test derives them from resolveDataDir + dataPaths (1743d47)
 2026-10-14 · 039 · closed · doctor shows the Defender ASR text for a blocked smoke check only on Windows; on macOS the fail: names the EPERM and uninstall + install; SKILL.md doctor names the Mac config and log next to the Windows ones (6280d31)
 2026-10-14 · 040 · closed · the three win32 quitAndWait default-isRunning tests use the shared advancing fake clock, so a processRunning regression fails in ms with the still-running error instead of an OOM worker crash (556ea59)
 2026-10-15 · 041 · closed · a failed install/update whose previous exe is gone now says to run /snapsolve install (start only when the exe is there but fails to launch) (a91a53e)
@@ -51,3 +51,4 @@ Backlog: 033 (macOS icon), 042, 053, 054, 056. Canvas (A2): https://claude.ai/ar
 2026-10-17 · 060 · closed · show/hide hotkey Control+Alt+X (SPEC Amendment 8): hidden = win.hide(), starts hidden, tab and transitions removed, always resizable with the minimum; hotkeys.toggle validated (clash across all three → defaults), registered/paused/re-registered; tray Show/Hide snapsolve (⌃⌥X) via hotkeySymbols; installer default + SKILL.md; red re-run via revert (docs/issues.md); hand keypress → 032; found 068 (1ba1151)
 2026-10-17 · 064 · closed · capture default Control+Alt+C (⌃⌥C) in config DEFAULTS, the installer's default config.json and DEFAULT_HOTKEY, SKILL.md (install, doctor, AltGr) and DESIGN D9; existing hotkeys.capture values kept, never migrated; reopened after Eric's OK for the one missing test (skill.test.ts asserts the doctor's 'On a Mac, say Ctrl+Option+C' line and that the section no longer names ⌃⌥Q); master merged into the parked branch keeping ⌃⌥C and 060's toggle ⌃⌥X together; found 069 (0f21ca5)
 2026-10-18 · 061 · closed · native macOS restyle (mockup A2): vibrancy behind a transparent window on macOS, 36 px title bar with mark and × (preload hide on panel:hide replaces copy, SPEC Amendment 9), newest thread open with older threads as one-line rows, one composer pinned at the bottom for the newest thread, Retry only on error; Mac hand check → 032; follow-up 070 (f9e2c87)
+2026-10-18 · 065 · paused · parked on keel/065 for the cloud session: code c0f97ed, unit/integration green, panel e2e 18/19 (the new + button test fails); next: fix it, SPEC Amendment 10 + DECISIONS rows, npm test, review, close (c0f97ed)

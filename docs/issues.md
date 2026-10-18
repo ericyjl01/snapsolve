@@ -236,3 +236,10 @@ tags: e2e, flaky, panel, drag, window.json, load, 058
 Symptom: during 064's close prep `npm test` failed once — `panel.e2e.test.ts` "title bar drag moves the window … (058)" timed out in 120000 ms; that run took 158 s against 39–42 s for every other run.
 Cause:   (suspected) machine load, not the app: the same file alone passed 10/10 in 15 s right after, and two later full runs were green (853 passed, 39 s). Editing PROJECT_STATE.md *during* a run also fails the suite's git-clean teardown ("the test suite left files git does not ignore") — unrelated to the tests.
 Note:    backlog 069. Keep the working tree still while `npm test` runs, and re-run a timed-out e2e alone before treating it as a real failure.
+
+## 2026-10-18 · task 061 · `tasks.py red` refused an untracked file that is not code
+tags: keel, red, untracked, settings, credentials, gitignore
+Symptom: `tasks.py red 061` → "uncommitted code on keel/061 — commit the tests first (.claude/settings.off.json)".
+Cause:   Eric's switched-off Claude Code settings file (Foundry env, holds an API key) sat untracked in `.claude/`; keel counts any untracked file as code.
+Fix:     with Eric's OK ("its off right now so you ignore"), `.claude/settings.off.json` added to `.git/info/exclude` (local, never committed); red then accepted. DECISIONS 2026-10-18.
+Note:    never commit or `git add -A` that file; a new untracked personal file needs the same local exclude, asked first.

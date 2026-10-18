@@ -2,18 +2,15 @@
 
 ## Now
 On Eric's Mac at /Users/ericli/dev/snapsolve-master (no remote). macOS only (Amendment 4); local only (DECISIONS 055).
-- 064 closed (reopened by Eric): capture default ⌃⌥C everywhere, doctor Mac line asserted; master merged into the
-  parked branch first (⌃⌥C + 060's toggle ⌃⌥X kept together). Found 069 (058 drag e2e times out under load).
-- 058/059 closed: floating window, drag + resize (min 280 × 300) saved per display in <data>/window.json; hand checks → 032.
-- 060 closed: show/hide ⌃⌥X, hidden = nothing on screen, no tab; hand keypress check → 032. Found 068 (DESIGN.md tab text).
-- Queue (Eric: "begin working on these changes"): 061 → 065 → 063 in M3; backlog 066 (panelWidth), 067, 068, 069.
-- 032 waits until the redesign is done (Eric, chat): then rewrite docs/checklists/macos.md (keel/032) for ⌃⌥C/X/V, the floating window and no tab; release a bumped version; Eric runs `/snapsolve update` and the checklist.
+- 061 closed: A2 restyle (vibrancy on macOS, title bar mark + × = hide via preload `hide`/`panel:hide`, newest card
+  open, older threads one-line rows, one composer for the newest thread), Copy gone (SPEC Amendment 9). Mac
+  side-by-side hand check → 032. Found 070 (dark highlight.js theme).
+- `.claude/settings.off.json` (Eric's, API key) excluded locally in .git/info/exclude (DECISIONS 2026-10-18).
+- Queue: 065 → 063 in M3; backlog 066 (panelWidth), 067, 068, 069, 070. 032 waits for the redesign.
 - e2e on this Mac: keep it awake (`caffeinate -dims`); with the lid closed tests hang 150–900 s.
-Backlog: 033 (macOS icon), 042, 053, 054, 056 (README row + plugin.json still say Windows).
-Redesign canvas (mockup A2): https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH. Open: is append (⌃⌥⇧Q) still wanted? (065 removes it)
+Backlog: 033 (macOS icon), 042, 053, 054, 056. Canvas (A2): https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH
 
 ## Log
-2026-10-14 · 036 · closed · a step failing after install/update quit the app restarts the previous version while current still resolves to it and its exe exists (warn: after the fail:); otherwise a fail: names the command to run; CLI hook wiring in realSteps.mjs, inert unless SNAPSOLVE_TEST=1; backlog 041 (0de5582)
 2026-10-14 · 037 · closed · SKILL.md doctor names the data folder's files: hotkeys.capture in %LOCALAPPDATA%/snapsolve/config.json for the hotkey question, the log at %LOCALAPPDATA%/snapsolve/logs/snapsolve.log (both on Windows); test derives them from resolveDataDir + dataPaths (1743d47)
 2026-10-14 · 039 · closed · doctor shows the Defender ASR text for a blocked smoke check only on Windows; on macOS the fail: names the EPERM and uninstall + install; SKILL.md doctor names the Mac config and log next to the Windows ones (6280d31)
 2026-10-14 · 040 · closed · the three win32 quitAndWait default-isRunning tests use the shared advancing fake clock, so a processRunning regression fails in ms with the still-running error instead of an OOM worker crash (556ea59)
@@ -53,3 +50,4 @@ Redesign canvas (mockup A2): https://claude.ai/artifact/YDwUWu2mMWHJui9b5unfPH. 
 2026-10-17 · 059 · closed · resize from any edge or corner (SPEC Amendment 7): resizable + 280 × 300 minimum only while open and at rest, moved/resized share the save path (per display, never from a transition), under-minimum sizes put back and not saved, saved sizes raised to the minimum then clamped, drawn grip; hand drag deferred to 032; found 067 (backlog e2e flake) (1bf32d2)
 2026-10-17 · 060 · closed · show/hide hotkey Control+Alt+X (SPEC Amendment 8): hidden = win.hide(), starts hidden, tab and transitions removed, always resizable with the minimum; hotkeys.toggle validated (clash across all three → defaults), registered/paused/re-registered; tray Show/Hide snapsolve (⌃⌥X) via hotkeySymbols; installer default + SKILL.md; red re-run via revert (docs/issues.md); hand keypress → 032; found 068 (1ba1151)
 2026-10-17 · 064 · closed · capture default Control+Alt+C (⌃⌥C) in config DEFAULTS, the installer's default config.json and DEFAULT_HOTKEY, SKILL.md (install, doctor, AltGr) and DESIGN D9; existing hotkeys.capture values kept, never migrated; reopened after Eric's OK for the one missing test (skill.test.ts asserts the doctor's 'On a Mac, say Ctrl+Option+C' line and that the section no longer names ⌃⌥Q); master merged into the parked branch keeping ⌃⌥C and 060's toggle ⌃⌥X together; found 069 (0f21ca5)
+2026-10-18 · 061 · closed · native macOS restyle (mockup A2): vibrancy behind a transparent window on macOS, 36 px title bar with mark and × (preload hide on panel:hide replaces copy, SPEC Amendment 9), newest thread open with older threads as one-line rows, one composer pinned at the bottom for the newest thread, Retry only on error; Mac hand check → 032; follow-up 070 (f9e2c87)

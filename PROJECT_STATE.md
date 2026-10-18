@@ -14,7 +14,6 @@ npm test` → 876/878 (docs/issues.md 2026-10-18).
 - Backlog 033, 042, 053, 054, 056, 066–070.
 
 ## Log
-2026-10-14 · 040 · closed · the three win32 quitAndWait default-isRunning tests use the shared advancing fake clock, so a processRunning regression fails in ms with the still-running error instead of an OOM worker crash (556ea59)
 2026-10-15 · 041 · closed · a failed install/update whose previous exe is gone now says to run /snapsolve install (start only when the exe is there but fails to launch) (a91a53e)
 2026-10-15 · 038 · closed · release.test.ts: the source plugin.json test is titled "names snapsolve and has no version" (assertions unchanged) (570c5ba)
 2026-10-15 · 034 · closed · runner tests: a timed-out turn whose claude never closes settles at the SIGKILL (timeout + retry, queue moves on); a close after that settle emits nothing; found 042 (b7800f2)
@@ -54,3 +53,4 @@ npm test` → 876/878 (docs/issues.md 2026-10-18).
 2026-10-18 · 061 · closed · native macOS restyle (mockup A2): vibrancy behind a transparent window on macOS, 36 px title bar with mark and × (preload hide on panel:hide replaces copy, SPEC Amendment 9), newest thread open with older threads as one-line rows, one composer pinned at the bottom for the newest thread, Retry only on error; Mac hand check → 032; follow-up 070 (f9e2c87)
 2026-10-18 · 065 · paused · parked on keel/065 for the cloud session: code c0f97ed, unit/integration green, panel e2e 18/19 (the new + button test fails); next: fix it, SPEC Amendment 10 + DECISIONS rows, npm test, review, close (c0f97ed)
 2026-10-18 · 065 · blocked · two macOS-only e2e assertions (content protection; userdata without the override) cannot pass in a Linux cloud session, so Done-when and close's full-suite gate cannot be met: platform-gate them (071) or close on the Mac? → keel/065 (caa71ef)
+2026-10-18 · 071 · blocked · platform-gating the two macOS-only e2e assertions is 065's own block question (option a), so it waits for Eric rather than me answering it myself → not started (-)

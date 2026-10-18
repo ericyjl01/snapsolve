@@ -47,7 +47,6 @@ beforeEach(async () => {
     },
     config: { model: "opus", effort: "high", maxScreenshotsPerThread: 6 },
     log: quietLog,
-    clipboard: { writeText: vi.fn() },
     openExternal: vi.fn(async () => undefined),
     confirmClearHistory: vi.fn(async () => true),
   };
@@ -333,12 +332,12 @@ describe("IPC handlers", () => {
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
   });
 
-  it("copy writes the text to the clipboard; a non-string is refused", async () => {
+  // The Copy button and `copy` handler are gone with the restyle (061): nothing writes to the clipboard.
+  it("exposes exactly the five renderer handlers, none of them copy (061)", () => {
     const app = createApp(deps);
-    await app.handlers.copy("**x = 4**");
-    expect(deps.clipboard.writeText).toHaveBeenCalledWith("**x = 4**");
-    await expect(app.handlers.copy({} as unknown as string)).rejects.toThrow();
-    expect(deps.clipboard.writeText).toHaveBeenCalledTimes(1);
+    expect(Object.keys(app.handlers).sort()).toEqual(
+      ["listThreads", "followUp", "retry", "openExternal", "clearHistory"].sort(),
+    );
   });
 
   it("openExternal opens only http(s) URLs", async () => {

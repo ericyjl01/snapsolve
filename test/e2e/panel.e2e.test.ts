@@ -12,7 +12,7 @@ const PROBLEM = path.join(fixturesDir, "problems", "algebra.png");
 const CSP =
   "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' snapsolve:; " +
   "connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
-// SPEC §4.4's nine plus Amendment 2's two (task 030).
+// SPEC §4.4's nine plus Amendment 2's two (task 030), with `copy` replaced by `hide` (Amendment 9, task 061).
 const PRELOAD_NAMES = [
   "onDelta",
   "onDone",
@@ -20,7 +20,7 @@ const PRELOAD_NAMES = [
   "listThreads",
   "followUp",
   "retry",
-  "copy",
+  "hide",
   "openExternal",
   "clearHistory",
   "openScreenRecordingSettings",
@@ -114,7 +114,24 @@ describe("panel (e2e)", () => {
       await expect.poll(() => thinking.count(), { timeout: 5_000 }).toBe(0);
       expect(await p.page.locator(`${card(id)} .answer`).first().innerText()).toContain("Answer 1: saw 1 image(s).");
 
-      const box = p.page.locator(`${card(id)} textarea.follow-up`);
+      // No Copy (061): no button, and nothing to call.
+      expect(await p.page.getByRole("button", { name: /copy/i }).count()).toBe(0);
+      expect(await p.page.evaluate(() => "copy" in (window as unknown as { snapsolve: object }).snapsolve)).toBe(false);
+
+      // The follow-up composer is the window's own, pinned below the list (061), not one box per card.
+      expect(await p.page.locator(`${card(id)} textarea`).count()).toBe(0);
+      expect(await p.page.locator(`${card(id)} .retry`).isVisible()).toBe(false);
+      const box = p.page.locator("#composer textarea");
+      const content = await p.page.locator("#content").boundingBox();
+      const composer = await p.page.locator("#composer").boundingBox();
+      expect(composer && content && composer.y >= content.y + content.height - 1).toBe(true);
+      expect(composer && Math.round(composer.y + composer.height)).toBe(460);
+      // Shift+Enter is a new line, not a send.
+      await box.fill("Why");
+      await box.press("Shift+Enter");
+      expect(await box.inputValue()).toBe("Why\n");
+      await new Promise((r) => setTimeout(r, 500));
+      expect(await p.page.locator(`${card(id)} .question`).count()).toBe(0);
       await box.fill("Why is it 4?");
       await box.press("Enter");
       await expect.poll(() => p.page.locator(`${card(id)} .answer`).count(), { timeout: 20_000 }).toBe(2);
@@ -152,7 +169,7 @@ describe("panel (e2e)", () => {
     }
   }, 60_000);
 
-  it("stays open 2 s after the answer with autoHideSec 0, has no × button, and Esc after clicking in hides it with nothing left on screen", async () => {
+  it("stays open 2 s after the answer with autoHideSec 0, and Esc after clicking in hides it with nothing left on screen", async () => {
     const p = await launchPanel();
     try {
       const id = await capture(p.app);
@@ -160,9 +177,6 @@ describe("panel (e2e)", () => {
       await expect.poll(() => p.page.locator(`${card(id)} .thinking`).count(), { timeout: 5_000 }).toBe(0);
       await new Promise((r) => setTimeout(r, 2_000));
       expect((await windowInfo(p.app)).bounds.width).toBe(360);
-
-      expect(await p.page.evaluate(() => document.body.innerText.includes("×"))).toBe(false);
-      expect(await p.page.locator('button.close, [aria-label*="close" i], [title*="close" i]').count()).toBe(0);
 
       await p.page.locator(`${card(id)} .answer`).first().click();
       // A real key press reaches main's before-input-event; Playwright's keyboard (CDP) bypasses it, so the key is
@@ -176,6 +190,86 @@ describe("panel (e2e)", () => {
       expect(await p.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(0);
     } finally {
       await p.close();
+    }
+  }, 90_000);
+
+  it("the title bar's × hides the window with nothing left on screen, and the next capture shows it again (061)", async () => {
+    const p = await launchPanel();
+    try {
+      const id = await capture(p.app);
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
+      const hide = p.page.locator("#titlebar").getByRole("button", { name: "Hide window" });
+      expect(await hide.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("no-drag");
+      await hide.click();
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
+      expect(await p.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((w) => w.isVisible()).length)).toBe(0);
+
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "attached", timeout: 20_000 });
+      await capture(p.app);
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("older threads are one-line rows (title and time) that open on click, and the composer follows up the newest thread (061)", async () => {
+    const p = await launchPanel();
+    try {
+      const older = await capture(p.app);
+      await p.page.locator(`${card(older)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      const newest = await capture(p.app);
+      await p.page.locator(`${card(newest)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+
+      // Newest first: the newest card is open, the older one shows only its header row.
+      expect(await p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId))).toEqual([newest, older]);
+      const row = p.page.locator(`${card(older)} .card-header`);
+      expect(await row.isVisible()).toBe(true);
+      expect((await row.locator(".card-title").innerText()).length).toBeGreaterThan(0);
+      expect((await row.locator(".card-time").innerText()).length).toBeGreaterThan(0);
+      expect(await p.page.locator(`${card(older)} .answer`).first().isVisible()).toBe(false);
+      expect(await p.page.locator(`${card(newest)} .answer`).first().isVisible()).toBe(true);
+      expect((await row.boundingBox())?.height).toBeLessThan(60);
+
+      const box = p.page.locator("#composer textarea");
+      await box.fill("And the other root?");
+      await box.press("Enter");
+      await expect.poll(() => p.page.locator(`${card(newest)} .answer:not(.streaming)`).count(), { timeout: 20_000 }).toBe(2);
+      expect(await p.page.locator(`${card(newest)} .question`).allInnerTexts()).toContain("And the other root?");
+      expect(await p.page.locator(`${card(older)} .answer`).count()).toBe(1);
+      expect(await p.page.locator(`${card(older)} .question`).count()).toBe(0);
+
+      await row.click();
+      await expect.poll(() => p.page.locator(`${card(older)} .answer`).first().isVisible(), { timeout: 5_000 }).toBe(true);
+    } finally {
+      await p.close();
+    }
+  }, 120_000);
+
+  it("Retry shows only on an errored turn (061)", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    const projects = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-projects-"));
+    const scenarioFile = path.join(projects, "scenario");
+    writeFileSync(scenarioFile, "error");
+    const launched = await launchApp({
+      dataDir,
+      env: { SNAPSOLVE_TEST_CLAUDE: FAKE, SNAPSOLVE_TEST_PROJECTS: projects, FAKE_PROJECTS: projects, FAKE_CLAUDE_SCENARIO_FILE: scenarioFile },
+    });
+    try {
+      const page = await launched.app.firstWindow();
+      await page.waitForLoadState("domcontentloaded");
+      const id = await capture(launched.app);
+      const retry = page.locator(`${card(id)} .retry`);
+      await retry.waitFor({ state: "visible", timeout: 20_000 });
+      expect(await page.locator(`${card(id)} .error`).first().isVisible()).toBe(true);
+
+      writeFileSync(scenarioFile, "ok");
+      await retry.click();
+      await page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      await expect.poll(() => retry.isVisible(), { timeout: 5_000 }).toBe(false);
+    } finally {
+      await launched.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      rmSync(projects, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }, 90_000);
 

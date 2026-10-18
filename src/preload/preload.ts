@@ -1,4 +1,4 @@
-// The renderer's whole view of main (SPEC §4.4 + Amendment 2): exactly the eleven functions, each bound to its one
+// The renderer's whole view of main (SPEC §4.4 + Amendments 2 and 9): exactly the eleven functions, each bound to its one
 // channel.
 // No generic send/invoke passthrough; listeners get the payload only, never the IPC event.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
@@ -19,7 +19,7 @@ const api: SnapsolveApi = {
   listThreads: () => ipcRenderer.invoke(IPC.threadsList),
   followUp: (threadId, text) => ipcRenderer.invoke(IPC.threadFollowUp, threadId, text),
   retry: (threadId) => ipcRenderer.invoke(IPC.threadRetry, threadId),
-  copy: (text) => ipcRenderer.invoke(IPC.clipboardCopy, text),
+  hide: () => ipcRenderer.invoke(IPC.panelHide),
   openExternal: (url) => ipcRenderer.invoke(IPC.externalOpen, url),
   clearHistory: () => ipcRenderer.invoke(IPC.historyClear),
   // No arguments cross: main opens a fixed URL / relaunches.

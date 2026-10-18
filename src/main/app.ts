@@ -19,7 +19,6 @@ export interface AppDeps {
   panel: { open(): void; send<C extends keyof IpcEvents>(channel: C, payload: IpcEvents[C]): void };
   config: Pick<Config, "model" | "effort" | "maxScreenshotsPerThread">;
   log: Logger;
-  clipboard: { writeText(text: string): void };
   /** `shell.openExternal`; only ever called with an http(s) URL. */
   openExternal: (url: string) => Promise<void>;
   /** The native confirm dialog before clearing history; true = go ahead. */
@@ -39,7 +38,6 @@ export type AppHandlers = {
   listThreads(): Promise<Thread[]>;
   followUp(threadId: string, text: string): Promise<void>;
   retry(threadId: string): Promise<void>;
-  copy(text: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   clearHistory(): Promise<boolean>;
 };
@@ -188,11 +186,6 @@ export function createApp(deps: AppDeps): App {
       }
       // The runner re-runs the failed turn in place: no second copy of its user turn (task 050).
       start(thread.id, { kind: "retry" });
-    },
-
-    async copy(text) {
-      if (typeof text !== "string") throw new SnapsolveError("internal", "copy needs text");
-      deps.clipboard.writeText(text);
     },
 
     async openExternal(url) {

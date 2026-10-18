@@ -381,7 +381,7 @@ class FakeWindow extends EventEmitter {
 const DISPLAY_A = { id: 1, workArea: { x: 0, y: 25, width: 1440, height: 875 } };
 const DISPLAY_B = { id: 2, workArea: { x: 1440, y: 0, width: 1920, height: 1080 } };
 
-function panelSetup(options: { saved?: WindowBounds; cursorOn?: typeof DISPLAY_A } = {}) {
+function panelSetup(options: { saved?: WindowBounds; cursorOn?: typeof DISPLAY_A; platform?: NodeJS.Platform } = {}) {
   let cursorDisplay = options.cursorOn ?? DISPLAY_A;
   const displays = [DISPLAY_A, DISPLAY_B];
   const saves: WindowBounds[] = [];
@@ -396,7 +396,7 @@ function panelSetup(options: { saved?: WindowBounds; cursorOn?: typeof DISPLAY_A
       },
     },
     ipcMain: { handle() {} },
-    platform: "darwin" as NodeJS.Platform,
+    platform: options.platform ?? ("darwin" as NodeJS.Platform),
     preloadPath: "/preload.js",
     config: { autoHideSec: 0 },
     log: quietLog,
@@ -444,6 +444,24 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
   it("the window is movable, resizable with a 280 × 300 minimum, frameless", () => {
     const { win } = panelSetup();
     expect(win.options).toMatchObject({ movable: true, resizable: true, minWidth: 280, minHeight: 300, frame: false });
+  });
+
+  // 061, mockup A2 "native macOS": the frosted look is the OS's own blur behind a window with no opaque fill.
+  // The window is shown inactive (showInactive), so the blur must not follow the window's key state.
+  it("macOS: frosted — vibrancy behind a transparent window background, kept while inactive (061)", () => {
+    const { win } = panelSetup();
+    expect(win.options).toMatchObject({
+      type: "panel",
+      vibrancy: "under-window",
+      visualEffectState: "active",
+      backgroundColor: "#00000000",
+    });
+  });
+
+  it("off macOS: no vibrancy and an opaque background (061)", () => {
+    const { win } = panelSetup({ platform: "win32" });
+    expect(win.options.vibrancy).toBeUndefined();
+    expect(win.options.backgroundColor).toBe("#ffffff");
   });
 
   it("hidden state hides the window: close calls win.hide() and no 8 × 72 bounds are ever set", () => {

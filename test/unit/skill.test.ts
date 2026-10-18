@@ -202,11 +202,13 @@ describe("SKILL.md install and doctor notes", () => {
     expect(install).toContain("Show/Hide snapsolve");
   });
 
-  it("doctor: asks the Ctrl+Alt+C question after the script", () => {
+  it("doctor: asks the Ctrl+Alt+C question after the script, and names Ctrl+Option+C on a Mac", () => {
     const doctor = sections().get("doctor")!;
     const question = "Press Ctrl+Alt+C now — did a card appear with an answer?";
     expect(doctor).toContain(question);
     expect(doctor.indexOf(question)).toBeGreaterThan(doctor.indexOf(command("doctor")));
+    expect(doctor).toContain("On a Mac, say Ctrl+Option+C");
+    expect(doctor).not.toContain("Ctrl+Option+Q");
   });
 });
 

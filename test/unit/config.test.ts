@@ -59,7 +59,7 @@ describe("loadConfig", () => {
     const before = await snapshot();
     const r = await loadConfig(file);
     expect(r.warnings).toEqual([]);
-    expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q" });
+    expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" });
     expect(await snapshot()).toEqual(before);
   });
 

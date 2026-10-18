@@ -215,6 +215,8 @@ Cause:   (1) `commands.mjs` DEFAULT_HOTKEY had no test, because the installer-co
 Tried:   review 1 fail → added the win32/darwin "config.json without hotkeys.capture" install test (b1130c4); review 2 pass.
 Tried:   close → "memory committed on keel/064: SPEC.md" → `git restore --source=master --staged -- SPEC.md` + "064: restore memory" (3b6bb68) → review stale → review 3 fail (doctor Mac line unasserted).
 Note:    SPEC.md amendments stay uncommitted until the close commit on W, like DECISIONS. Before the first review, mutate each changed literal back (scratch copy) and confirm some test fails, for user-facing text as well as code.
+Fix:     Eric reopened it ("for 064 yes it is okay to reopen." (user, chat)): `unblock` reset attempts to 1, `start` merged master (058/059/060) into keel/064 — seven conflicts, all the same shape: keep 064's capture `Control+Alt+C` and 060's `toggle: "Control+Alt+X"` together (config.ts DEFAULTS, steps.mjs, SKILL.md install bullet + show/hide bullet, config/hotkeys/macos/skill tests; `macos.test.ts` 064's notification test also needed 060's `onToggle`). Then the two doctor assertions (0c821a6), review pass, closed (0f21ca5).
+Note:    a long-parked task branch pays for it at `start`: resolve each conflict as "both changes", not one side, and re-run the task tests — the merge broke `config.test.ts:62` (a kept-value expectation that predates `toggle`).
 
 ## 2026-10-17 · task 059 · panel e2e "captureFromFile opens…" saw an answer before its no-answer check (1 in 4)
 tags: e2e, flaky, panel, thinking, fake claude, slow scenario, cold start
@@ -228,3 +230,9 @@ Symptom: after adding a SKILL.md test and widening 060's test command, `tasks.py
 Cause:   `set --test-cmd` invalidates red (and review) by design.
 Fix:     reverted the implementation (e952ab9), ran red there (failing, recorded), reverted the revert (identical tree to 715a2a9). No history rewritten.
 Note:    settle the test command before `red`; a test added later rides the existing command or goes in a file the command already runs.
+
+## 2026-10-17 · task 064 · full suite flaked only under load: 058 drag e2e timed out at 120 s
+tags: e2e, flaky, panel, drag, window.json, load, 058
+Symptom: during 064's close prep `npm test` failed once — `panel.e2e.test.ts` "title bar drag moves the window … (058)" timed out in 120000 ms; that run took 158 s against 39–42 s for every other run.
+Cause:   (suspected) machine load, not the app: the same file alone passed 10/10 in 15 s right after, and two later full runs were green (853 passed, 39 s). Editing PROJECT_STATE.md *during* a run also fails the suite's git-clean teardown ("the test suite left files git does not ignore") — unrelated to the tests.
+Note:    backlog 069. Keep the working tree still while `npm test` runs, and re-run a timed-out e2e alone before treating it as a real failure.

@@ -1663,7 +1663,7 @@
     {
       "id": "064",
       "title": "hotkeys: capture default Control+Alt+C (was Control+Alt+Q)",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "milestone": 3,
       "deps": [],
@@ -1672,17 +1672,17 @@
       "attempts": 1,
       "branch": "keel/064",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-17",
+      "commit": "0f21ca5",
       "notes": "Eric 2026-10-17 (DECISIONS hotkeys row). Eric's own config.json already set to Control+Alt+C by hand.",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/config.test.ts test/unit/hotkeys.test.ts test/unit/macos.test.ts test/unit/skill.test.ts test/unit/installer-commands.test.ts",
       "tests_commit": "502dda23ede0efffff72bfcb964eb34f90ae5616",
       "no_tests": null,
       "review": {
-        "verdict": "fail",
-        "sha": "3b6bb6866839a500eccd5b1e73fb832d0960f8b8",
-        "reasons": "1. test/unit/skill.test.ts:198-203 ('doctor: asks the Ctrl+Alt+C question after the script'): the task's named test 'SKILL.md install and doctor name Ctrl+Option+C' only half exists. The install half is asserted (skill.test.ts:191-192), but nothing checks that the doctor section names Ctrl+Option+C. Its Mac line (plugin/skills/snapsolve/SKILL.md:76, 'On a Mac, say Ctrl+Option+C instead') is the question Mac users actually get, since the app is macOS-only (SPEC Amendment 4). Reverting it to Ctrl+Option+Q leaves every test green. Fix: in the doctor test, add expect(doctor).toContain('On a Mac, say Ctrl+Option+C') and expect(doctor).not.toContain('Ctrl+Option+Q'). Everything else checks out: the task tests exit 0 (205 passed), npm test exits 0 (799 passed, 7 skipped), the Done-when grep finds nothing in src or plugin, and the post-red test changes (config.test.ts:183,254; installer-commands.test.ts:197-208) are genuine fixes or additions.",
+        "verdict": "pass",
+        "sha": "0c821a6e155662b1b9a886041e1fc43aba8608fa",
+        "reasons": "config.test: DEFAULTS.hotkeys.capture === Control+Alt+C and an existing Control+Alt+Q in config.json is returned untouched with no warning and no file rewrite; installer-commands: install prints Ctrl+Alt+C / Ctrl+Option+C from DEFAULT_HOTKEY when config.json has no hotkeys.capture (it.each win32+darwin, asserts no +Q) and prints the user's own Ctrl+Alt+Q when set; installer-steps: the written config.json has capture Control+Alt+C; skill.test: SKILL.md install and doctor name Ctrl+Option+C and no longer name Ctrl+Option+Q, doctor question is Press Ctrl+Alt+C; macos.test: the taken-key notification over DEFAULTS reads 'Ctrl+Option+C is taken by another app...'; hotkeys.test and lifecycle e2e register Control+Alt+C. Post-red test diff only adds tests or retargets the changed default (config.test:183,254 fallback values; config.test:62 gains toggle from the master merge; installer-commands:197-208 added; skill.test:205-211 strengthened) - nothing weakened, skipped or deleted. Done-when grep over src and plugin finds no Control+Alt+Q / Ctrl+Alt+Q / Ctrl+Option+Q. Task tests 217 passed exit 0; npm test 853 passed, 7 skipped, exit 0. No new dependency, nothing on ARCHITECTURE Do NOT, changes confined to Scope.",
         "at": "2026-10-17"
       }
     },
@@ -1770,6 +1770,27 @@
       "test_cmd": null,
       "tests_commit": null,
       "no_tests": "documentation only: DESIGN.md text",
+      "review": null
+    },
+    {
+      "id": "069",
+      "title": "e2e: 058 title-bar drag test times out under load (120 s)",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [],
+      "file": "docs/tasks/069-e2e-058-title-bar-drag-test-times-out-un.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
       "review": null
     }
   ]

@@ -65,7 +65,7 @@ export function createPermissionHandlers(deps: {
   };
 }
 
-/** An Electron accelerator as the platform names its keys: "Control+Alt+Q" → "Ctrl+Option+Q" (macOS), "Ctrl+Alt+Q". */
+/** An Electron accelerator as the platform names its keys: "Control+Alt+C" → "Ctrl+Option+C" (macOS), "Ctrl+Alt+C". */
 export function hotkeyLabel(accelerator: string, platform: NodeJS.Platform): string {
   const mac = platform === "darwin";
   const names: Record<string, string> = {

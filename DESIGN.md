@@ -6,7 +6,7 @@ Status: design agreed with Eric via grill-me interview, 2026-10-13; revised afte
 
 ## 1. What it is
 
-Press **Ctrl+Alt+Q** (macOS: **Ctrl+Option+Q**). snapsolve captures the full screen, sends it to Claude (Opus, high effort) via the user's own Claude Code login, and streams a concise step-by-step explanation of the problem on screen into an auto-hiding side panel on the right edge. Answers and screenshots are kept as threads; each thread supports follow-up questions and appending more screenshots.
+Press **Ctrl+Alt+C** (macOS: **Ctrl+Option+C**). snapsolve captures the full screen, sends it to Claude (Opus, high effort) via the user's own Claude Code login, and streams a concise step-by-step explanation of the problem on screen into an auto-hiding side panel on the right edge. Answers and screenshots are kept as threads; each thread supports follow-up questions and appending more screenshots.
 
 Distributed as a Claude Code plugin (`snapsolve`) in Eric's local `claude-skills` marketplace. Recipients run `/snapsolve install`; Claude installs the desktop app on Windows or macOS. The Claude Code skill is only the installer/manager; the runtime is a standalone Electron tray app.
 
@@ -22,7 +22,7 @@ Distributed as a Claude Code plugin (`snapsolve`) in Eric's local `claude-skills
 | D4/D5 | Output structure | No user-maintained template. The system prompt sets principles; the LLM chooses structure per problem. "Answer → steps → check" is an example, not a mandate |
 | D6/D7 | Display | Right-edge side panel with history; collapsed to a small edge tab when not in use, slides out on capture, stays open until dismissed (×, Esc, tab, tray) |
 | D8 | Capture | Full screen (the display the cursor is on), one press, no region selection |
-| D9 | Hotkey | Ctrl+Alt+Q (Windows); Ctrl+Option+Q (macOS, verified free). Configurable |
+| D9 | Hotkey | Ctrl+Alt+C (Windows); Ctrl+Option+C (macOS, no Apple default binding). Configurable. Was Ctrl+Alt+Q until task 064 (SPEC Amendment 5); existing config.json values are kept |
 | D10 | Follow-ups | Follow-up text box per thread + Ctrl+Alt+Shift+Q appends a new screenshot to the current thread |
 | D11/D12 | Storage | Persist everything (screenshots + answers + transcripts). Retention forever. Manual "Clear history" |
 | D13 | Lifecycle | Manual start (Start-menu / ~/Applications launcher) + tray/menu-bar icon. No auto-start |
@@ -68,9 +68,9 @@ snapsolve (Electron)
 
 ### 3.1 Lifecycle and hotkeys (`main.ts`, `hotkeys.ts`)
 - `app.requestSingleInstanceLock()`. On `second-instance`: argv contains `--quit` → `app.quit()`; otherwise open the panel. The installer uses `snapsolve --quit` before update/uninstall.
-- `globalShortcut.register('Control+Alt+Q', …)` and `'Control+Alt+Shift+Q'`. Electron maps `Alt` to Option on macOS. Capture hotkey debounced at 400 ms.
-- If `register` returns false: tray notification "Ctrl+Alt+Q is taken by another app; change `hotkeys.capture` in config.json" (Electron cannot identify the other app).
-- Note in config docs: on German/French/Polish layouts Ctrl+Alt = AltGr, so Ctrl+Alt+Q swallows AltGr+Q (`@` on German). Fine for US layouts; installer prints the active hotkey once.
+- `globalShortcut.register('Control+Alt+C', …)` and `'Control+Alt+Shift+Q'`. Electron maps `Alt` to Option on macOS. Capture hotkey debounced at 400 ms.
+- If `register` returns false: tray notification "Ctrl+Alt+C is taken by another app; change `hotkeys.capture` in config.json" (Electron cannot identify the other app).
+- Note in config docs: on German/French/Polish layouts Ctrl+Alt = AltGr, so Ctrl+Alt+C swallows AltGr+C (`ć` on Polish). Fine for US layouts; installer prints the active hotkey once.
 - "Pause hotkeys" in tray → `unregisterAll()`; resume re-registers.
 - `powerMonitor.on('resume')` → re-check `globalShortcut.isRegistered` for both keys and re-register; in-flight timeouts are measured from spawn wall-clock and only kill a still-alive process.
 
@@ -186,7 +186,7 @@ Find the problem they are working on and explain how to solve it: correct, step 
 ### 3.7 Config (`config.json`)
 ```json
 {
-  "hotkeys": { "capture": "Control+Alt+Q", "append": "Control+Alt+Shift+Q" },
+  "hotkeys": { "capture": "Control+Alt+C", "append": "Control+Alt+Shift+Q" },
   "model": "opus",
   "effort": "high",
   "panelWidth": 420,
@@ -236,7 +236,7 @@ macOS keys the Screen Recording grant to the app's code signature, bundle id, an
 4. Write `config.json` with `claudePath = fs.realpathSync(<resolved claude>)`. On macOS, store the resolved path itself once realpath confirms it resolves: the native installer's `~/.local/bin/claude` symlinks into a version dir that auto-updates prune (task 043).
 5. Pro-plan users: Opus/high consumes the weekly Opus allowance faster; the tray tooltip shows 5h/7d utilization; switch `model` to `sonnet` if needed.
 6. Launch detached: Windows `Start-Process "$env:LOCALAPPDATA\Programs\snapsolve\snapsolve.exe"`; macOS `open -a ~/Applications/snapsolve.app` (clean env, no `CLAUDECODE`). macOS: walk the user through the Screen Recording grant + Relaunch.
-7. `doctor`: `claude auth status` + `claude --version` + "Press Ctrl+Alt+Q now — did a card appear with an answer?"
+7. `doctor`: `claude auth status` + `claude --version` + "Press Ctrl+Alt+C now — did a card appear with an answer?"
 
 Corporate networks: document `ELECTRON_MIRROR`, `HTTPS_PROXY`, `NODE_EXTRA_CA_CERTS` for TLS inspection (npm ci and packager share the `@electron/get` cache).
 
@@ -259,7 +259,7 @@ Corporate networks: document `ELECTRON_MIRROR`, `HTTPS_PROXY`, `NODE_EXTRA_CA_CE
 
 | Concern | Windows | macOS |
 |---|---|---|
-| Hotkey | Ctrl+Alt+Q | Ctrl+Option+Q (no Apple default binding, verified) |
+| Hotkey | Ctrl+Alt+C | Ctrl+Option+C (no Apple default binding) |
 | Capture permission | none | Screen Recording (TCC), one-time per stable app identity |
 | Panel window | alwaysOnTop, skipTaskbar | `type: 'panel'`, all Spaces, over full-screen apps |
 | Panel excluded from capture (D18) | Yes (WDA_EXCLUDEFROMCAPTURE) | Best-effort (NSWindowSharingNone; ScreenCaptureKit apps ignore it) |
@@ -274,7 +274,7 @@ Corporate networks: document `ELECTRON_MIRROR`, `HTTPS_PROXY`, `NODE_EXTRA_CA_CE
 - Unit: stream-json parser with recorded fixtures (`text_delta`, thinking blocks, `system/init`, `ui_invalidate`, `status`, `thinking_tokens`, `rate_limit_event`, `result`, unknown types, malformed lines); store (atomic writes, thread discovery without index); config validation; image encode (resize >2576, JPEG fallback >3 MB).
 - Integration (Windows, real `claude`): synthetic problem PNGs (easy algebra, rate word problem, code bug, multiple-choice) → runner → assert known answers; transcript moved into thread dir; follow-up via `--resume <path>`; delete the `~/.claude/projects` copy and confirm follow-up still works; resume-fallback path with a corrupted transcript; append screenshot; 7th append → new thread; `ANTHROPIC_API_KEY` set in parent env → init shows claude.ai auth.
 - Manual Windows checklist: hotkey from Outlook/browser/Explorer; **no console flash**; card appears within ~0.5 s; panel doesn't steal focus; DPI-correct 1920×1200 capture; panel open during capture is not in the PNG and the window behind it is (no black box); panel absent from a Teams screen share and a Snipping Tool capture; tab click / × / Esc dismiss, panel never hides on its own; history survives restart; Clear history; `--quit` + relaunch; sleep/resume keeps hotkeys.
-- macOS checklist (Eric, on his Mac): install; Screen Recording prompt on first capture → grant → Relaunch; menu-bar icon, no Dock icon; Ctrl+Option+Q; capture of the cursor's display; panel over a full-screen app and on other Spaces; panel absent from the PNG (hide path); record whether the panel appears in a Teams/Zoom share and a ⌘⇧5 capture (expected: visible in ScreenCaptureKit apps); follow-up; restart persistence; `update` does not re-prompt for Screen Recording; note whether macOS 15 shows a monthly re-authorization prompt.
+- macOS checklist (Eric, on his Mac): install; Screen Recording prompt on first capture → grant → Relaunch; menu-bar icon, no Dock icon; Ctrl+Option+C; capture of the cursor's display; panel over a full-screen app and on other Spaces; panel absent from the PNG (hide path); record whether the panel appears in a Teams/Zoom share and a ⌘⇧5 capture (expected: visible in ScreenCaptureKit apps); follow-up; restart persistence; `update` does not re-prompt for Screen Recording; note whether macOS 15 shows a monthly re-authorization prompt.
 
 ## 9. Evidence (measured 2026-10-13 on Eric's Windows PC, Claude Code 2.1.296)
 Latency/accuracy, `claude -p` with stream-json image input, generated PNG problems:

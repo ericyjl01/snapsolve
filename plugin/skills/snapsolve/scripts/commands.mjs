@@ -13,7 +13,7 @@ export const USAGE = "usage: node snapsolve.mjs install | start | update | docto
 const INSTALL_HINT = "run /snapsolve install";
 const SUPPORTED = ["win32", "darwin"];
 const STATE_FILE = "install.json";
-const DEFAULT_HOTKEY = "Control+Alt+Q";
+const DEFAULT_HOTKEY = "Control+Alt+C";
 const VERSION_DIR = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 
 /** argv (after the script) → `{ command, purge }`, or `{ usage }`. `--purge` only goes with uninstall. */
@@ -407,10 +407,10 @@ const KEY_LABELS = {
   meta: "Win",
 };
 
-// macOS names for the modifiers that differ (DESIGN §7: Ctrl+Option+Q).
+// macOS names for the modifiers that differ (DESIGN §7: Ctrl+Option+C).
 const MAC_KEY_LABELS = { ...KEY_LABELS, alt: "Option", option: "Option", commandorcontrol: "Cmd", cmdorctrl: "Cmd", command: "Cmd", cmd: "Cmd", super: "Cmd", meta: "Cmd" };
 
-/** "Control+Alt+Q" → "Ctrl+Alt+Q" on Windows, "Ctrl+Option+Q" on macOS. */
+/** "Control+Alt+C" → "Ctrl+Alt+C" on Windows, "Ctrl+Option+C" on macOS. */
 function hotkeyLabel(accelerator, platform = "win32") {
   const labels = platform === "darwin" ? MAC_KEY_LABELS : KEY_LABELS;
   return accelerator

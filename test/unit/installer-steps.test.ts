@@ -1021,6 +1021,7 @@ describe("writeClaudePath", () => {
     const written = JSON.parse(readFileSync(configFile, "utf8"));
     expect(Object.keys(written)).toEqual(Object.keys(DEFAULTS));
     expect(written).toEqual({ ...DEFAULTS, claudePath: claudeReal });
+    expect(written.hotkeys.capture).toBe("Control+Alt+C");
     expect(r).toEqual({ claudePath: claudeReal, warning: null });
 
     const loaded = await loadConfig(configFile);

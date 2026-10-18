@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CAPTURE_DEBOUNCE_MS, createHotkeys } from "../../src/main/hotkeys";
 
-const KEYS = { capture: "Control+Alt+Q", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" };
+const KEYS = { capture: "Control+Alt+C", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" };
 
 /** A globalShortcut stand-in: `taken` accelerators belong to another app; `lose` drops one as the OS can. */
 function fakeShortcut(taken: string[] = []) {
@@ -100,7 +100,7 @@ describe("hotkeys", () => {
     hotkeys.start();
     expect(deps.notify).toHaveBeenCalledTimes(1);
     const message = deps.notify.mock.calls[0][0] as string;
-    expect(message).toContain("Control+Alt+Q");
+    expect(message).toContain("Control+Alt+C");
     expect(message).toContain("hotkeys.capture");
     expect(message).not.toContain("hotkeys.append");
     expect(hotkeys.status()).toEqual({ capture: false, append: true, toggle: true, paused: false });

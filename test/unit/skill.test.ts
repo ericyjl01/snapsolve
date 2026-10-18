@@ -188,7 +188,8 @@ describe("SKILL.md install and doctor notes", () => {
     expect(install).toContain("brew install node");
     expect(install).toMatch(/Screen Recording/);
     expect(install).toMatch(/Relaunch/);
-    expect(install).toContain("Ctrl+Option+Q");
+    expect(install).toContain("Ctrl+Option+C");
+    expect(install).not.toContain("Ctrl+Option+Q");
     const update = sections().get("update")!;
     expect(update).toMatch(/Screen Recording/);
     expect(intro).not.toMatch(/Windows-only/);
@@ -201,11 +202,13 @@ describe("SKILL.md install and doctor notes", () => {
     expect(install).toContain("Show/Hide snapsolve");
   });
 
-  it("doctor: asks the Ctrl+Alt+Q question after the script", () => {
+  it("doctor: asks the Ctrl+Alt+C question after the script, and names Ctrl+Option+C on a Mac", () => {
     const doctor = sections().get("doctor")!;
-    const question = "Press Ctrl+Alt+Q now — did a card appear with an answer?";
+    const question = "Press Ctrl+Alt+C now — did a card appear with an answer?";
     expect(doctor).toContain(question);
     expect(doctor.indexOf(question)).toBeGreaterThan(doctor.indexOf(command("doctor")));
+    expect(doctor).toContain("On a Mac, say Ctrl+Option+C");
+    expect(doctor).not.toContain("Ctrl+Option+Q");
   });
 });
 
@@ -235,7 +238,7 @@ describe("SKILL.md doctor paths (037)", () => {
 
   it("the hotkey question uses hotkeys.capture from that config file when it is not the default", () => {
     const doctor = sections().get("doctor")!;
-    const after = doctor.slice(doctor.indexOf("Press Ctrl+Alt+Q now"));
+    const after = doctor.slice(doctor.indexOf("Press Ctrl+Alt+C now"));
     expect(after).toContain("`hotkeys.capture`");
     expect(after).toContain(WIN_CONFIG);
     expect(doctor).not.toMatch(/If they changed the hotkey, use theirs/);

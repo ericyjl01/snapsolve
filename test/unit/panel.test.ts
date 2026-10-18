@@ -1,73 +1,141 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Logger } from "../../src/main/log";
 import {
-  computeBounds,
+  clampIntoWorkArea,
   createAutoHide,
+  createPanel,
+  defaultBounds,
   isSafeExternalUrl,
+  loadWindowBounds,
+  MIN_SIZE,
+  OPEN_INSET,
+  OPEN_SIZE,
+  type PanelDeps,
+  type Rect,
   resolveSnapsolveUrl,
-  TRANSITION_STEPS,
-  transitionSteps,
+  SAVE_DEBOUNCE_MS,
+  saveWindowBounds,
+  type WindowBounds,
 } from "../../src/main/panel";
 import { createStore, type Store } from "../../src/main/store";
 
 const quietLog: Logger = { debug() {}, info() {}, warn() {}, error() {}, flush: async () => {} };
+/** A logger that records warning event names. */
+function recordingLog(): Logger & { warnings: string[] } {
+  const warnings: string[] = [];
+  return { debug() {}, info() {}, warn: (event: string) => void warnings.push(event), error() {}, flush: async () => {}, warnings };
+}
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-describe("computeBounds", () => {
-  const primary = { workArea: { x: 0, y: 0, width: 1280, height: 800 } };
+describe("defaultBounds", () => {
+  const primary = { id: 1, workArea: { x: 0, y: 0, width: 1280, height: 800 } };
 
-  it("tab: 8 × 72 at the right edge, vertically centered", () => {
-    expect(computeBounds("tab", primary, 420)).toEqual({ x: 1272, y: 364, width: 8, height: 72 });
-  });
-
-  it("open: panelWidth × work-area height at the right edge", () => {
-    expect(computeBounds("open", primary, 420)).toEqual({ x: 860, y: 0, width: 420, height: 800 });
+  it("first show is 360 × 460 at the top-right of the cursor's display (24 px in from the right and top)", () => {
+    expect(OPEN_SIZE).toEqual({ width: 360, height: 460 });
+    expect(OPEN_INSET).toBe(24);
+    expect(defaultBounds(primary)).toEqual({ x: 1280 - 24 - 360, y: 24, width: 360, height: 460 });
   });
 
   it("respects a second display's offsets (left of, and above, the primary)", () => {
-    const second = { workArea: { x: -1920, y: -200, width: 1920, height: 1040 } };
-    expect(computeBounds("tab", second, 420)).toEqual({ x: -8, y: 284, width: 8, height: 72 });
-    expect(computeBounds("open", second, 420)).toEqual({ x: -420, y: -200, width: 420, height: 1040 });
-    const right = { workArea: { x: 1280, y: 25, width: 1440, height: 875 } };
-    expect(computeBounds("open", right, 500)).toEqual({ x: 2220, y: 25, width: 500, height: 875 });
+    expect(defaultBounds({ id: 2, workArea: { x: -1920, y: -200, width: 1920, height: 1040 } })).toEqual({ x: -384, y: -176, width: 360, height: 460 });
+    expect(defaultBounds({ id: 3, workArea: { x: 1280, y: 25, width: 1440, height: 875 } })).toEqual({ x: 2336, y: 49, width: 360, height: 460 });
   });
 
-  it("clamps a panelWidth wider than the display to the work area", () => {
-    expect(computeBounds("open", primary, 3000)).toEqual({ x: 0, y: 0, width: 1280, height: 800 });
+  it("a display smaller than the window: the window is clamped into the work area", () => {
+    expect(defaultBounds({ id: 4, workArea: { x: 0, y: 0, width: 300, height: 400 } })).toEqual({ x: 0, y: 0, width: 300, height: 400 });
   });
 
   it("always returns whole pixels (odd heights, fractional work areas)", () => {
-    const odd = { workArea: { x: 0.5, y: 0, width: 1279.5, height: 801 } };
-    for (const state of ["tab", "open"] as const) {
-      for (const v of Object.values(computeBounds(state, odd, 420))) expect(Number.isInteger(v)).toBe(true);
+    for (const v of Object.values(defaultBounds({ id: 5, workArea: { x: 0.5, y: 0, width: 1279.5, height: 801 } }))) {
+      expect(Number.isInteger(v)).toBe(true);
     }
   });
 });
 
-describe("transitionSteps", () => {
-  const tab = { x: 1272, y: 364, width: 8, height: 72 };
-  const open = { x: 860, y: 0, width: 420, height: 800 };
+describe("clampIntoWorkArea", () => {
+  const area = { x: 0, y: 25, width: 1440, height: 875 };
 
-  it("6 whole-pixel steps that end exactly on the target", () => {
-    const steps = transitionSteps(tab, open);
-    expect(TRANSITION_STEPS).toBe(6);
-    expect(steps).toHaveLength(6);
-    expect(steps.at(-1)).toEqual(open);
-    for (const r of steps) for (const v of Object.values(r)) expect(Number.isInteger(v)).toBe(true);
-    const widths = steps.map((r) => r.width);
-    expect([...widths].sort((a, b) => a - b)).toEqual(widths);
-    expect(widths[0]).toBeGreaterThan(tab.width);
+  it("a rect that fits is returned unchanged", () => {
+    expect(clampIntoWorkArea({ x: 500, y: 300, width: 360, height: 460 }, area)).toEqual({ x: 500, y: 300, width: 360, height: 460 });
   });
 
-  it("collapsing goes the other way and ends on the tab", () => {
-    expect(transitionSteps(open, tab).at(-1)).toEqual(tab);
+  it("saved bounds are clamped into the work area: partly off any edge → moved fully inside, size kept", () => {
+    expect(clampIntoWorkArea({ x: 1300, y: 300, width: 360, height: 460 }, area)).toEqual({ x: 1080, y: 300, width: 360, height: 460 });
+    expect(clampIntoWorkArea({ x: -100, y: 0, width: 360, height: 460 }, area)).toEqual({ x: 0, y: 25, width: 360, height: 460 });
+    expect(clampIntoWorkArea({ x: 400, y: 700, width: 360, height: 460 }, area)).toEqual({ x: 400, y: 440, width: 360, height: 460 });
   });
 
-  it("from == to still yields 6 identical steps", () => {
-    expect(transitionSteps(open, open)).toEqual(Array.from({ length: 6 }, () => open));
+  it("fully off-screen (display removed, resolution change) → inside, at the nearest edge", () => {
+    expect(clampIntoWorkArea({ x: 5000, y: -3000, width: 360, height: 460 }, area)).toEqual({ x: 1080, y: 25, width: 360, height: 460 });
+  });
+
+  it("larger than the work area → shrunk to it", () => {
+    expect(clampIntoWorkArea({ x: 10, y: 10, width: 2000, height: 1000 }, area)).toEqual({ x: 0, y: 25, width: 1440, height: 875 });
+  });
+
+  it("whole pixels", () => {
+    const r = clampIntoWorkArea({ x: 10.4, y: 30.6, width: 360.5, height: 460.2 }, { x: 0.5, y: 0, width: 1000.5, height: 801 });
+    for (const v of Object.values(r)) expect(Number.isInteger(v)).toBe(true);
+  });
+});
+
+describe("loadWindowBounds (window.json)", () => {
+  let root: string;
+  let file: string;
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(os.tmpdir(), "snapsolve-window-"));
+    file = path.join(root, "window.json");
+  });
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  });
+
+  it("a missing state file → no saved bounds, no warning", async () => {
+    const log = recordingLog();
+    expect(await loadWindowBounds(file, { log })).toEqual({});
+    expect(log.warnings).toEqual([]);
+  });
+
+  it("corrupt state file → no saved bounds, a warning is logged, no throw", async () => {
+    await writeFile(file, "{ not json");
+    const log = recordingLog();
+    expect(await loadWindowBounds(file, { log })).toEqual({});
+    expect(log.warnings).toEqual(["panel.windowStateUnreadable"]);
+  });
+
+  it("valid entries are kept, malformed ones dropped with a warning", async () => {
+    await writeFile(
+      file,
+      JSON.stringify({
+        displays: {
+          "1": { x: 10, y: 20, width: 360, height: 460 },
+          "2": { x: "a", y: 0, width: 360, height: 460 },
+          "3": { x: 0, y: 0, width: 0, height: 460 },
+          "4": null,
+        },
+      }),
+    );
+    const log = recordingLog();
+    expect(await loadWindowBounds(file, { log })).toEqual({ "1": { x: 10, y: 20, width: 360, height: 460 } });
+    expect(log.warnings).toEqual(["panel.windowStateInvalid"]);
+  });
+
+  it("a file that is not { displays: {...} } → no saved bounds and a warning", async () => {
+    await writeFile(file, JSON.stringify([1, 2]));
+    const log = recordingLog();
+    expect(await loadWindowBounds(file, { log })).toEqual({});
+    expect(log.warnings).toEqual(["panel.windowStateInvalid"]);
+  });
+
+  it("round-trips what saveWindowBounds writes", async () => {
+    const saved = { "7": { x: 1, y: 2, width: 360, height: 460 } };
+    await saveWindowBounds(file, saved);
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ displays: saved });
+    expect(await loadWindowBounds(file, { log: recordingLog() })).toEqual(saved);
   });
 });
 
@@ -236,5 +304,448 @@ describe("createAutoHide", () => {
     expect(onExpire).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(onExpire).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// createPanel over a fake BrowserWindow and screen: the floating window (058, 059), shown or hidden (060).
+
+class FakeWebContents extends EventEmitter {
+  setWindowOpenHandler() {}
+  send() {}
+  isDestroyed() {
+    return false;
+  }
+}
+
+class FakeWindow extends EventEmitter {
+  static last: FakeWindow;
+  bounds: Rect;
+  visible = false;
+  webContents = new FakeWebContents();
+  /** Every setBounds call, in order. */
+  sets: Rect[] = [];
+  /** Every show, in order: "inactive" (showInactive) or "focus" (show). */
+  shows: string[] = [];
+  hides = 0;
+  constructor(readonly options: Record<string, unknown>) {
+    super();
+    const { x, y, width, height } = options as unknown as Rect;
+    this.bounds = { x, y, width, height };
+    FakeWindow.last = this;
+  }
+  setContentProtection() {}
+  loadURL() {
+    return Promise.resolve();
+  }
+  setBounds(r: Rect) {
+    this.bounds = { ...r };
+    this.sets.push({ ...r });
+  }
+  getBounds() {
+    return { ...this.bounds };
+  }
+  isVisible() {
+    return this.visible;
+  }
+  showInactive() {
+    this.visible = true;
+    this.shows.push("inactive");
+  }
+  show() {
+    this.visible = true;
+    this.shows.push("focus");
+  }
+  hide() {
+    this.visible = false;
+    this.hides++;
+  }
+  isDestroyed() {
+    return false;
+  }
+  isFocused() {
+    return false;
+  }
+  /** The user drags an edge or corner: the OS resizes it (left/top edges move x/y too), then Electron emits `resized`. */
+  userResize(r: Rect) {
+    this.bounds = { ...r };
+    this.emit("resized");
+  }
+  /** The user drags the window by its title bar: the OS moves it, then Electron emits `moved`. */
+  userMove(x: number, y: number) {
+    this.bounds = { ...this.bounds, x, y };
+    this.emit("moved");
+  }
+}
+
+const DISPLAY_A = { id: 1, workArea: { x: 0, y: 25, width: 1440, height: 875 } };
+const DISPLAY_B = { id: 2, workArea: { x: 1440, y: 0, width: 1920, height: 1080 } };
+
+function panelSetup(options: { saved?: WindowBounds; cursorOn?: typeof DISPLAY_A } = {}) {
+  let cursorDisplay = options.cursorOn ?? DISPLAY_A;
+  const displays = [DISPLAY_A, DISPLAY_B];
+  const saves: WindowBounds[] = [];
+  const deps = {
+    BrowserWindow: FakeWindow as unknown as PanelDeps["BrowserWindow"],
+    screen: {
+      getCursorScreenPoint: () => ({ x: cursorDisplay.workArea.x + 5, y: cursorDisplay.workArea.y + 5 }),
+      getDisplayNearestPoint: () => cursorDisplay,
+      getDisplayMatching: (r: Rect) => {
+        const cx = r.x + r.width / 2;
+        return displays.find((d) => cx >= d.workArea.x && cx < d.workArea.x + d.workArea.width) ?? displays[0];
+      },
+    },
+    ipcMain: { handle() {} },
+    platform: "darwin" as NodeJS.Platform,
+    preloadPath: "/preload.js",
+    config: { autoHideSec: 0 },
+    log: quietLog,
+    bounds: options.saved ?? {},
+    saveBounds: vi.fn(async (b: WindowBounds) => void saves.push(structuredClone(b))),
+  } satisfies PanelDeps;
+  const panel = createPanel(deps);
+  const win = FakeWindow.last;
+  win.emit("ready-to-show");
+  return {
+    panel,
+    win,
+    deps,
+    saves,
+    moveCursorTo: (d: typeof DISPLAY_A) => {
+      cursorDisplay = d;
+    },
+    /** Lets the save debounce run. */
+    rest: () => vi.advanceTimersByTime(SAVE_DEBOUNCE_MS),
+  };
+}
+
+/** No 8 × 72 tab (or anything smaller than the window's minimum) is ever set. */
+function expectNoTab(win: FakeWindow): void {
+  for (const r of win.sets) expect(r.width >= MIN_SIZE.width && r.height >= MIN_SIZE.height, JSON.stringify(r)).toBe(true);
+}
+
+describe("createPanel: shown or hidden, no tab (060)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("starts hidden: ready-to-show does not show it, and nothing tab-sized is created", () => {
+    const { panel, win } = panelSetup();
+    expect(win.isVisible()).toBe(false);
+    expect(win.shows).toEqual([]);
+    expect(panel.isOpen()).toBe(false);
+    expect(win.getBounds()).toEqual(defaultBounds(DISPLAY_A));
+    expectNoTab(win);
+  });
+
+  it("the window is movable, resizable with a 280 × 300 minimum, frameless", () => {
+    const { win } = panelSetup();
+    expect(win.options).toMatchObject({ movable: true, resizable: true, minWidth: 280, minHeight: 300, frame: false });
+  });
+
+  it("hidden state hides the window: close calls win.hide() and no 8 × 72 bounds are ever set", () => {
+    const { panel, win } = panelSetup();
+    panel.open();
+    expect(win.isVisible()).toBe(true);
+    panel.close();
+    expect(win.isVisible()).toBe(false);
+    expect(win.hides).toBe(1);
+    expect(panel.isOpen()).toBe(false);
+    expectNoTab(win);
+  });
+
+  it("toggle shows at saved bounds with showInactive (no focus steal), and hides again", () => {
+    const { panel, win } = panelSetup({ saved: { "1": { x: 500, y: 300, width: 400, height: 500 } } });
+    panel.toggle();
+    expect(win.isVisible()).toBe(true);
+    expect(win.shows).toEqual(["inactive"]);
+    expect(win.getBounds()).toEqual({ x: 500, y: 300, width: 400, height: 500 });
+    panel.toggle();
+    expect(win.isVisible()).toBe(false);
+    panel.toggle();
+    expect(win.shows).toEqual(["inactive", "inactive"]);
+    expect(win.getBounds()).toEqual({ x: 500, y: 300, width: 400, height: 500 });
+    expectNoTab(win);
+  });
+
+  it("toggle back shows it exactly where the user left it, before the save has run", () => {
+    const { panel, win } = panelSetup();
+    panel.toggle();
+    win.userMove(700, 400);
+    panel.toggle();
+    panel.toggle();
+    expect(win.getBounds()).toEqual({ x: 700, y: 400, width: 360, height: 460 });
+  });
+
+  it("capture shows a hidden window (open), at the cursor display's saved rect, without focus", () => {
+    const { panel, win } = panelSetup({ saved: { "1": { x: 200, y: 200, width: 360, height: 460 } } });
+    panel.open();
+    expect(win.isVisible()).toBe(true);
+    expect(win.shows).toEqual(["inactive"]);
+    expect(win.getBounds()).toEqual({ x: 200, y: 200, width: 360, height: 460 });
+  });
+
+  it("Esc while focused hides the window", () => {
+    const { panel, win } = panelSetup();
+    panel.open();
+    const prevent = vi.fn();
+    win.webContents.emit("before-input-event", { preventDefault: prevent }, { type: "keyDown", key: "Escape" });
+    expect(prevent).toHaveBeenCalled();
+    expect(win.isVisible()).toBe(false);
+  });
+
+  it("the capture hide path keeps a hidden window hidden: show() after a capture does not reveal it", () => {
+    const { panel, win } = panelSetup();
+    panel.hide();
+    panel.show();
+    expect(win.isVisible()).toBe(false);
+    panel.open();
+    panel.hide();
+    expect(win.isVisible()).toBe(false);
+    panel.show();
+    expect(win.isVisible()).toBe(true);
+    expect(win.shows.every((s) => s === "inactive")).toBe(true);
+  });
+
+  it("a hidden window does not save moves or resizes", () => {
+    const { win, saves, rest } = panelSetup();
+    win.userMove(10, 30);
+    win.userResize({ x: 10, y: 30, width: 500, height: 500 });
+    rest();
+    expect(saves).toEqual([]);
+  });
+});
+
+describe("createPanel: floating window bounds (058)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("first open is 360 × 460 at the top-right of the cursor's display", () => {
+    const { panel, win } = panelSetup();
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 1440 - 24 - 360, y: 25 + 24, width: 360, height: 460 });
+  });
+
+  it("open uses saved bounds for the display", () => {
+    const { panel, win } = panelSetup({ saved: { "1": { x: 500, y: 300, width: 360, height: 460 } } });
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 500, y: 300, width: 360, height: 460 });
+  });
+
+  it("saved bounds are clamped into the work area when opened", () => {
+    const { panel, win } = panelSetup({ saved: { "1": { x: 1300, y: -50, width: 360, height: 460 } } });
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 1080, y: 25, width: 360, height: 460 });
+  });
+
+  it("saved bounds are per display: a rect saved on display A is not used on display B", () => {
+    const { panel, win, moveCursorTo } = panelSetup({ saved: { "1": { x: 500, y: 300, width: 360, height: 460 } } });
+    moveCursorTo(DISPLAY_B);
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 1440 + 1920 - 24 - 360, y: 24, width: 360, height: 460 });
+  });
+
+  it("a user move is saved for its display after the debounce, and the next open comes back there", () => {
+    const { panel, win, saves, rest } = panelSetup();
+    panel.open();
+    win.userMove(600, 200);
+    win.userMove(620, 210);
+    expect(saves).toEqual([]);
+    rest();
+    expect(saves).toEqual([{ "1": { x: 620, y: 210, width: 360, height: 460 } }]);
+    panel.close();
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 620, y: 210, width: 360, height: 460 });
+  });
+
+  it("open while already shown on the same display keeps the window where it is", () => {
+    const { panel, win } = panelSetup();
+    panel.open();
+    win.userMove(700, 400);
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 700, y: 400, width: 360, height: 460 });
+  });
+
+  it("bounds main sets itself (open, clamping) are not saved as user moves", () => {
+    const { panel, win, saves, rest } = panelSetup({ saved: { "1": { x: 1300, y: 300, width: 360, height: 460 } } });
+    panel.open();
+    win.emit("moved");
+    win.emit("resized");
+    rest();
+    expect(saves).toEqual([]);
+  });
+
+  it("hide/show around a capture keeps the position", () => {
+    const { panel, win } = panelSetup();
+    panel.open();
+    win.userMove(300, 300);
+    panel.hide();
+    expect(win.isVisible()).toBe(false);
+    expect(win.getBounds()).toEqual({ x: 300, y: 300, width: 360, height: 460 });
+    panel.show();
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 300, y: 300, width: 360, height: 460 });
+  });
+
+  it("redock clamps instead of snapping: a position that still fits is kept, one that does not is moved inside", () => {
+    const { panel, win } = panelSetup();
+    panel.open();
+    win.userMove(400, 300);
+    panel.redock();
+    expect(win.getBounds()).toEqual({ x: 400, y: 300, width: 360, height: 460 });
+    DISPLAY_A.workArea.width = 600;
+    try {
+      panel.redock();
+      expect(win.getBounds()).toEqual({ x: 240, y: 300, width: 360, height: 460 });
+    } finally {
+      DISPLAY_A.workArea.width = 1440;
+    }
+  });
+
+  it("redock does not overwrite the saved rect", () => {
+    const { panel, win, saves, rest } = panelSetup({ saved: { "1": { x: 1000, y: 300, width: 360, height: 460 } } });
+    panel.open();
+    DISPLAY_A.workArea.width = 600;
+    try {
+      panel.redock();
+      win.emit("moved");
+      rest();
+      expect(saves).toEqual([]);
+    } finally {
+      DISPLAY_A.workArea.width = 1440;
+    }
+  });
+
+  it("redock while hidden leaves it hidden", () => {
+    const { panel, win } = panelSetup();
+    panel.redock();
+    expect(win.isVisible()).toBe(false);
+    expectNoTab(win);
+  });
+
+  it("reset clears saved bounds: the entry is deleted, saved, and a shown window goes back to the default", () => {
+    const { panel, win, saves } = panelSetup({
+      saved: { "1": { x: 500, y: 300, width: 360, height: 460 }, "2": { x: 2000, y: 100, width: 360, height: 460 } },
+    });
+    panel.open();
+    panel.resetPosition();
+    expect(saves).toEqual([{}]);
+    expect(win.getBounds()).toEqual(defaultBounds(DISPLAY_A));
+    panel.close();
+    panel.open();
+    expect(win.getBounds()).toEqual(defaultBounds(DISPLAY_A));
+  });
+
+  it("reset while hidden stays hidden; the next open is at the default", () => {
+    const { panel, win } = panelSetup({ saved: { "1": { x: 500, y: 300, width: 360, height: 460 } } });
+    panel.resetPosition();
+    expect(win.isVisible()).toBe(false);
+    panel.open();
+    expect(win.getBounds()).toEqual(defaultBounds(DISPLAY_A));
+  });
+
+  it("a failed save is logged, never thrown", async () => {
+    const log = recordingLog();
+    const deps = panelSetup().deps;
+    const panel = createPanel({ ...deps, log, saveBounds: async () => Promise.reject(new Error("disk full")) });
+    const win = FakeWindow.last;
+    panel.open();
+    win.userMove(100, 100);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    await vi.runAllTimersAsync();
+    expect(log.warnings).toContain("panel.windowStateSaveFailed");
+  });
+});
+
+describe("createPanel: resizing the floating window (059)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("the minimum is 280 × 300", () => {
+    expect(MIN_SIZE).toEqual({ width: 280, height: 300 });
+  });
+
+  it("no saved size uses 360 × 460", () => {
+    const { panel, win } = panelSetup({ saved: { "2": { x: 1500, y: 50, width: 700, height: 800 } } });
+    panel.open();
+    expect(win.getBounds()).toMatchObject({ width: 360, height: 460 });
+  });
+
+  it("resize saves width and height (and the x/y a left or top edge moved) for that display", () => {
+    const { panel, win, saves, rest } = panelSetup();
+    panel.open();
+    const { x, y } = win.getBounds();
+    win.userResize({ x: x - 140, y, width: 500, height: 600 });
+    rest();
+    expect(saves).toEqual([{ "1": { x: x - 140, y, width: 500, height: 600 } }]);
+  });
+
+  it("the resized window reopens at the new size, also after hide + show around a capture", () => {
+    const { panel, win, rest } = panelSetup();
+    panel.open();
+    win.userResize({ x: 400, y: 100, width: 500, height: 600 });
+    rest();
+    panel.close();
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 400, y: 100, width: 500, height: 600 });
+    panel.hide();
+    panel.show();
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 400, y: 100, width: 500, height: 600 });
+  });
+
+  it("below minimum is clamped: a resize under 280 × 300 is neither applied nor saved", () => {
+    const { panel, win, saves } = panelSetup();
+    panel.open();
+    win.userResize({ x: 500, y: 100, width: 200, height: 250 });
+    expect(win.getBounds()).toEqual({ x: 500, y: 100, width: 280, height: 300 });
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS * 2);
+    expect(saves).toEqual([]);
+  });
+
+  it("a saved size under the minimum (an edited window.json) opens at 280 × 300", () => {
+    const { panel, win } = panelSetup({ saved: { "1": { x: 500, y: 100, width: 100, height: 120 } } });
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 500, y: 100, width: 280, height: 300 });
+  });
+
+  it("saved size larger than the work area is clamped: a size saved on a big display fits a smaller one", () => {
+    const { panel, win } = panelSetup({ saved: { "1": { x: 100, y: 100, width: 1800, height: 1000 } } });
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 0, y: 25, width: 1440, height: 875 });
+  });
+
+  it("redock keeps a resized window's size when it fits, shrinks it when the display got smaller", () => {
+    const { panel, win } = panelSetup();
+    panel.open();
+    win.userResize({ x: 100, y: 100, width: 700, height: 700 });
+    panel.redock();
+    expect(win.getBounds()).toEqual({ x: 100, y: 100, width: 700, height: 700 });
+    DISPLAY_A.workArea.width = 600;
+    try {
+      panel.redock();
+      expect(win.getBounds()).toEqual({ x: 0, y: 100, width: 600, height: 700 });
+    } finally {
+      DISPLAY_A.workArea.width = 1440;
+    }
+  });
+
+  it("reset also resets the size to 360 × 460", () => {
+    const { panel, win, saves } = panelSetup({ saved: { "1": { x: 100, y: 100, width: 700, height: 700 } } });
+    panel.open();
+    panel.resetPosition();
+    expect(saves).toEqual([{}]);
+    expect(win.getBounds()).toEqual(defaultBounds(DISPLAY_A));
   });
 });

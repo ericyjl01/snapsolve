@@ -1,16 +1,18 @@
-// The side panel (SPEC §2.2, §4.1–4.4): one frameless, always-on-top, content-protected window that is either an
-// 8 × 72 tab on the right edge or `panelWidth` × work-area height, moved between the two in 6 steps over 120 ms and
-// shown with `showInactive`. It loads the renderer from `snapsolve://app/…` (never file://), serves thumbnails from
-// `snapsolve://thread/<uuid>/<n>.png`, denies window.open and navigation, and collapses on Esc (SPEC Amendment 3).
-import { stat } from "node:fs/promises";
+// The panel (SPEC §2.2, §4.1–4.4, Amendments 5–8): one frameless, always-on-top, content-protected floating window,
+// 360 × 460 by default, that the user drags by its title bar (task 058) and resizes from its edges, not below
+// 280 × 300 (059). It is either shown (`showInactive`, so focus stays in the user's app) or hidden (`win.hide()`:
+// nothing on screen, no tab; 060). Where the user leaves it, and at what size, is saved per display in
+// `<data>/window.json`. It loads the renderer from `snapsolve://app/…` (never file://), serves thumbnails from
+// `snapsolve://thread/<uuid>/<n>.png`, denies window.open and navigation, and hides on Esc.
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { BrowserWindow, BrowserWindowConstructorOptions, Input, IpcMainInvokeEvent } from "electron";
 import { SnapsolveError } from "../shared/errors";
 import type { IpcEvents, IpcRequests } from "../shared/ipc";
 import type { Logger } from "./log";
-import { isUuid, type Store } from "./store";
+import { isUuid, type Store, writeJsonAtomic } from "./store";
 
-export type PanelState = "tab" | "open";
+export type PanelState = "hidden" | "open";
 
 export interface Rect {
   x: number;
@@ -19,10 +21,13 @@ export interface Rect {
   height: number;
 }
 
-export const TAB_WIDTH = 8;
-export const TAB_HEIGHT = 72;
-export const TRANSITION_STEPS = 6;
-export const TRANSITION_MS = 120;
+/** The floating window's size and its first position: this far in from the work area's right and top edges. */
+export const OPEN_SIZE = Object.freeze({ width: 360, height: 460 });
+export const OPEN_INSET = 24;
+/** The window cannot be resized below this (task 059). */
+export const MIN_SIZE = Object.freeze({ width: 280, height: 300 });
+/** A drag fires many `moved`; the position is written once it has rested this long. */
+export const SAVE_DEBOUNCE_MS = 300;
 export const SCHEME = "snapsolve";
 export const RENDERER_URL = `${SCHEME}://app/index.html`;
 /** How often the auto-hide timer checks whether it is held. */
@@ -39,24 +44,66 @@ const MIME: Record<string, string> = {
 };
 const SCREENSHOT_NAME = /^([1-9]\d{0,2})\.png$/;
 
-/** The window's bounds for `state` on a display (whole pixels; a panel wider than the work area is clamped). */
-export function computeBounds(state: PanelState, display: { workArea: Rect }, panelWidth: number): Rect {
+/** The window's default (first-show) bounds on a display: OPEN_SIZE, OPEN_INSET from the top-right; inside its work area. */
+export function defaultBounds(display: { workArea: Rect }): Rect {
   const area = display.workArea;
   const right = Math.round(area.x + area.width);
-  if (state === "tab") {
-    return { x: right - TAB_WIDTH, y: Math.round(area.y + (area.height - TAB_HEIGHT) / 2), width: TAB_WIDTH, height: TAB_HEIGHT };
-  }
-  const width = Math.round(Math.min(panelWidth, area.width));
-  return { x: right - width, y: Math.round(area.y), width, height: Math.round(area.height) };
+  const rect = { x: right - OPEN_INSET - OPEN_SIZE.width, y: area.y + OPEN_INSET, ...OPEN_SIZE };
+  return clampIntoWorkArea(rect, area);
 }
 
-/** The `TRANSITION_STEPS` bounds from `from` to `to`, evenly spaced, the last exactly `to`. */
-export function transitionSteps(from: Rect, to: Rect): Rect[] {
-  const at = (a: number, b: number, i: number) => Math.round(a + ((b - a) * i) / TRANSITION_STEPS);
-  return Array.from({ length: TRANSITION_STEPS }, (_, k) => {
-    const i = k + 1;
-    return { x: at(from.x, to.x, i), y: at(from.y, to.y, i), width: at(from.width, to.width, i), height: at(from.height, to.height, i) };
-  });
+/** `rect` moved (and shrunk only if larger) so it lies fully inside `area`; whole pixels. */
+export function clampIntoWorkArea(rect: Rect, area: Rect): Rect {
+  const left = Math.ceil(area.x);
+  const top = Math.ceil(area.y);
+  const right = Math.floor(area.x + area.width);
+  const bottom = Math.floor(area.y + area.height);
+  const width = Math.min(Math.round(rect.width), right - left);
+  const height = Math.min(Math.round(rect.height), bottom - top);
+  const x = Math.min(Math.max(Math.round(rect.x), left), right - width);
+  const y = Math.min(Math.max(Math.round(rect.y), top), bottom - height);
+  return { x, y, width, height };
+}
+
+/** Saved floating-window bounds, keyed by display id (as a string, the JSON key). */
+export type WindowBounds = Record<string, Rect>;
+
+function isRect(value: unknown): value is Rect {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  const finite = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+  return finite(r.x) && finite(r.y) && finite(r.width) && finite(r.height) && (r.width as number) > 0 && (r.height as number) > 0;
+}
+
+/**
+ * Reads `window.json` (`{ displays: { "<id>": Rect } }`). Missing → none saved; unreadable or not that shape →
+ * none saved and a warning; malformed entries are dropped with one warning. Never throws.
+ */
+export async function loadWindowBounds(file: string, deps: { log: Logger }): Promise<WindowBounds> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(file, "utf8"));
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") deps.log.warn("panel.windowStateUnreadable", { file, error: e });
+    return {};
+  }
+  const displays = (parsed as { displays?: unknown } | null)?.displays;
+  if (typeof displays !== "object" || displays === null || Array.isArray(displays)) {
+    deps.log.warn("panel.windowStateInvalid", { file });
+    return {};
+  }
+  const saved: WindowBounds = {};
+  const dropped: string[] = [];
+  for (const [id, rect] of Object.entries(displays)) {
+    if (isRect(rect)) saved[id] = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    else dropped.push(id);
+  }
+  if (dropped.length) deps.log.warn("panel.windowStateInvalid", { file, dropped });
+  return saved;
+}
+
+export function saveWindowBounds(file: string, saved: WindowBounds): Promise<void> {
+  return writeJsonAtomic(file, { displays: saved });
 }
 
 /** The renderer may only ask main to open `http:` / `https:` URLs (SPEC §4.4); anything else, or no URL, is refused. */
@@ -124,8 +171,8 @@ export interface AutoHide {
 }
 
 /**
- * SPEC §4.3: with `seconds` > 0, collapses the panel `seconds` after `start` (a turn's end), not counting time while
- * `isHeld` (pointer over the panel, or the panel focused, i.e. the follow-up box in use). 0 never collapses.
+ * SPEC §4.3: with `seconds` > 0, hides the window `seconds` after `start` (a turn's end), not counting time while
+ * `isHeld` (pointer over the window, or the window focused, i.e. the follow-up box in use). 0 never hides it.
  */
 export function createAutoHide(options: { seconds: number; isHeld: () => boolean; onExpire: () => void }): AutoHide {
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -152,6 +199,7 @@ export function createAutoHide(options: { seconds: number; isHeld: () => boolean
 }
 
 interface DisplayLike {
+  id: number;
   workArea: Rect;
 }
 
@@ -169,22 +217,33 @@ export interface PanelDeps {
   };
   platform: NodeJS.Platform;
   preloadPath: string;
-  config: { panelWidth: number; autoHideSec: number };
+  config: { autoHideSec: number };
   log: Logger;
+  /** Saved floating-window bounds per display, as `loadWindowBounds` read them at startup. */
+  bounds: WindowBounds;
+  /** Persists the whole map (`saveWindowBounds`); a rejection is logged. */
+  saveBounds(saved: WindowBounds): Promise<void>;
 }
 
 export interface Panel {
-  /** Slides out on the display under the cursor (SPEC §4.1: the captured display); never takes focus. */
+  /**
+   * Shows the window (a capture, a second launch) on the display under the cursor (the captured display) at that
+   * display's saved rect, or the default, clamped into its work area; already shown there → stays put. Never takes focus.
+   */
   open(): void;
-  collapse(): void;
+  /** Hides it: nothing stays on screen (task 060). */
+  close(): void;
+  /** The show/hide hotkey and the tray item. */
   toggle(): void;
-  /** Slid out (the tab does not count). For the capturer's hide path. */
+  /** Shown (and not hidden for a capture). For the capturer's hide path. */
   isOpen(): boolean;
-  /** Capture hide path (SPEC §2.2, macOS): hides the window without changing its state; `show` brings it back. */
+  /** Capture hide path (SPEC §2.2, macOS): hides the window without changing its state; `show` brings it back if shown. */
   hide(): void;
   show(): void;
-  /** Re-docks on the current display after display changes (SPEC §4.1). */
+  /** After display changes (SPEC §4.1): a shown window is clamped into its display, not snapped. */
   redock(): void;
+  /** Tray "Reset window position": forgets every saved rect; a shown window goes back to the default. */
+  resetPosition(): void;
   send<C extends keyof IpcEvents>(channel: C, payload: IpcEvents[C]): void;
   /** Answers the renderer's requests; only the panel's own web contents is served. */
   handle(handlers: PanelHandlers): void;
@@ -195,17 +254,22 @@ export interface Panel {
 
 export function createPanel(deps: PanelDeps): Panel {
   const { screen, config, log } = deps;
-  let state: PanelState = "tab";
+  let state: PanelState = "hidden";
   let display: DisplayLike = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  let animation: ReturnType<typeof setInterval> | undefined;
+  let saved: WindowBounds = { ...deps.bounds };
+  /** Where main last put the window: a `moved`/`resized` landing there is ours, not the user's. */
+  let target: Rect = openBoundsOn(display);
   let hiddenForCapture = false;
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   const win = new deps.BrowserWindow({
-    ...computeBounds("tab", display, config.panelWidth),
+    ...target,
     show: false,
     frame: false,
-    resizable: false,
-    movable: false,
+    resizable: true,
+    minWidth: MIN_SIZE.width,
+    minHeight: MIN_SIZE.height,
+    movable: true,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -235,7 +299,7 @@ export function createPanel(deps: PanelDeps): Panel {
       const b = win.getBounds();
       return p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height;
     },
-    onExpire: () => collapse(),
+    onExpire: () => close(),
   });
 
   const wc = win.webContents;
@@ -248,78 +312,94 @@ export function createPanel(deps: PanelDeps): Panel {
     log.warn("panel.navigationPrevented", { scheme: schemeOf(url) });
   });
   wc.on("will-redirect", (event) => event.preventDefault());
-  // Esc while the panel has focus (only a focused window gets key input): handled here, no IPC (SPEC Amendment 3).
+  // Esc while the window has focus (only a focused window gets key input): handled here, no IPC (SPEC Amendment 3).
   wc.on("before-input-event", (event, input: Input) => {
     if (input.type === "keyDown" && input.key === "Escape" && state === "open") {
       event.preventDefault();
-      collapse();
+      close();
     }
   });
   wc.on("render-process-gone", (_e, details) => log.error("panel.rendererGone", { reason: details.reason }));
-  win.once("ready-to-show", () => {
-    if (!hiddenForCapture) win.showInactive();
-  });
   void win.loadURL(RENDERER_URL).catch((e: unknown) => log.error("panel.loadFailed", { error: e }));
 
-  function moveTo(target: Rect, animate: boolean): void {
-    clearInterval(animation);
-    animation = undefined;
-    if (win.isDestroyed()) return;
-    if (!animate || !win.isVisible()) {
-      win.setBounds(target);
-      return;
-    }
-    const steps = transitionSteps(win.getBounds(), target);
-    let i = 0;
-    animation = setInterval(() => {
-      if (win.isDestroyed()) {
-        clearInterval(animation);
-        return;
-      }
-      win.setBounds(steps[i++]);
-      if (i >= steps.length) {
-        clearInterval(animation);
-        animation = undefined;
-      }
-    }, TRANSITION_MS / TRANSITION_STEPS);
+  /** The window's rect on `d`: its saved rect (at least MIN_SIZE), else the default, clamped into its work area. */
+  function openBoundsOn(d: DisplayLike): Rect {
+    const rect = saved[String(d.id)];
+    return rect ? clampIntoWorkArea(atLeastMinimum(rect), d.workArea) : defaultBounds(d);
+  }
+
+  function moveTo(to: Rect): void {
+    target = to;
+    if (!win.isDestroyed()) win.setBounds(to);
   }
 
   function open(): void {
-    display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const wasOpen = state === "open";
+    const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const stay = state === "open" && cursorDisplay.id === display.id;
+    display = cursorDisplay;
     state = "open";
     autoHide.stop();
-    if (!hiddenForCapture && !win.isVisible()) win.showInactive();
-    moveTo(computeBounds("open", display, config.panelWidth), !wasOpen);
+    moveTo(stay ? clampIntoWorkArea(win.getBounds(), display.workArea) : openBoundsOn(display));
+    if (!hiddenForCapture && !win.isDestroyed() && !win.isVisible()) win.showInactive();
   }
 
-  function collapse(): void {
+  function close(): void {
     autoHide.stop();
-    if (state === "tab") return;
-    state = "tab";
-    moveTo(computeBounds("tab", display, config.panelWidth), true);
+    if (state === "hidden") return;
+    state = "hidden";
+    if (!win.isDestroyed()) win.hide();
   }
+
+  const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+
+  function persist(): void {
+    void deps.saveBounds({ ...saved }).catch((e: unknown) => log.warn("panel.windowStateSaveFailed", { error: e }));
+  }
+
+  // A user drag ends in `moved` (title bar) or `resized` (an edge or corner); main's own setBounds (open, clamping)
+  // are told apart by the window sitting exactly on the target main set. A size under MIN_SIZE is put back to it,
+  // not saved. Kept per display.
+  const userChanged = () => {
+    if (state !== "open" || hiddenForCapture || win.isDestroyed()) return;
+    const bounds = win.getBounds();
+    if (sameRect(bounds, target)) return;
+    if (bounds.width < MIN_SIZE.width || bounds.height < MIN_SIZE.height) {
+      moveTo(atLeastMinimum(bounds));
+      return;
+    }
+    target = bounds;
+    display = screen.getDisplayMatching(bounds);
+    // Remembered at once (a hide + show right after the drag comes back here); written once the drag rests.
+    saved = { ...saved, [String(display.id)]: bounds };
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(persist, SAVE_DEBOUNCE_MS);
+  };
+  win.on("moved", userChanged);
+  win.on("resized", userChanged);
 
   return {
     window: win,
     open,
-    collapse,
-    toggle: () => (state === "open" ? collapse() : open()),
-    isOpen: () => state === "open" && win.isVisible(),
+    close,
+    toggle: () => (state === "open" ? close() : open()),
+    isOpen: () => state === "open" && !win.isDestroyed() && win.isVisible(),
     hide() {
       hiddenForCapture = true;
-      clearInterval(animation);
-      animation = undefined;
-      if (state === "open") win.setBounds(computeBounds("open", display, config.panelWidth));
-      win.hide();
+      if (!win.isDestroyed()) win.hide();
     },
     show() {
       hiddenForCapture = false;
-      if (!win.isDestroyed()) win.showInactive();
+      if (state === "open" && !win.isDestroyed()) win.showInactive();
     },
     redock() {
       display = screen.getDisplayMatching(win.getBounds());
-      moveTo(computeBounds(state, display, config.panelWidth), false);
+      if (state === "open") moveTo(clampIntoWorkArea(win.getBounds(), display.workArea));
+    },
+    resetPosition() {
+      clearTimeout(saveTimer);
+      saved = {};
+      persist();
+      if (state === "open") moveTo(defaultBounds(display));
     },
     send(channel, payload) {
       if (!win.isDestroyed() && !wc.isDestroyed()) wc.send(channel, payload);
@@ -334,6 +414,10 @@ export function createPanel(deps: PanelDeps): Panel {
     },
     turnEnded: () => autoHide.start(),
   };
+}
+
+function atLeastMinimum(rect: Rect): Rect {
+  return { ...rect, width: Math.max(rect.width, MIN_SIZE.width), height: Math.max(rect.height, MIN_SIZE.height) };
 }
 
 function schemeOf(url: string): string {

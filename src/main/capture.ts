@@ -35,7 +35,7 @@ export interface SourceLike {
 export interface CapturerDeps {
   desktopCapturer: { getSources(options: { types: ["screen"]; thumbnailSize: Size }): Promise<SourceLike[]> };
   screen: { getCursorScreenPoint(): Point; getDisplayNearestPoint(point: Point): DisplayLike };
-  /** `isOpen`: slid out (a collapsed edge tab is not open). */
+  /** `isOpen`: shown (a hidden window is not open). */
   panel: { isOpen(): boolean; hide(): void; show(): void };
   /** Electron's `systemPreferences`: the macOS Screen Recording state; asked only on darwin. */
   mediaAccess: { getMediaAccessStatus(kind: "screen"): string };

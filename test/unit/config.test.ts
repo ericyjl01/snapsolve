@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULTS, loadConfig } from "../../src/main/config";
 
 const SPEC_DEFAULTS = {
-  hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+Q" },
+  hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+Q", toggle: "Control+Alt+X" },
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -108,7 +108,7 @@ describe("loadConfig", () => {
 
   it("a valid file is honored and left untouched", async () => {
     const custom = {
-      hotkeys: { capture: "CommandOrControl+Shift+Space", append: "Ctrl+Alt+num5" },
+      hotkeys: { capture: "CommandOrControl+Shift+Space", append: "Ctrl+Alt+num5", toggle: "Alt+F8" },
       model: "claude-opus-5-5[1m]",
       effort: "max",
       panelWidth: 500,
@@ -134,7 +134,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       model: "sonnet",
-      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+W" },
+      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+W", toggle: "Control+Alt+X" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -180,7 +180,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       panelWidth: 500,
-      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+W" },
+      hotkeys: { capture: "Control+Alt+C", append: "Control+Alt+Shift+W", toggle: "Control+Alt+X" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -226,6 +226,36 @@ describe("loadConfig", () => {
     expect(r.warnings).toHaveLength(1);
     expect(r.warnings[0]).toContain("hotkeys");
     expect(await snapshot()).toEqual(before);
+  });
+
+  it("hotkeys.toggle default is Control+Alt+X; a good value is honored (060)", async () => {
+    expect(DEFAULTS.hotkeys.toggle).toBe("Control+Alt+X");
+    await writeConfig({ hotkeys: { toggle: "Control+Alt+T" } });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.hotkeys).toEqual({ ...SPEC_DEFAULTS.hotkeys, toggle: "Control+Alt+T" });
+  });
+
+  it.each(["", "X", "Control+Alt+Nope", 7])("bad hotkeys.toggle %j → its default + one warning naming hotkeys.toggle", async (toggle) => {
+    await writeConfig({ hotkeys: { toggle } });
+    const before = await snapshot();
+    const r = await loadConfig(file);
+    expect(r.config.hotkeys).toEqual(SPEC_DEFAULTS.hotkeys);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain("hotkeys.toggle");
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it.each([
+    [{ capture: "Control+Alt+W", toggle: "alt+ctrl+w" }, "hotkeys.capture", "hotkeys.toggle"],
+    [{ append: "Control+Alt+W", toggle: "Ctrl+Option+W" }, "hotkeys.append", "hotkeys.toggle"],
+  ])("toggle the same key as another hotkey %j → defaults for all + one warning naming both", async (hotkeys, a, b) => {
+    await writeConfig({ hotkeys });
+    const r = await loadConfig(file);
+    expect(r.config.hotkeys).toEqual(SPEC_DEFAULTS.hotkeys);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain(a);
+    expect(r.warnings[0]).toContain(b);
   });
 
   it("malformed JSON → defaults + warning, file untouched", async () => {

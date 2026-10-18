@@ -207,3 +207,24 @@ Cause 2: the test's first wait `${card(first)} .answer` also matches the streami
 Fix:     runner emits `{ type: "turn", threadId, thread }` right after saving the user turn; app remembers the thread and broadcasts threads:changed. The 051 and 057 e2e tests wait for `.answer:not(.streaming)` before appending. Deterministic e2e: seeded answer held ~20 s (slow scenario), note must show within 5 s with no finished answer.
 Tried:   fix 1 alone still failed 1 of 9 file runs (cause 2); a 30-run loop also hit runs of 200–900 s that look like the Mac sleeping/throttling, not the app.
 Note:    a card shows only what a runner event or listThreads delivered; anything saved to disk mid-turn needs its own event. In e2e, `.answer` includes the streaming node: wait for `.answer:not(.streaming)` when the saved answer matters.
+
+## 2026-10-17 · task 064 · three review attempts used on test coverage + a SPEC.md commit
+tags: keel, review, attempts, memory files, SPEC.md, skill test, hotkey, 064
+Symptom: 064's code was right from the first commit (task tests + `npm test` green, grep clean), yet all 3 attempts went: review 1 fail, close refused, review 3 fail.
+Cause:   (1) `commands.mjs` DEFAULT_HOTKEY had no test, because the installer-commands fake `writeClaudePath` writes the hotkey itself. (2) SPEC.md is a keel memory file; committing the Amendment on keel/064 made `close` refuse, and the restore commit made the passing review stale. (3) `skill.test.ts` checked the install text for Ctrl+Option+C but not the doctor's "On a Mac, say Ctrl+Option+C" line.
+Tried:   review 1 fail → added the win32/darwin "config.json without hotkeys.capture" install test (b1130c4); review 2 pass.
+Tried:   close → "memory committed on keel/064: SPEC.md" → `git restore --source=master --staged -- SPEC.md` + "064: restore memory" (3b6bb68) → review stale → review 3 fail (doctor Mac line unasserted).
+Note:    SPEC.md amendments stay uncommitted until the close commit on W, like DECISIONS. Before the first review, mutate each changed literal back (scratch copy) and confirm some test fails, for user-facing text as well as code.
+
+## 2026-10-17 · task 059 · panel e2e "captureFromFile opens…" saw an answer before its no-answer check (1 in 4)
+tags: e2e, flaky, panel, thinking, fake claude, slow scenario, cold start
+Symptom: `test/e2e/panel.e2e.test.ts` first test: `expect(… .answer count).toBe(0)` got 1 (1974 ms, first test right after `npm run build`); 3 isolated reruns passed.
+Cause:   (suspected) the slow fake emits its first text piece `FAKE_DELAY_MS / 3` = 500 ms after spawn; when the first window is slow to show "Thinking…", the answer node already exists by the time the check runs. Not from 059 (no renderer timing change).
+Note:    backlog task (see tasks.py list): check the order (Thinking… before any .answer) from a renderer-side record, or raise the first piece's delay in that test.
+
+## 2026-10-17 · task 060 · `tasks.py set --test-cmd` after red cleared red (code already in)
+tags: keel, red, test_cmd, set, revert, process
+Symptom: after adding a SKILL.md test and widening 060's test command, `tasks.py brief 060` showed `git show -`: no red commit; `red` runs at HEAD, where the code already passed.
+Cause:   `set --test-cmd` invalidates red (and review) by design.
+Fix:     reverted the implementation (e952ab9), ran red there (failing, recorded), reverted the revert (identical tree to 715a2a9). No history rewritten.
+Note:    settle the test command before `red`; a test added later rides the existing command or goes in a file the command already runs.

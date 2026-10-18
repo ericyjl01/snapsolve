@@ -195,6 +195,13 @@ describe("SKILL.md install and doctor notes", () => {
     expect(intro).not.toMatch(/Windows-only/);
   });
 
+  it("install names the show/hide hotkey: Ctrl+Option+X, hotkeys.toggle, the Show/Hide snapsolve item (060)", () => {
+    const install = sections().get("install")!;
+    expect(install).toContain("Ctrl+Option+X");
+    expect(install).toContain("`hotkeys.toggle`");
+    expect(install).toContain("Show/Hide snapsolve");
+  });
+
   it("doctor: asks the Ctrl+Alt+C question after the script", () => {
     const doctor = sections().get("doctor")!;
     const question = "Press Ctrl+Alt+C now — did a card appear with an answer?";

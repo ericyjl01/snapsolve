@@ -31,8 +31,8 @@ import { loadConfig } from "./config";
 import { encodeForModel } from "./encode";
 import { createHotkeys } from "./hotkeys";
 import { createLogger, type Logger } from "./log";
-import { createPermissionHandlers, darwinStartup, hotkeyLabel } from "./macos";
-import { createPanel, resolveSnapsolveUrl, SCHEME } from "./panel";
+import { createPermissionHandlers, darwinStartup, hotkeyLabel, hotkeySymbols } from "./macos";
+import { createPanel, loadWindowBounds, resolveSnapsolveUrl, saveWindowBounds, SCHEME } from "./panel";
 import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
 import { createStore } from "./store";
@@ -112,7 +112,9 @@ async function start(): Promise<void> {
         Tray,
         Menu,
         image: trayImage(process.platform),
+        toggleHotkey: hotkeySymbols(config.hotkeys.toggle, process.platform),
         onOpenPanel: () => panel.toggle(),
+        onResetPosition: () => panel.resetPosition(),
         onPause: () => keys.pause(),
         onResume: () => keys.resume(),
         onOpenHistory: () => void openHistoryFolder(paths.threads, { mkdir, openPath: (dir) => shell.openPath(dir), log }),
@@ -167,6 +169,8 @@ async function start(): Promise<void> {
     preloadPath: path.join(__dirname, "preload.js"),
     config,
     log,
+    bounds: await loadWindowBounds(paths.windowState, { log }),
+    saveBounds: (saved) => saveWindowBounds(paths.windowState, saved),
   });
   const core = createApp({
     store,
@@ -177,7 +181,7 @@ async function start(): Promise<void> {
     clipboard,
     openExternal: (url) => shell.openExternal(url),
     confirmClearHistory: async () => {
-      // No parent window: the tray asks too, and a sheet on the 8 px tab would be lost.
+      // No parent window: the tray asks too, and a sheet on a hidden window would be lost.
       const { response } = await dialog.showMessageBox({
         type: "warning",
         buttons: ["Clear history", "Cancel"],
@@ -243,6 +247,7 @@ async function start(): Promise<void> {
     config,
     onCapture: captureInto(core.onCapture),
     onAppend: captureInto(core.onAppend),
+    onToggle: () => panel.toggle(),
     notify,
     label: (accelerator) => hotkeyLabel(accelerator, process.platform),
     log,
@@ -263,6 +268,8 @@ async function start(): Promise<void> {
       /** The same through the append path (the most recent capture's thread). */
       appendFromFile: async (png: string) => core.onAppend({ png: readImage(png).toPNG() }),
       hotkeyStatus: () => keys.status(),
+      /** What the show/hide hotkey does. */
+      toggle: () => panel.toggle(),
       notifications: () => [...notices],
       /** A capture refused for want of the Screen Recording grant, as the capturer reports it. */
       denyCapture: (prompted: boolean) => core.onCaptureDenied(prompted),

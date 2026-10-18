@@ -63,10 +63,10 @@ function exitOf(app: ElectronApplication, timeoutMs: number): Promise<number | n
   });
 }
 
-const panelWidth = (app: ElectronApplication) => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds().width);
+const panelVisible = (app: ElectronApplication) => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible());
 
 type TestHooks = {
-  hotkeyStatus(): { capture: boolean; append: boolean; paused: boolean };
+  hotkeyStatus(): { capture: boolean; append: boolean; toggle: boolean; paused: boolean };
   captureFromFile(png: string): Promise<string>;
   appendFromFile(png: string): Promise<string>;
 };
@@ -86,9 +86,10 @@ describe("app lifecycle (e2e)", () => {
   it("a second launch without arguments opens the first instance's panel and exits itself", async () => {
     const first = await launch();
     try {
-      await expect.poll(() => panelWidth(first.app), { timeout: 5_000 }).toBe(8);
+      // Hidden at startup (060: no tab); the second launch shows it.
+      expect(await panelVisible(first.app)).toBe(false);
       expect(await secondInstance(first.dataDir)).toBe(0);
-      await expect.poll(() => panelWidth(first.app), { timeout: 5_000 }).toBe(420);
+      await expect.poll(() => panelVisible(first.app), { timeout: 5_000 }).toBe(true);
       expect(first.app.process().exitCode).toBeNull();
     } finally {
       await first.close();
@@ -105,16 +106,17 @@ describe("app lifecycle (e2e)", () => {
     }
   }, 30_000);
 
-  it("both hotkeys are registered at startup", async () => {
+  it("the three hotkeys are registered at startup", async () => {
     const first = await launch();
     try {
       const status = await first.app.evaluate(() => (globalThis as unknown as { snapsolveTest: TestHooks }).snapsolveTest.hotkeyStatus());
-      expect(status).toEqual({ capture: true, append: true, paused: false });
+      expect(status).toEqual({ capture: true, append: true, toggle: true, paused: false });
       const registered = await first.app.evaluate(({ globalShortcut }) => [
         globalShortcut.isRegistered("Control+Alt+C"),
         globalShortcut.isRegistered("Control+Alt+Shift+Q"),
+        globalShortcut.isRegistered("Control+Alt+X"),
       ]);
-      expect(registered).toEqual([true, true]);
+      expect(registered).toEqual([true, true, true]);
     } finally {
       await first.close();
     }

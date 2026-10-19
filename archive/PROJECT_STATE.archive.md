@@ -45,3 +45,4 @@
 2026-10-14 · 039 · closed · doctor shows the Defender ASR text for a blocked smoke check only on Windows; on macOS the fail: names the EPERM and uninstall + install; SKILL.md doctor names the Mac config and log next to the Windows ones (6280d31)
 2026-10-14 · 040 · closed · the three win32 quitAndWait default-isRunning tests use the shared advancing fake clock, so a processRunning regression fails in ms with the still-running error instead of an OOM worker crash (556ea59)
 2026-10-15 · 041 · closed · a failed install/update whose previous exe is gone now says to run /snapsolve install (start only when the exe is there but fails to launch) (a91a53e)
+2026-10-15 · 038 · closed · release.test.ts: the source plugin.json test is titled "names snapsolve and has no version" (assertions unchanged) (570c5ba)

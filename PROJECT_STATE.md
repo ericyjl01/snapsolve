@@ -1,20 +1,20 @@
 # PROJECT_STATE
 
 ## Now
-Origin: https://github.com/ericyjl01/snapsolve.git (cloud session). macOS only (Amendment 4); app install local (055).
-Cloud e2e works: `git fetch origin keel/<id>` first, hand-unzip Electron, then `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a
-npm test` → 876/878 (docs/issues.md 2026-10-18). ALL BLOCKED — three questions, all for Eric.
-- 065 BLOCKED on keel/065 (caa71ef), work finished: tests db814a5, code c0f97ed, 5ac3136 (`.thumb[hidden]` fixed the
-  "+ button" e2e), f518147 (SKILL.md "One chat"), + a master merge. SPEC Amendment 10, 5 DECISIONS rows and the
-  ARCHITECTURE preload line (twelve, `newThread`) are committed. Only close's full-suite gate stands in the way.
-- Q1 (065): the two red tests are macOS-only — panel.e2e content protection, userdata.e2e "without the override".
-  (a) platform-gate both (071, written) and close 065 here, or (b) close 065 on your Mac? Also: keep or drop ⌃⌥⇧Q?
-- Q2 (071): blocked on Q1's answer — 071 *is* option (a), so it waits rather than me answering my own question.
-- Q3 (063): voice needs swiftc and your Mac; work it there, or split out the platform-independent half here?
-- 032 still waits for your Mac hand check. Backlog 033, 042, 053, 054, 056, 066–070.
+Everything is pushed to https://github.com/ericyjl01/snapsolve.git — master and keel/065. Work moves back to the Mac:
+Eric chose (b) on 2026-10-19 — the two macOS-only e2e assertions stay as they are, 071 is dropped, ⌃⌥⇧Q is gone (065
+already removes it), and 063 + 032 are his on the Mac. `npm test` is green there; in a Linux cloud session it is
+876/878 (panel.e2e content protection, userdata.e2e "without the override" — docs/issues.md 2026-10-18).
+- 065 is open and finished on keel/065 (caa71ef): tests db814a5 (red ok), code c0f97ed, 5ac3136 (`.thumb[hidden]` —
+  `display: block` beat the UA `[hidden]`, which is why the "+ button" e2e failed), f518147 (SKILL.md "One chat").
+  SPEC Amendment 10, 5 DECISIONS rows and the ARCHITECTURE preload line (twelve, `newThread`) are on master.
+- ON THE MAC, to finish 065: `git pull` → `tasks.py start 065` → run both Done-when commands → `tasks.py brief 065` +
+  a fresh Opus reviewer → `tasks.py close 065`. No review was recorded here on purpose: it binds to the branch tip,
+  and `start` on the Mac merges master in and moves that tip, which would make it stale at once.
+- Then `tasks.py next` → 063 (voice; needs swiftc). 032 still waits for your checklist results. Backlog 033, 042,
+  053, 054, 056, 066–070.
 
 ## Log
-2026-10-15 · 038 · closed · release.test.ts: the source plugin.json test is titled "names snapsolve and has no version" (assertions unchanged) (570c5ba)
 2026-10-15 · 034 · closed · runner tests: a timed-out turn whose claude never closes settles at the SIGKILL (timeout + retry, queue moves on); a close after that settle emits nothing; found 042 (b7800f2)
 2026-10-15 · 043 · closed · macOS config.json claudePath stores the resolved symlink (after realpath confirms it resolves) so Claude Code auto-updates do not break it; win32 keeps realpath; install passes platform (3f74473)
 2026-10-15 · 044 · closed · one SemVer compareVersions exported from steps.mjs (pre-release below release, build metadata ignored, null when unparsable) used by preflight, doctor and update; doctor warns it cannot compare unparsable versions (15f92c0)
@@ -54,3 +54,4 @@ npm test` → 876/878 (docs/issues.md 2026-10-18). ALL BLOCKED — three questio
 2026-10-18 · 065 · blocked · two macOS-only e2e assertions (content protection; userdata without the override) cannot pass in a Linux cloud session, so Done-when and close's full-suite gate cannot be met: platform-gate them (071) or close on the Mac? → keel/065 (caa71ef)
 2026-10-18 · 071 · blocked · platform-gating the two macOS-only e2e assertions is 065's own block question (option a), so it waits for Eric rather than me answering it myself → not started (-)
 2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)
+2026-10-19 · 071 · dropped · Eric chose option (b) — the two macOS-only e2e assertions stay as they are and 065 closes on the Mac, so there is nothing to platform-gate (-)

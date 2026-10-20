@@ -60,6 +60,9 @@ export function assemble({ root, target, rename = renameRetrying }) {
   }
 
   const warnings = [];
+  if (!payload.has("app/native/snapsolve-speech")) {
+    warnings.push("dist/native/snapsolve-speech is missing (built without swiftc): the speech helper is not released, so voice will not work");
+  }
   const entry = { name: NAME, source: `./plugins/${NAME}`, description: pkg.description };
   const marketplace = addMarketplaceEntry(readFileSync(marketplaceFile, "utf8"), entry);
   const readmeFile = path.join(target, "README.md");
@@ -98,6 +101,8 @@ function buildPayload(root, pkg) {
   const dist = path.join(root, "dist");
   for (const file of ["main.js", "preload.js"]) add(`app/${file}`, readFileSync(path.join(dist, file)));
   addDir(path.join(dist, "renderer"), "app/renderer/");
+  // The speech helper (063); main restores its executable bit (voice.ts resolveSpeechHelper).
+  addDir(path.join(dist, "native"), "app/native/");
   addDir(path.join(root, "prompts"), "app/prompts/");
   if (existsSync(path.join(root, "assets"))) addDir(path.join(root, "assets"), "app/assets/");
   addDir(path.join(root, "bootstrap"), "app/bootstrap/");

@@ -1,11 +1,14 @@
-// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2, 9 and 10) that maps 1:1 onto them.
-import type { AnswerDelta, AnswerDone, Thread } from "./types";
+// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2, 9, 10 and 11) that maps 1:1
+// onto them.
+import type { AnswerDelta, AnswerDone, Thread, VoiceState } from "./types";
 
 export const IPC = {
   // main → renderer events
   answerDelta: "answer:delta",
   answerDone: "answer:done",
   threadsChanged: "threads:changed",
+  // SPEC Amendment 11 (task 063): the voice composer's state.
+  voiceState: "voice:state",
   // renderer → main requests (invoke/handle)
   threadsList: "threads:list",
   threadFollowUp: "thread:followUp",
@@ -19,6 +22,10 @@ export const IPC = {
   // SPEC Amendment 2 (macOS Screen Recording card); neither takes an argument.
   screenRecordingSettingsOpen: "settings:openScreenRecording",
   appRelaunch: "app:relaunch",
+  // SPEC Amendment 11 (task 063): the mic buttons (as the voice hotkey) and the voice card's Open System Settings; no
+  // argument.
+  voiceToggle: "voice:toggle",
+  voiceSettingsOpen: "settings:openVoice",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -37,6 +44,9 @@ export const PRELOAD_CHANNELS = {
   clearHistory: IPC.historyClear,
   openScreenRecordingSettings: IPC.screenRecordingSettingsOpen,
   relaunch: IPC.appRelaunch,
+  onVoice: IPC.voiceState,
+  toggleVoice: IPC.voiceToggle,
+  openVoiceSettings: IPC.voiceSettingsOpen,
 } as const satisfies Record<keyof SnapsolveApi, IpcChannel>;
 
 /** Payloads of main → renderer events. */
@@ -44,6 +54,7 @@ export interface IpcEvents {
   [IPC.answerDelta]: AnswerDelta;
   [IPC.answerDone]: AnswerDone;
   [IPC.threadsChanged]: Thread[];
+  [IPC.voiceState]: VoiceState;
 }
 
 /** Arguments and results of renderer → main requests. */
@@ -57,6 +68,8 @@ export interface IpcRequests {
   [IPC.historyClear]: { args: []; result: boolean };
   [IPC.screenRecordingSettingsOpen]: { args: []; result: void };
   [IPC.appRelaunch]: { args: []; result: void };
+  [IPC.voiceToggle]: { args: []; result: void };
+  [IPC.voiceSettingsOpen]: { args: []; result: void };
 }
 
 /** The renderer-side API preload exposes via contextBridge (implemented in task 009). */
@@ -78,4 +91,10 @@ export interface SnapsolveApi {
   openScreenRecordingSettings(): Promise<void>;
   /** Restarts the app (a new Screen Recording grant takes effect only in a new process). */
   relaunch(): Promise<void>;
+  /** The voice composer's state as it changes (task 063). */
+  onVoice(listener: (state: VoiceState) => void): () => void;
+  /** A mic button: what the voice hotkey does (start; again: stop and send). */
+  toggleVoice(): Promise<void>;
+  /** macOS: main opens System Settings at the pane voice was refused (a fixed URL); elsewhere nothing. */
+  openVoiceSettings(): Promise<void>;
 }

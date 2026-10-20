@@ -1,5 +1,5 @@
 // Error kinds and the text the card shows for each (SPEC §7.1). Shared by main and renderer: no Node imports.
-import type { Turn } from "./types";
+import type { Turn, VoiceDenial } from "./types";
 
 export const ERROR_KINDS = [
   "claudeNotFound",
@@ -14,6 +14,10 @@ export const ERROR_KINDS = [
   "dataDirUnavailable",
   "unsupportedPlatform",
   "threadNotFound",
+  "microphoneDenied",
+  "speechDenied",
+  "voiceUnavailable",
+  "voiceFailed",
   "internal",
 ] as const;
 
@@ -32,6 +36,10 @@ const MESSAGES: Record<ErrorKind, string> = {
   dataDirUnavailable: "snapsolve can't find or create its data folder.",
   unsupportedPlatform: "snapsolve runs only on Windows and macOS.",
   threadNotFound: "This thread no longer exists.",
+  microphoneDenied: "snapsolve needs Microphone access for voice questions. Turn it on in System Settings.",
+  speechDenied: "snapsolve needs Speech Recognition access for voice questions. Turn it on in System Settings.",
+  voiceUnavailable: "Voice input isn't available on this Mac.",
+  voiceFailed: "Voice input stopped working. Details are in the snapsolve log.",
   internal: "Something went wrong. Details are in the snapsolve log.",
 };
 
@@ -62,6 +70,16 @@ export function screenRecordingCard(prompted: boolean): ScreenRecordingCard {
   return prompted
     ? { message: "Grant Screen Recording in the prompt, then click Relaunch.", actions: ["relaunch"] }
     : { message: MESSAGES.screenRecordingDenied, actions: ["openSettings", "relaunch"] };
+}
+
+/** What a voice permission card shows (task 063): which permission to turn on, and Open System Settings. */
+export interface VoicePermissionCard {
+  message: string;
+  actions: "openSettings"[];
+}
+
+export function voicePermissionCard(denial: VoiceDenial): VoicePermissionCard {
+  return { message: MESSAGES[denial === "microphone" ? "microphoneDenied" : "speechDenied"], actions: ["openSettings"] };
 }
 
 /** The one error type the app throws or returns. `message` is for the log; the UI shows `userMessage(kind)`. */

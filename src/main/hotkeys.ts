@@ -1,4 +1,5 @@
-// Global hotkeys (SPEC §1.1, Amendment 10): capture and show/hide (task 060) from config, capture debounced at 400 ms, a
+// Global hotkeys (SPEC §1.1, Amendments 10–11): capture, show/hide (task 060) and voice (task 063) from config, capture
+// debounced at 400 ms, a
 // notification naming the key and its config field when registration fails, pause/resume, and re-registration after
 // system resume.
 import type { Hotkeys } from "../shared/types";
@@ -7,7 +8,7 @@ import type { Logger } from "./log";
 export const CAPTURE_DEBOUNCE_MS = 400;
 
 type Name = keyof Hotkeys;
-const NAMES: readonly Name[] = ["capture", "toggle"];
+const NAMES: readonly Name[] = ["capture", "toggle", "voice"];
 
 export interface HotkeysDeps {
   /** Electron's `globalShortcut`. */
@@ -20,6 +21,8 @@ export interface HotkeysDeps {
   onCapture: () => void;
   /** Shows or hides the window. */
   onToggle: () => void;
+  /** Starts a dictation; pressed again, stops and sends it (voice.ts decides). */
+  onVoice: () => void;
   /** Shows a tray notification. */
   notify: (message: string) => void;
   /** How an accelerator is named to the user (macos.ts `hotkeyLabel`); default: as configured. */
@@ -31,6 +34,7 @@ export interface HotkeysDeps {
 export interface HotkeyStatus {
   capture: boolean;
   toggle: boolean;
+  voice: boolean;
   paused: boolean;
 }
 
@@ -59,6 +63,7 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
       run("capture", deps.onCapture);
     },
     toggle: () => run("toggle", deps.onToggle),
+    voice: () => run("voice", deps.onVoice),
   };
 
   function run(name: Name, fn: () => void): void {
@@ -121,6 +126,7 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
     status: () => ({
       capture: !paused && isRegistered("capture"),
       toggle: !paused && isRegistered("toggle"),
+      voice: !paused && isRegistered("voice"),
       paused,
     }),
   };

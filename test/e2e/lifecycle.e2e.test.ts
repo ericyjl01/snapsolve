@@ -105,17 +105,20 @@ describe("app lifecycle (e2e)", () => {
     }
   }, 30_000);
 
-  it("the two hotkeys are registered at startup; the old append key (065) is not", async () => {
+  it("the three hotkeys (capture, toggle, voice 063) are registered at startup; the old append key (065) is not", async () => {
     const first = await launch();
     try {
       const status = await first.app.evaluate(() => (globalThis as unknown as { snapsolveTest: TestHooks }).snapsolveTest.hotkeyStatus());
-      expect(status).toEqual({ capture: true, toggle: true, paused: false });
+      expect(status).toEqual({ capture: true, toggle: true, voice: true, paused: false });
       const registered = await first.app.evaluate(({ globalShortcut }) => [
         globalShortcut.isRegistered("Control+Alt+C"),
         globalShortcut.isRegistered("Control+Alt+Shift+Q"),
         globalShortcut.isRegistered("Control+Alt+X"),
+        globalShortcut.isRegistered("Control+Alt+V"),
+        // Esc is held only while a dictation listens.
+        globalShortcut.isRegistered("Escape"),
       ]);
-      expect(registered).toEqual([true, false, true]);
+      expect(registered).toEqual([true, false, true, true, false]);
     } finally {
       await first.close();
     }

@@ -18,6 +18,12 @@
         <path d="M5 8.5l2 2 4-5"></path>
       </svg>
       <span class="name">snapsolve</span>
+      <button id="voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
+        <svg aria-hidden="true" width="12" height="13" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.6">
+          <rect x="3.5" y="1" width="5" height="8" rx="2.5"></rect>
+          <path d="M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2"></path>
+        </svg>
+      </button>
       <button id="new-chat" class="icon new-chat" type="button" aria-label="New chat" title="New chat">
         <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7">
           <path d="M7 2v10M2 7h10"></path>
@@ -35,14 +41,28 @@
     </div>
     <div id="composer" class="composer">
       <label class="visually-hidden" for="follow-up">Ask a follow-up</label>
-      <div class="composer-box">
+      <div id="composer-box" class="composer-box">
         <textarea id="follow-up" rows="1" placeholder="Ask a follow-up"></textarea>
+        <button id="composer-voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
+          <svg aria-hidden="true" width="12" height="13" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.6">
+            <rect x="3.5" y="1" width="5" height="8" rx="2.5"></rect>
+            <path d="M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2"></path>
+          </svg>
+        </button>
         <button id="send" class="icon send" type="button" aria-label="Send">
           <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M7 12V2M3 6l4-4 4 4"></path>
           </svg>
         </button>
       </div>
+      <!-- Task 063: while dictating, the composer is this bar (the voice hotkey again sends, Esc cancels). -->
+      <div id="listening" class="listening" role="status" hidden>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="levels" aria-hidden="true"><span class="level"></span><span class="level"></span><span class="level"></span><span class="level"></span><span class="level"></span></span>
+        <span class="transcript"></span>
+        <span class="hint"></span>
+      </div>
+      <p id="voice-note" class="voice-note" role="status" hidden></p>
     </div>
     <div class="grip" aria-hidden="true"></div>
     <script src="renderer.js"></script>

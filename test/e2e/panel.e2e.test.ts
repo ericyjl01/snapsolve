@@ -8,12 +8,13 @@ import { fixturesDir } from "../paths";
 import { launchApp, type LaunchedApp } from "./helpers";
 
 const FAKE = path.join(fixturesDir, "fake-claude.mjs");
+const FAKE_SPEECH = path.join(fixturesDir, "fake-speech.mjs");
 const PROBLEM = path.join(fixturesDir, "problems", "algebra.png");
 const CSP =
   "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' snapsolve:; " +
   "connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
 // SPEC §4.4's nine plus Amendment 2's two (task 030), with `copy` replaced by `hide` (Amendment 9, task 061), plus
-// `newThread` (Amendment 10, task 065).
+// `newThread` (Amendment 10, task 065), plus voice's three (Amendment 11, task 063).
 const PRELOAD_NAMES = [
   "onDelta",
   "onDone",
@@ -27,6 +28,9 @@ const PRELOAD_NAMES = [
   "clearHistory",
   "openScreenRecordingSettings",
   "relaunch",
+  "onVoice",
+  "toggleVoice",
+  "openVoiceSettings",
 ];
 
 interface Panel extends LaunchedApp {
@@ -34,7 +38,7 @@ interface Panel extends LaunchedApp {
 }
 
 /** The built app in test mode, its claude the fake (slow: ~500 ms before each answer piece), answers ending in math. */
-async function launchPanel(dataDir?: string): Promise<Panel> {
+async function launchPanel(dataDir?: string, extraEnv: Record<string, string> = {}): Promise<Panel> {
   const projects = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-projects-"));
   const launched = await launchApp({
     dataDir,
@@ -45,6 +49,8 @@ async function launchPanel(dataDir?: string): Promise<Panel> {
       FAKE_CLAUDE_SCENARIO: "slow",
       FAKE_DELAY_MS: "1500",
       FAKE_ANSWER_SUFFIX: " So $x = \\sqrt{16}$.",
+      SNAPSOLVE_TEST_SPEECH: FAKE_SPEECH,
+      ...extraEnv,
     },
   });
   const page = await launched.app.firstWindow();
@@ -83,6 +89,20 @@ function capture(app: ElectronApplication): Promise<string> {
 }
 
 const card = (id: string) => `[data-thread-id="${id}"]`;
+
+/** What the voice hotkey does (063). */
+function voiceKey(app: ElectronApplication): Promise<void> {
+  return app.evaluate(() => (globalThis as unknown as { snapsolveTest: { voice(): void } }).snapsolveTest.voice());
+}
+
+/** What Esc does while listening (063): the temporary global Escape shortcut's callback. */
+function voiceEscape(app: ElectronApplication): Promise<void> {
+  return app.evaluate(() => (globalThis as unknown as { snapsolveTest: { voiceEscape(): void } }).snapsolveTest.voiceEscape());
+}
+
+function escapeRegistered(app: ElectronApplication): Promise<boolean> {
+  return app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered("Escape"));
+}
 
 /** The title bar's "+" (065). */
 async function newChat(page: Page): Promise<void> {
@@ -151,7 +171,7 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the twelve preload functions", async () => {
+  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the fifteen preload functions", async () => {
     const p = await launchPanel();
     try {
       expect((await windowInfo(p.app)).contentProtected).toBe(true);
@@ -270,7 +290,12 @@ describe("panel (e2e)", () => {
       const plus = p.page.locator("#titlebar").getByRole("button", { name: "New chat" });
       expect(await plus.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("no-drag");
       // Before the ×, at the top right.
-      expect(await p.page.locator("#titlebar button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).toEqual(["New chat", "Hide window"]);
+      // 063 put the mic (Dictate) first.
+      expect(await p.page.locator("#titlebar button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).toEqual([
+        "Dictate",
+        "New chat",
+        "Hide window",
+      ]);
       await plus.click();
       // The current card moves into the history list.
       await expect.poll(() => p.page.locator(`${card(first)} .answer`).first().isVisible(), { timeout: 5_000 }).toBe(false);
@@ -624,4 +649,121 @@ describe("panel (e2e)", () => {
       await p.close();
     }
   });
+
+  it("voice: hotkey → listening bar with the live transcript → hotkey again → the question in the newest card with a mic mark, answered (063)", async () => {
+    const p = await launchPanel();
+    const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
+    try {
+      const id = await capture(p.app);
+      await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(1);
+      await p.page.locator("#hide").click();
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
+
+      await voiceKey(p.app);
+      // Shown (it was hidden), without taking focus; the composer is the listening bar.
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
+      expect((await windowInfo(p.app)).focused).toBe(false);
+      const bar = p.page.locator("#listening");
+      await bar.waitFor({ state: "visible", timeout: 5_000 });
+      expect(await p.page.locator("#follow-up").isVisible()).toBe(false);
+      expect(await bar.locator(".dot").isVisible()).toBe(true);
+      expect(await bar.locator(".levels .level").count()).toBeGreaterThan(0);
+      expect(await bar.locator(".hint").innerText()).toBe("⌃⌥V to send · esc to cancel");
+      await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
+      expect(await escapeRegistered(p.app)).toBe(true);
+
+      await voiceKey(p.app);
+      const asked = p.page.locator(`${card(id)} .question.voice`);
+      await asked.waitFor({ state: "visible", timeout: 10_000 });
+      expect(await asked.innerText()).toContain("why the product rule?");
+      expect(await asked.locator(".mic-mark").count()).toBe(1);
+      await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(2);
+      // Back to the composer; the temporary Esc is gone.
+      await expect.poll(() => bar.isVisible(), { timeout: 5_000 }).toBe(false);
+      expect(await p.page.locator("#follow-up").isVisible()).toBe(true);
+      expect(await escapeRegistered(p.app)).toBe(false);
+      // Saved as a dictated text turn.
+      const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", id, "thread.json"), "utf8"));
+      expect(saved.turns.filter((t: { kind?: string }) => t.kind === "text")).toEqual([
+        { role: "user", kind: "text", text: "why the product rule?", voice: true },
+      ]);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("voice: Esc cancels (nothing sent, Esc released); the composer's mic button does what the hotkey does (063)", async () => {
+    const p = await launchPanel();
+    const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
+    try {
+      const id = await capture(p.app);
+      await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(1);
+      const bar = p.page.locator("#listening");
+
+      await voiceKey(p.app);
+      await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why");
+      await voiceEscape(p.app);
+      await expect.poll(() => bar.isVisible(), { timeout: 5_000 }).toBe(false);
+      expect(await escapeRegistered(p.app)).toBe(false);
+      await new Promise((r) => setTimeout(r, 1_000));
+      expect(await p.page.locator(`${card(id)} .question`).count()).toBe(0);
+
+      const mic = p.page.locator("#composer-voice");
+      expect(await mic.getAttribute("aria-label")).toBe("Dictate");
+      await mic.click();
+      await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
+      await p.page.locator("#voice").click();
+      await p.page.locator(`${card(id)} .question.voice`).waitFor({ state: "visible", timeout: 10_000 });
+      await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(2);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("voice: an empty transcript sends nothing and says Didn't catch that (063)", async () => {
+    const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "empty" });
+    try {
+      await voiceKey(p.app);
+      await p.page.locator("#listening").waitFor({ state: "visible", timeout: 5_000 });
+      await voiceKey(p.app);
+      const note = p.page.locator("#voice-note");
+      await expect.poll(() => note.innerText(), { timeout: 5_000 }).toBe("Didn't catch that.");
+      expect(await p.page.locator("[data-thread-id]").count()).toBe(0);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
+  it("voice: mic denied shows a permission card with Open System Settings and no Retry (063)", async () => {
+    const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "denied" });
+    try {
+      await voiceKey(p.app);
+      const permission = p.page.locator(".card.permission");
+      await permission.waitFor({ state: "visible", timeout: 5_000 });
+      expect(await permission.locator(".error").textContent()).toMatch(/Microphone/);
+      expect(await permission.locator("button.open-settings").isVisible()).toBe(true);
+      expect(await permission.locator("button.relaunch").count()).toBe(0);
+      expect(await permission.locator(".retry").isVisible()).toBe(false);
+      expect(await p.page.locator("#listening").isVisible()).toBe(false);
+      expect(await escapeRegistered(p.app)).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
+  it("voice: a helper that crashes shows an error card, no buttons, and the composer is back (063)", async () => {
+    const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "crash" });
+    try {
+      await voiceKey(p.app);
+      const card = p.page.locator(".card.permission");
+      await card.waitFor({ state: "visible", timeout: 10_000 });
+      expect(await card.locator(".error").textContent()).toBe("Voice input stopped working. Details are in the snapsolve log.");
+      expect(await card.locator("button").count()).toBe(0);
+      await expect.poll(() => p.page.locator("#listening").isVisible(), { timeout: 5_000 }).toBe(false);
+      expect(await p.page.locator("#follow-up").isVisible()).toBe(true);
+      expect(await escapeRegistered(p.app)).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
 });

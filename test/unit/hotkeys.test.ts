@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { CAPTURE_DEBOUNCE_MS, createHotkeys } from "../../src/main/hotkeys";
 
-// No append key (065): a capture continues the current thread.
-const KEYS = { capture: "Control+Alt+C", toggle: "Control+Alt+X" };
+// No append key (065): a capture continues the current thread. Voice (063): dictate a follow-up.
+const KEYS = { capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V" };
 const OLD_APPEND = "Control+Alt+Shift+Q";
 
 /** A globalShortcut stand-in: `taken` accelerators belong to another app; `lose` drops one as the OS can. */
@@ -34,6 +34,7 @@ function setup(options: { taken?: string[]; hotkeys?: typeof KEYS } = {}) {
     config: { hotkeys: options.hotkeys ?? KEYS },
     onCapture: vi.fn(),
     onToggle: vi.fn(),
+    onVoice: vi.fn(),
     notify: vi.fn(),
     now: () => t,
   };
@@ -42,11 +43,11 @@ function setup(options: { taken?: string[]; hotkeys?: typeof KEYS } = {}) {
 }
 
 describe("hotkeys", () => {
-  it("registers the two accelerators from config, capture and toggle", () => {
-    const { hotkeys, shortcut } = setup({ hotkeys: { capture: "Control+Alt+W", toggle: "Control+Alt+E" } });
+  it("registers the three accelerators from config: capture, toggle and voice (063)", () => {
+    const { hotkeys, shortcut } = setup({ hotkeys: { capture: "Control+Alt+W", toggle: "Control+Alt+E", voice: "Control+Alt+R" } });
     hotkeys.start();
-    expect(shortcut.gs.register.mock.calls.map((c) => c[0]).sort()).toEqual(["Control+Alt+E", "Control+Alt+W"]);
-    expect(hotkeys.status()).toEqual({ capture: true, toggle: true, paused: false });
+    expect(shortcut.gs.register.mock.calls.map((c) => c[0]).sort()).toEqual(["Control+Alt+E", "Control+Alt+R", "Control+Alt+W"]);
+    expect(hotkeys.status()).toEqual({ capture: true, toggle: true, voice: true, paused: false });
   });
 
   it("the old append key (065) is never registered, not even when a config object still carries it", () => {
@@ -77,7 +78,7 @@ describe("hotkeys", () => {
     hotkeys.start();
     expect(deps.notify).toHaveBeenCalledTimes(1);
     expect(deps.notify.mock.calls[0][0]).toBe("Control+Alt+X is taken by another app. Change hotkeys.toggle in config.json.");
-    expect(hotkeys.status()).toEqual({ capture: true, toggle: false, paused: false });
+    expect(hotkeys.status()).toEqual({ capture: true, toggle: false, voice: true, paused: false });
     shortcut.press(KEYS.capture);
     expect(deps.onCapture).toHaveBeenCalledTimes(1);
   });
@@ -99,6 +100,45 @@ describe("hotkeys", () => {
     expect(deps.onToggle).toHaveBeenCalledTimes(1);
   });
 
+  it("voice press → onVoice, every press (start, then stop and send; not debounced) (063)", () => {
+    const { hotkeys, deps, shortcut, at } = setup();
+    hotkeys.start();
+    at(0);
+    shortcut.press(KEYS.voice);
+    at(10);
+    shortcut.press(KEYS.voice);
+    expect(deps.onVoice).toHaveBeenCalledTimes(2);
+    expect(deps.onCapture).not.toHaveBeenCalled();
+    expect(deps.onToggle).not.toHaveBeenCalled();
+  });
+
+  it("a taken voice key notifies naming hotkeys.voice; capture and toggle still work (063)", () => {
+    const { hotkeys, deps, shortcut } = setup({ taken: [KEYS.voice] });
+    hotkeys.start();
+    expect(deps.notify).toHaveBeenCalledTimes(1);
+    expect(deps.notify.mock.calls[0][0]).toBe("Control+Alt+V is taken by another app. Change hotkeys.voice in config.json.");
+    expect(hotkeys.status()).toEqual({ capture: true, toggle: true, voice: false, paused: false });
+    shortcut.press(KEYS.capture);
+    shortcut.press(KEYS.toggle);
+    expect(deps.onCapture).toHaveBeenCalledTimes(1);
+    expect(deps.onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("voice hotkey paused and re-registered with the others (063)", () => {
+    const { hotkeys, deps, shortcut } = setup();
+    hotkeys.start();
+    hotkeys.pause();
+    shortcut.press(KEYS.voice);
+    expect(deps.onVoice).not.toHaveBeenCalled();
+    hotkeys.resume();
+    shortcut.lose(KEYS.voice);
+    shortcut.gs.register.mockClear();
+    hotkeys.reRegisterIfLost();
+    expect(shortcut.gs.register.mock.calls.map((c) => c[0])).toEqual([KEYS.voice]);
+    shortcut.press(KEYS.voice);
+    expect(deps.onVoice).toHaveBeenCalledTimes(1);
+  });
+
   it("capture press → onCapture", () => {
     const { hotkeys, deps, shortcut } = setup();
     hotkeys.start();
@@ -115,7 +155,7 @@ describe("hotkeys", () => {
     expect(message).toContain("Control+Alt+C");
     expect(message).toContain("hotkeys.capture");
     expect(message).not.toContain("hotkeys.toggle");
-    expect(hotkeys.status()).toEqual({ capture: false, toggle: true, paused: false });
+    expect(hotkeys.status()).toEqual({ capture: false, toggle: true, voice: true, paused: false });
     shortcut.press(KEYS.toggle);
     expect(deps.onToggle).toHaveBeenCalledTimes(1);
   });
@@ -167,12 +207,12 @@ describe("hotkeys", () => {
     hotkeys.pause();
     expect(shortcut.gs.isRegistered(KEYS.capture)).toBe(false);
     expect(shortcut.gs.isRegistered(KEYS.toggle)).toBe(false);
-    expect(hotkeys.status()).toEqual({ capture: false, toggle: false, paused: true });
+    expect(hotkeys.status()).toEqual({ capture: false, toggle: false, voice: false, paused: true });
     shortcut.press(KEYS.capture);
     expect(deps.onCapture).not.toHaveBeenCalled();
     hotkeys.pause();
     hotkeys.resume();
-    expect(hotkeys.status()).toEqual({ capture: true, toggle: true, paused: false });
+    expect(hotkeys.status()).toEqual({ capture: true, toggle: true, voice: true, paused: false });
     shortcut.press(KEYS.capture);
     expect(deps.onCapture).toHaveBeenCalledTimes(1);
   });
@@ -181,7 +221,7 @@ describe("hotkeys", () => {
     const { hotkeys, shortcut } = setup();
     hotkeys.start();
     hotkeys.pause();
-    expect(shortcut.gs.unregister.mock.calls.map((c) => c[0]).sort()).toEqual([KEYS.capture, KEYS.toggle].sort());
+    expect(shortcut.gs.unregister.mock.calls.map((c) => c[0]).sort()).toEqual([KEYS.capture, KEYS.toggle, KEYS.voice].sort());
   });
 
   it("reRegisterIfLost re-registers only the missing key", () => {
@@ -191,7 +231,7 @@ describe("hotkeys", () => {
     shortcut.gs.register.mockClear();
     hotkeys.reRegisterIfLost();
     expect(shortcut.gs.register.mock.calls.map((c) => c[0])).toEqual([KEYS.capture]);
-    expect(hotkeys.status()).toEqual({ capture: true, toggle: true, paused: false });
+    expect(hotkeys.status()).toEqual({ capture: true, toggle: true, voice: true, paused: false });
   });
 
   it("reRegisterIfLost does nothing while paused, and picks up a key that was taken at startup once it is free", () => {

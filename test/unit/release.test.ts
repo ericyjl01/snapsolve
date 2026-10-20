@@ -33,6 +33,8 @@ Setup details live elsewhere.
 
 const ICO = Buffer.from([0, 0, 1, 0, 1, 0, 16, 16, 0, 0, 13, 10, 255, 0]);
 const WOFF2 = Buffer.from([0x77, 0x4f, 0x46, 0x32, 13, 10, 0, 1, 2]);
+// A Mach-O header with CR LF inside: a binary, never normalized.
+const SPEECH = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 13, 10, 0, 7]);
 
 let tmp: string;
 let root: string;
@@ -85,6 +87,8 @@ function makeRoot(dir: string, version = VERSION): void {
   write(path.join(dir, "dist", "renderer", "styles.css"), "body{}\n");
   write(path.join(dir, "dist", "renderer", "katex.min.css"), ".katex{}\n");
   write(path.join(dir, "dist", "renderer", "fonts", "KaTeX_Main-Regular.woff2"), WOFF2);
+  // 063: the speech helper `npm run build` compiles on macOS.
+  write(path.join(dir, "dist", "native", "snapsolve-speech"), SPEECH);
   write(path.join(dir, "prompts", "system.md"), "You explain problems.\r\nStep by step.\r\n");
   write(path.join(dir, "assets", "icon.ico"), ICO);
   write(path.join(dir, "bootstrap", "boot.js"), "// boot\n");
@@ -138,6 +142,7 @@ const EXPECTED = [
   "app/bootstrap/boot.js",
   "app/bootstrap/package.json",
   "app/main.js",
+  "app/native/snapsolve-speech",
   "app/package-lock.json",
   "app/package.json",
   "app/preload.js",
@@ -175,6 +180,18 @@ describe("assemble: the plugin tree", () => {
     expect(readFileSync(path.join(pluginDir(), "app", "renderer", "fonts", "KaTeX_Main-Regular.woff2")).equals(WOFF2)).toBe(true);
     expect(readFileSync(path.join(pluginDir(), "app", "main.js"))).toEqual(readFileSync(path.join(root, "dist", "main.js")));
     expect(readFileSync(path.join(pluginDir(), "app", "bootstrap", "boot.js"))).toEqual(readFileSync(path.join(root, "bootstrap", "boot.js")));
+  });
+
+  it("the speech helper goes to app/native byte for byte (063)", () => {
+    assemble({ root, target });
+    expect(readFileSync(path.join(pluginDir(), "app", "native", "snapsolve-speech")).equals(SPEECH)).toBe(true);
+  });
+
+  it("no dist/native (built without swiftc) → no app/native, and a warning says voice will not work (063)", async () => {
+    await rm(path.join(root, "dist", "native"), { recursive: true });
+    const result = assemble({ root, target });
+    expect(files(pluginDir())).toEqual(EXPECTED.filter((f) => !f.startsWith("app/native/")));
+    expect(result.warnings).toContainEqual(expect.stringMatching(/speech helper.*voice/i));
   });
 
   it("no assets/ in the repo → no app/assets in the payload", async () => {

@@ -381,7 +381,9 @@ class FakeWindow extends EventEmitter {
 const DISPLAY_A = { id: 1, workArea: { x: 0, y: 25, width: 1440, height: 875 } };
 const DISPLAY_B = { id: 2, workArea: { x: 1440, y: 0, width: 1920, height: 1080 } };
 
-function panelSetup(options: { saved?: WindowBounds; cursorOn?: typeof DISPLAY_A; platform?: NodeJS.Platform } = {}) {
+function panelSetup(
+  options: { saved?: WindowBounds; cursorOn?: typeof DISPLAY_A; platform?: NodeJS.Platform; onClose?: () => void } = {},
+) {
   let cursorDisplay = options.cursorOn ?? DISPLAY_A;
   const displays = [DISPLAY_A, DISPLAY_B];
   const saves: WindowBounds[] = [];
@@ -402,6 +404,7 @@ function panelSetup(options: { saved?: WindowBounds; cursorOn?: typeof DISPLAY_A
     log: quietLog,
     bounds: options.saved ?? {},
     saveBounds: vi.fn(async (b: WindowBounds) => void saves.push(structuredClone(b))),
+    ...(options.onClose ? { onClose: options.onClose } : {}),
   } satisfies PanelDeps;
   const panel = createPanel(deps);
   const win = FakeWindow.last;
@@ -473,6 +476,24 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
     expect(win.hides).toBe(1);
     expect(panel.isOpen()).toBe(false);
     expectNoTab(win);
+  });
+
+  it("onClose runs each time a shown window is hidden (× / Esc / toggle), never for the capture hide path (063: voice stops)", () => {
+    const onClose = vi.fn();
+    const { panel } = panelSetup({ onClose });
+    panel.close();
+    expect(onClose).not.toHaveBeenCalled();
+    panel.open();
+    panel.hide();
+    panel.show();
+    expect(onClose).not.toHaveBeenCalled();
+    panel.close();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    panel.close();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    panel.toggle();
+    panel.toggle();
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it("toggle shows at saved bounds with showInactive (no focus steal), and hides again", () => {

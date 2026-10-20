@@ -15,7 +15,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `encode.ts`: resize / PNG→JPEG fallback for the image sent to the model (pure, over an image interface)
   - `capture.ts`: display + source selection, capture mutex, platform panel handling
   - `panel.ts`: the panel BrowserWindow, tab and floating-window bounds (saved per display in `<data>/window.json`: `loadWindowBounds` / `saveWindowBounds`, task 058), content protection, IPC handlers, `snapsolve://` protocol (`app/<file>` = the renderer from `dist/renderer`, `thread/<uuid>/<n>.png` = thumbnails), auto-hide timer
-  - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `onAppend`), the renderer's request handlers, runner events → panel, `resolveClaudeCommand`
+  - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `newThread`), the renderer's request handlers, runner events → panel, `resolveClaudeCommand`
   - `hotkeys.ts`: globalShortcut registration, debounce, pause/resume
   - `tray.ts`: tray menu and tooltip
   - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the Screen Recording card's two actions (fixed settings URL, relaunch), hotkey labels per platform

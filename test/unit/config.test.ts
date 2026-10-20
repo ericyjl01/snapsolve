@@ -109,7 +109,7 @@ describe("loadConfig", () => {
 
   it("a valid file is honored and left untouched", async () => {
     const custom = {
-      hotkeys: { capture: "CommandOrControl+Shift+Space", toggle: "Alt+F8" },
+      hotkeys: { capture: "CommandOrControl+Shift+Space", toggle: "Alt+F8", voice: "Alt+F9" },
       model: "claude-opus-5-5[1m]",
       effort: "max",
       panelWidth: 500,
@@ -135,7 +135,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       model: "sonnet",
-      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T" },
+      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T", voice: "Control+Alt+V" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -181,7 +181,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       panelWidth: 500,
-      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T" },
+      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T", voice: "Control+Alt+V" },
     });
     expect(await snapshot()).toEqual(before);
   });

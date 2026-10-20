@@ -273,6 +273,89 @@ describe("onCapture continues the current thread (065)", () => {
   });
 });
 
+// 063: a dictated question goes where a typed one would: the current thread, else a new text thread.
+describe("onVoice (063)", () => {
+  const SAID = "why the product rule?";
+
+  it("transcript goes to the newest thread via the follow-up path, marked as dictated", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture({ png: PNG });
+    deps.panel.open.mockClear();
+    expect(await app.onVoice(SAID)).toBe(id);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(id, { kind: "followUp", text: SAID, voice: true });
+    expect(deps.panel.open).toHaveBeenCalled();
+  });
+
+  it("after a restart the newest thread on disk takes it", async () => {
+    const older = await store.createThread({ model: "opus", effort: "high" });
+    await new Promise((r) => setTimeout(r, 5));
+    const newer = await store.createThread({ model: "opus", effort: "high" });
+    const app = createApp(deps);
+    expect(await app.onVoice(SAID)).toBe(newer.id);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(newer.id, { kind: "followUp", text: SAID, voice: true });
+    expect(older.id).not.toBe(newer.id);
+  });
+
+  it("no thread → a new text thread with the dictated question as its first turn", async () => {
+    const app = createApp(deps);
+    const id = await app.onVoice(SAID);
+    expect(await store.listThreads()).toHaveLength(1);
+    expect(deps.runner.enqueue).toHaveBeenCalledWith(id, { kind: "followUp", text: SAID, voice: true });
+    expect((sent(IPC.threadsChanged).at(-1) as Thread[]).map((t) => t.id)).toEqual([id]);
+  });
+
+  it("after + a dictated question starts a new text thread; the next capture then continues that one", async () => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await app.handlers.newThread();
+    const second = await app.onVoice(SAID);
+    expect(second).not.toBe(first);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(second, { kind: "followUp", text: SAID, voice: true });
+    expect(await app.onCapture({ png: PNG2 })).toBe(second);
+  });
+
+  it.each(["", "   ", 7 as unknown as string])("an empty transcript %j queues nothing", async (text) => {
+    const app = createApp(deps);
+    await expect(app.onVoice(text)).rejects.toThrow();
+    expect(deps.runner.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("onVoiceDenied (063): mic denied shows a permission card", () => {
+  it("opens the panel on one unsaved card naming what to turn on; a second denial replaces it; a dictation that works removes it", async () => {
+    const app = createApp(deps);
+    await app.onVoiceDenied("microphone");
+    expect(deps.panel.open).toHaveBeenCalledTimes(1);
+    let cards = sent(IPC.threadsChanged).at(-1) as Thread[];
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ permission: { voice: "microphone" }, status: "error" });
+    expect(cards[0].turns[0]).toMatchObject({ role: "assistant", isError: true, errorKind: "microphoneDenied" });
+    expect(await store.listThreads()).toEqual([]);
+
+    await app.onVoiceDenied("speechRecognition");
+    cards = sent(IPC.threadsChanged).at(-1) as Thread[];
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ permission: { voice: "speechRecognition" } });
+    expect(cards[0].turns[0]).toMatchObject({ errorKind: "speechDenied" });
+
+    const id = await app.onVoice("why the product rule?");
+    cards = sent(IPC.threadsChanged).at(-1) as Thread[];
+    expect(cards.map((t) => t.id)).toEqual([id]);
+  });
+
+  it("the voice card and the Screen Recording card are separate cards", async () => {
+    const app = createApp(deps);
+    await app.onCaptureDenied(false);
+    await app.onVoiceDenied("microphone");
+    const cards = sent(IPC.threadsChanged).at(-1) as Thread[];
+    expect(cards).toHaveLength(2);
+    expect(cards.map((t) => t.permission).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual([
+      { prompted: false },
+      { voice: "microphone" },
+    ]);
+  });
+});
+
 describe("continuedNote (051)", () => {
   it("is the card's text for a thread seeded from the previous one, and only for that", () => {
     expect(CONTINUED_NOTE).toMatch(/continued from the previous thread/i);

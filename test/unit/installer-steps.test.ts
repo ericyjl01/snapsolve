@@ -775,7 +775,12 @@ describe("packageBootstrap (darwin)", () => {
       overwrite: true,
       out: expect.any(String),
       platform: "darwin",
-      extendInfo: { LSUIElement: true },
+      // 063: the usage strings macOS shows when voice first asks for the microphone and speech recognition.
+      extendInfo: {
+        LSUIElement: true,
+        NSMicrophoneUsageDescription: "snapsolve listens while you dictate a question with the voice hotkey.",
+        NSSpeechRecognitionUsageDescription: "snapsolve turns your dictated question into text on this Mac.",
+      },
     });
     expect(r).toEqual({ exe: path.join(bundle, "Contents", "MacOS", "snapsolve") });
     expect(files(bundle)).toEqual(["Contents/Info.plist", "Contents/MacOS/snapsolve"]);
@@ -1022,6 +1027,7 @@ describe("writeClaudePath", () => {
     expect(Object.keys(written)).toEqual(Object.keys(DEFAULTS));
     expect(written).toEqual({ ...DEFAULTS, claudePath: claudeReal });
     expect(written.hotkeys.capture).toBe("Control+Alt+C");
+    expect(written.hotkeys.voice).toBe("Control+Alt+V");
     expect(r).toEqual({ claudePath: claudeReal, warning: null });
 
     const loaded = await loadConfig(configFile);

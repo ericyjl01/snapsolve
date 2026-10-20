@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULTS, loadConfig } from "../../src/main/config";
 
 const SPEC_DEFAULTS = {
-  // No append key (065): a capture continues the current thread.
-  hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+X" },
+  // No append key (065): a capture continues the current thread. Voice (063): dictate a follow-up.
+  hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V" },
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -60,7 +60,7 @@ describe("loadConfig", () => {
     const before = await snapshot();
     const r = await loadConfig(file);
     expect(r.warnings).toEqual([]);
-    expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+Q", toggle: "Control+Alt+X" });
+    expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+Q", toggle: "Control+Alt+X", voice: "Control+Alt+V" });
     expect(await snapshot()).toEqual(before);
   });
 
@@ -227,7 +227,7 @@ describe("loadConfig", () => {
       await writeConfig({ hotkeys: { capture: "Control+Alt+W", append } });
       const before = await snapshot();
       const r = await loadConfig(file);
-      expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+W", toggle: "Control+Alt+X" });
+      expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+W", toggle: "Control+Alt+X", voice: "Control+Alt+V" });
       expect(r.config.hotkeys).not.toHaveProperty("append");
       expect(r.warnings).toEqual([expect.stringMatching(/hotkeys\.append.*no longer used/)]);
       expect(await snapshot()).toEqual(before);
@@ -252,8 +252,28 @@ describe("loadConfig", () => {
     expect(await snapshot()).toEqual(before);
   });
 
+  it("voice hotkey default and validation: hotkeys.voice defaults to Control+Alt+V; a good value is honored (063)", async () => {
+    expect(DEFAULTS.hotkeys.voice).toBe("Control+Alt+V");
+    await writeConfig({ hotkeys: { voice: "Control+Shift+Space" } });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.hotkeys).toEqual({ ...SPEC_DEFAULTS.hotkeys, voice: "Control+Shift+Space" });
+  });
+
+  it.each(["", "V", "Shift+V", "Control+Alt+Nope", null])("bad hotkeys.voice %j → its default + one warning naming hotkeys.voice (063)", async (voice) => {
+    await writeConfig({ hotkeys: { voice } });
+    const before = await snapshot();
+    const r = await loadConfig(file);
+    expect(r.config.hotkeys).toEqual(SPEC_DEFAULTS.hotkeys);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain("hotkeys.voice");
+    expect(await snapshot()).toEqual(before);
+  });
+
   it.each([
     [{ capture: "Control+Alt+W", toggle: "alt+ctrl+w" }, "hotkeys.capture", "hotkeys.toggle"],
+    [{ capture: "Control+Alt+V" }, "hotkeys.capture", "hotkeys.voice"],
+    [{ toggle: "Control+Alt+W", voice: "Alt+Control+W" }, "hotkeys.toggle", "hotkeys.voice"],
   ])("toggle the same key as another hotkey %j → defaults for all + one warning naming both", async (hotkeys, a, b) => {
     await writeConfig({ hotkeys });
     const r = await loadConfig(file);

@@ -37,6 +37,16 @@ describe("userMessage", () => {
     expect(userMessage("notLoggedIn")).toBe("Run `claude` once and log in.");
   });
 
+  it("voice (063): denied microphone / speech recognition, unavailable and failed each say what happened", () => {
+    expect(ERROR_KINDS).toEqual(expect.arrayContaining(["microphoneDenied", "speechDenied", "voiceUnavailable", "voiceFailed"]));
+    expect(userMessage("microphoneDenied")).toBe("snapsolve needs Microphone access for voice questions. Turn it on in System Settings.");
+    expect(userMessage("speechDenied")).toBe(
+      "snapsolve needs Speech Recognition access for voice questions. Turn it on in System Settings.",
+    );
+    expect(userMessage("voiceUnavailable")).toBe("Voice input isn't available on this Mac.");
+    expect(userMessage("voiceFailed")).toBe("Voice input stopped working. Details are in the snapsolve log.");
+  });
+
   it("an unknown kind (e.g. from a stale renderer) falls back to the internal message", () => {
     expect(userMessage("noSuchKind" as ErrorKind)).toBe(userMessage("internal"));
   });

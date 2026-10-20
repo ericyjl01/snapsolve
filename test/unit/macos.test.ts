@@ -3,9 +3,17 @@ import { createApp } from "../../src/main/app";
 import { DEFAULTS } from "../../src/main/config";
 import { createHotkeys } from "../../src/main/hotkeys";
 import type { Logger } from "../../src/main/log";
-import { createPermissionHandlers, darwinStartup, hotkeyLabel, hotkeySymbols, SCREEN_RECORDING_SETTINGS_URL } from "../../src/main/macos";
+import {
+  createPermissionHandlers,
+  darwinStartup,
+  hotkeyLabel,
+  hotkeySymbols,
+  MICROPHONE_SETTINGS_URL,
+  SCREEN_RECORDING_SETTINGS_URL,
+  SPEECH_RECOGNITION_SETTINGS_URL,
+} from "../../src/main/macos";
 import { isSafeExternalUrl } from "../../src/main/panel";
-import { screenRecordingCard, userMessage } from "../../src/shared/errors";
+import { screenRecordingCard, userMessage, voicePermissionCard } from "../../src/shared/errors";
 import { IPC } from "../../src/shared/ipc";
 import type { Thread } from "../../src/shared/types";
 
@@ -134,11 +142,24 @@ describe("screenRecordingDenied card model", () => {
   });
 });
 
+describe("voice permission card model (063)", () => {
+  it("microphone denied: what to turn on, with Open System Settings only", () => {
+    expect(voicePermissionCard("microphone")).toEqual({ message: userMessage("microphoneDenied"), actions: ["openSettings"] });
+    expect(userMessage("microphoneDenied")).toMatch(/Microphone/);
+  });
+
+  it("speech recognition denied: what to turn on, with Open System Settings only", () => {
+    expect(voicePermissionCard("speechRecognition")).toEqual({ message: userMessage("speechDenied"), actions: ["openSettings"] });
+    expect(userMessage("speechDenied")).toMatch(/Speech Recognition/);
+  });
+});
+
 describe("permission handlers (SPEC Amendment 2)", () => {
-  function setup(platform: NodeJS.Platform) {
+  function setup(platform: NodeJS.Platform, denial: "microphone" | "speechRecognition" | null = null) {
     const calls: string[] = [];
     const deps = {
       platform,
+      voiceDenial: () => denial,
       openExternal: vi.fn(async (url: string) => void calls.push(`open ${url}`)),
       relaunch: vi.fn(() => void calls.push("relaunch")),
       exit: vi.fn(() => void calls.push("exit")),
@@ -167,6 +188,24 @@ describe("permission handlers (SPEC Amendment 2)", () => {
     const { handlers, deps } = setup("win32");
     await handlers.openScreenRecordingSettings();
     expect(deps.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("Open System Settings on a voice card opens the fixed pane of the last denial; never a URL from the renderer (063)", async () => {
+    expect(MICROPHONE_SETTINGS_URL).toBe("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone");
+    expect(SPEECH_RECOGNITION_SETTINGS_URL).toBe("x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition");
+    const mic = setup("darwin", "microphone");
+    await (mic.handlers.openVoiceSettings as (...a: unknown[]) => Promise<void>)("https://evil.example");
+    expect(mic.deps.openExternal.mock.calls).toEqual([[MICROPHONE_SETTINGS_URL]]);
+    const speech = setup("darwin", "speechRecognition");
+    await speech.handlers.openVoiceSettings();
+    expect(speech.deps.openExternal.mock.calls).toEqual([[SPEECH_RECOGNITION_SETTINGS_URL]]);
+    // No denial recorded yet: the microphone pane (the first thing voice asks for).
+    const none = setup("darwin", null);
+    await none.handlers.openVoiceSettings();
+    expect(none.deps.openExternal.mock.calls).toEqual([[MICROPHONE_SETTINGS_URL]]);
+    const win = setup("win32", "microphone");
+    await win.handlers.openVoiceSettings();
+    expect(win.deps.openExternal).not.toHaveBeenCalled();
   });
 
   it("Relaunch calls relaunch, then exit", async () => {

@@ -6,11 +6,10 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
   no append key (⌃⌥⇧Q gone).
 - 072 closed: docs/checklists/macos.md is now on master — 032's 15 items with ⌃⌥C plus rows 16–21, the deferred
   hand checks of 058–061, 064, 065. Eric runs that file for 032 (when 032 resumes, take master's copy).
-- Next: 073 (ARCHITECTURE app.ts line still names onAppend), then 063 (voice, swiftc 6.4 present).
+- 073 closed (module map: app.ts names newThread, not onAppend). Next: 063 (voice, swiftc 6.4, macOS 26.6).
 - Backlog 033, 042, 053, 054, 056, 066–070.
 
 ## Log
-2026-10-15 · 044 · closed · one SemVer compareVersions exported from steps.mjs (pre-release below release, build metadata ignored, null when unparsable) used by preflight, doctor and update; doctor warns it cannot compare unparsable versions (15f92c0)
 2026-10-15 · 045 · closed · steps.mjs exports renameRetrying, readJson, exists (follows links) and linkExists (dangling link counts); commands.mjs imports them and drops its copies; uninstall targets use linkExists (4baaef1)
 2026-10-15 · 046 · closed · findTranscript stats project dirs concurrently (32 workers, StoreDeps.stat injectable); same newest-mtime result and warnings (eea7d86)
 2026-10-15 · 047 · closed · a failed turn that streamed an answer logs errors/stderr plus 'result: <n> chars omitted' instead of the result text; classification unchanged (473afe1)
@@ -50,3 +49,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-19 · 071 · dropped · Eric chose option (b) — the two macOS-only e2e assertions stay as they are and 065 closes on the Mac, so there is nothing to platform-gate (-)
 2026-10-20 · 065 · closed · on the Mac: a capture continues the current chat (newest thread on disk after a restart), + starts a new one (preload newThread on thread:new, SPEC Amendment 10, twelve functions), a typed question after + starts a text thread, hotkeys.append removed and warned, neutral append text; .thumb[hidden]; hand check → 032; found 072 (a3fb69b)
 2026-10-20 · 072 · closed · docs/checklists/macos.md on master: 032's items with Ctrl+Option+C, follow-up and restart rows on the bottom composer, rows 16–21 for the deferred hand checks of 058, 059, 060, 061, 064, 065 (18ced94)
+2026-10-20 · 073 · closed · ARCHITECTURE module map: app.ts's pipeline line names onCapture and newThread (onAppend was removed in 065) (dd2e1df)

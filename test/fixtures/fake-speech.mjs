@@ -4,6 +4,7 @@
 //   FAKE_SPEECH_SCENARIO  ok (default): ready, then one word per 80 ms as partials with a level
 //                         empty: ready, no words; the final text is ""
 //                         denied: an error line, kind micDenied, exit 1
+//                         crash: ready, then exit 3 after 200 ms with no final line
 //   FAKE_SPEECH_TEXT      the words (default "why the product rule?")
 const scenario = process.env.FAKE_SPEECH_SCENARIO ?? "ok";
 const words = (process.env.FAKE_SPEECH_TEXT ?? "why the product rule?").split(" ");
@@ -13,6 +14,11 @@ const say = (message) => process.stdout.write(`${JSON.stringify(message)}\n`);
 if (scenario === "denied") {
   say({ type: "error", kind: "micDenied", message: "microphone access is denied" });
   process.exit(1);
+}
+
+if (scenario === "crash") {
+  say({ type: "ready" });
+  setTimeout(() => process.exit(3), 200);
 }
 
 let heard = [];
@@ -25,7 +31,7 @@ function stop() {
   process.exit(0);
 }
 
-say({ type: "ready" });
+if (scenario !== "crash") say({ type: "ready" });
 const timer = setInterval(() => {
   if (scenario === "empty" || heard.length === words.length) {
     say({ type: "level", level: 0.05 });

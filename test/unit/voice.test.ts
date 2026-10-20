@@ -10,6 +10,7 @@ import {
   ESCAPE,
   parseHelperLine,
   resolveSpeechHelper,
+  VOICE_BUSY_NOTE,
   VOICE_EMPTY_NOTE,
   VOICE_STOP_TIMEOUT_MS,
   type VoiceDeps,
@@ -73,7 +74,7 @@ function recordingLog() {
   return { log, text: () => JSON.stringify(lines) };
 }
 
-function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error } = {}) {
+function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; answering?: boolean } = {}) {
   const children: FakeHelper[] = [];
   const spawn = vi.fn((_file: string, _args: readonly string[], _options: unknown) => {
     if (options.spawnThrows) throw options.spawnThrows;
@@ -85,6 +86,8 @@ function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error } = 
   const states: VoiceState[] = [];
   const send = vi.fn(async (_text: string) => undefined);
   const onDenied = vi.fn();
+  const onFailed = vi.fn();
+  const isAnswering = vi.fn(() => options.answering ?? false);
   const showWindow = vi.fn();
   const recorded = recordingLog();
   const deps: VoiceDeps = {
@@ -96,6 +99,8 @@ function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error } = 
     onState: (s) => void states.push(s),
     send,
     onDenied,
+    onFailed,
+    isAnswering,
     showWindow,
     log: recorded.log,
   };
@@ -108,6 +113,8 @@ function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error } = 
     states,
     send,
     onDenied,
+    onFailed,
+    isAnswering,
     showWindow,
     logText: recorded.text,
     child: () => children.at(-1)!,
@@ -195,7 +202,7 @@ describe("voice", () => {
     t.voice.toggle();
     expect(t.child().signals).toEqual(["SIGINT"]);
     expect(t.last()).toEqual({ state: "stopping", text: "why the product", key: "⌃⌥V" });
-    // While the helper finishes the transcript (and while the answer is being worked on) another press does nothing.
+    // While the helper finishes the transcript another press does nothing.
     t.voice.toggle();
     expect(t.spawn).toHaveBeenCalledTimes(1);
     expect(t.child().signals).toEqual(["SIGINT"]);
@@ -205,6 +212,7 @@ describe("voice", () => {
     expect(t.send).toHaveBeenCalledTimes(1);
     expect(t.send).toHaveBeenCalledWith(QUESTION);
     expect(t.last()).toEqual({ state: "idle" });
+    expect(t.onFailed).not.toHaveBeenCalled();
     expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
     // Idle again: the next press starts a new dictation.
     t.voice.toggle();
@@ -232,7 +240,32 @@ describe("voice", () => {
     t.voice.toggle();
     vi.advanceTimersByTime(VOICE_STOP_TIMEOUT_MS);
     expect(t.child().signals).toEqual(["SIGKILL"]);
-    expect(t.last()).toEqual({ state: "idle", note: userMessage("voiceFailed") });
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.onFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it("a press while the current thread is thinking or answering is ignored: nothing spawned, a note says to wait", () => {
+    const t = setup({ answering: true });
+    t.voice.toggle();
+    expect(t.spawn).not.toHaveBeenCalled();
+    expect(t.showWindow).not.toHaveBeenCalled();
+    expect(t.shortcut.register).not.toHaveBeenCalled();
+    expect(VOICE_BUSY_NOTE).toBe("Wait for the answer, then ask.");
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_BUSY_NOTE });
+    expect(t.voice.status()).toBe("idle");
+  });
+
+  it("an answer that starts while listening does not block the stop: the second press still sends", async () => {
+    const t = setup();
+    t.voice.toggle();
+    t.child().line({ type: "ready" });
+    await flush();
+    t.isAnswering.mockReturnValue(true);
+    t.voice.toggle();
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send).toHaveBeenCalledWith(QUESTION);
   });
 
   it("the final text is trimmed before it is sent", async () => {
@@ -270,6 +303,7 @@ describe("voice", () => {
     await flush();
     expect(t.send).not.toHaveBeenCalled();
     expect(t.last()).toEqual({ state: "idle" });
+    expect(t.onFailed).not.toHaveBeenCalled();
   });
 
   it("Esc also cancels while the helper is finishing", async () => {
@@ -328,6 +362,17 @@ describe("voice", () => {
     expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
   });
 
+  it("a helper error of kind failed → the error card, nothing sent", async () => {
+    const t = setup();
+    t.voice.toggle();
+    t.child().line({ type: "error", kind: "failed", message: "audio engine" });
+    t.child().exit(1);
+    await flush();
+    expect(t.onFailed).toHaveBeenCalledTimes(1);
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
   it("an unavailable recognizer → a note saying voice is not available on this Mac", async () => {
     const t = setup();
     t.voice.toggle();
@@ -338,35 +383,38 @@ describe("voice", () => {
     expect(t.onDenied).not.toHaveBeenCalled();
   });
 
-  it("helper crash → an error note, not a hang: exit without a final line, while listening or stopping", async () => {
+  it("helper crash → an error card, not a hang: exit without a final line, while listening or stopping", async () => {
     for (const stopFirst of [false, true]) {
       const t = setup();
       t.voice.toggle();
       if (stopFirst) t.voice.toggle();
       t.child().exit(null, "SIGSEGV");
       await flush();
-      expect(t.last()).toEqual({ state: "idle", note: userMessage("voiceFailed") });
+      expect(t.last()).toEqual({ state: "idle" });
+      expect(t.onFailed).toHaveBeenCalledTimes(1);
       expect(t.send).not.toHaveBeenCalled();
       expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
     }
   });
 
-  it("a helper that cannot start (spawn error event or a throw) → the error note, Esc released", async () => {
+  it("a helper that cannot start (spawn error event or a throw) → the error card, Esc released", async () => {
     const t = setup();
     t.voice.toggle();
     t.child().emit("error", Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" }));
     await flush();
-    expect(t.last()).toEqual({ state: "idle", note: userMessage("voiceFailed") });
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.onFailed).toHaveBeenCalledTimes(1);
     expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
 
     const thrown = setup({ spawnThrows: new Error("EACCES") });
     thrown.voice.toggle();
-    expect(thrown.last()).toEqual({ state: "idle", note: userMessage("voiceFailed") });
+    expect(thrown.last()).toEqual({ state: "idle" });
+    expect(thrown.onFailed).toHaveBeenCalledTimes(1);
     expect(thrown.shortcut.registered.has(ESCAPE)).toBe(false);
     expect(thrown.voice.status()).toBe("idle");
   });
 
-  it("a helper that never answers the stop is killed after the stop timeout, with the error note", async () => {
+  it("a helper that never answers the stop is killed after the stop timeout, with the error card", async () => {
     const t = setup();
     t.voice.toggle();
     t.child().line({ type: "ready" });
@@ -377,7 +425,8 @@ describe("voice", () => {
     expect(t.child().signals).toEqual(["SIGINT"]);
     vi.advanceTimersByTime(1);
     expect(t.child().signals).toEqual(["SIGINT", "SIGKILL"]);
-    expect(t.last()).toEqual({ state: "idle", note: userMessage("voiceFailed") });
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.onFailed).toHaveBeenCalledTimes(1);
     expect(t.send).not.toHaveBeenCalled();
   });
 

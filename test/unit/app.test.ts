@@ -321,6 +321,41 @@ describe("onVoice (063)", () => {
   });
 });
 
+describe("isAnswering (063): a voice press is ignored while the current thread thinks or answers", () => {
+  it("no thread → false; a capture's thread is busy until its answer is done; after + → false", async () => {
+    const app = createApp(deps);
+    expect(app.isAnswering()).toBe(false);
+    const id = await app.onCapture({ png: PNG });
+    expect(app.isAnswering()).toBe(true);
+    listener?.({ type: "status", threadId: id, status: "running" });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(app.isAnswering()).toBe(true);
+    const done = await store.updateThread(id, { status: "done" });
+    listener?.({ type: "done", threadId: id, thread: done } as RunnerEvent);
+    expect(app.isAnswering()).toBe(false);
+    // An errored turn is not answering either.
+    const errored = await store.updateThread(id, { status: "error" });
+    listener?.({ type: "error", threadId: id, thread: errored } as RunnerEvent);
+    expect(app.isAnswering()).toBe(false);
+    // "+": the next question starts a new thread, so nothing is in the way.
+    listener?.({ type: "status", threadId: id, status: "running" });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(app.isAnswering()).toBe(true);
+    await app.handlers.newThread();
+    expect(app.isAnswering()).toBe(false);
+  });
+
+  it("a follow-up queued on the current thread makes it busy again", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture({ png: PNG });
+    const done = await store.updateThread(id, { status: "done" });
+    listener?.({ type: "done", threadId: id, thread: done } as RunnerEvent);
+    listener?.({ type: "status", threadId: id, status: "queued" });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(app.isAnswering()).toBe(true);
+  });
+});
+
 describe("onVoiceDenied (063): mic denied shows a permission card", () => {
   it("opens the panel on one unsaved card naming what to turn on; a second denial replaces it; a dictation that works removes it", async () => {
     const app = createApp(deps);
@@ -338,6 +373,21 @@ describe("onVoiceDenied (063): mic denied shows a permission card", () => {
     expect(cards[0]).toMatchObject({ permission: { voice: "speechRecognition" } });
     expect(cards[0].turns[0]).toMatchObject({ errorKind: "speechDenied" });
 
+    const id = await app.onVoice("why the product rule?");
+    cards = sent(IPC.threadsChanged).at(-1) as Thread[];
+    expect(cards.map((t) => t.id)).toEqual([id]);
+  });
+
+  it("a helper failure shows one unsaved voice error card (no buttons' permission), in the same slot as a denial; a dictation that works removes it", async () => {
+    const app = createApp(deps);
+    await app.onVoiceDenied("microphone");
+    await app.onVoiceFailed();
+    let cards = sent(IPC.threadsChanged).at(-1) as Thread[];
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ permission: { voice: "failed" }, status: "error" });
+    expect(cards[0].turns[0]).toMatchObject({ isError: true, errorKind: "voiceFailed" });
+    expect(deps.panel.open).toHaveBeenCalledTimes(2);
+    expect(await store.listThreads()).toEqual([]);
     const id = await app.onVoice("why the product rule?");
     cards = sent(IPC.threadsChanged).at(-1) as Thread[];
     expect(cards.map((t) => t.id)).toEqual([id]);

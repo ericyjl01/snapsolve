@@ -750,4 +750,20 @@ describe("panel (e2e)", () => {
       await p.close();
     }
   }, 60_000);
+
+  it("voice: a helper that crashes shows an error card, no buttons, and the composer is back (063)", async () => {
+    const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "crash" });
+    try {
+      await voiceKey(p.app);
+      const card = p.page.locator(".card.permission");
+      await card.waitFor({ state: "visible", timeout: 10_000 });
+      expect(await card.locator(".error").textContent()).toBe("Voice input stopped working. Details are in the snapsolve log.");
+      expect(await card.locator("button").count()).toBe(0);
+      await expect.poll(() => p.page.locator("#listening").isVisible(), { timeout: 5_000 }).toBe(false);
+      expect(await p.page.locator("#follow-up").isVisible()).toBe(true);
+      expect(await escapeRegistered(p.app)).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
 });

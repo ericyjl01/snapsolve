@@ -148,6 +148,10 @@ describe("voice permission card model (063)", () => {
     expect(userMessage("microphoneDenied")).toMatch(/Microphone/);
   });
 
+  it("helper failed: the failure, with no buttons", () => {
+    expect(voicePermissionCard("failed")).toEqual({ message: userMessage("voiceFailed"), actions: [] });
+  });
+
   it("speech recognition denied: what to turn on, with Open System Settings only", () => {
     expect(voicePermissionCard("speechRecognition")).toEqual({ message: userMessage("speechDenied"), actions: ["openSettings"] });
     expect(userMessage("speechDenied")).toMatch(/Speech Recognition/);

@@ -7,12 +7,10 @@
 // Esc does in main). Talks to main only
 // through `window.snapsolve` (SPEC §4.4); model output goes through render.ts. On macOS a missing Screen Recording
 // grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings / Relaunch,
-// nothing else; voice's refused Microphone or Speech Recognition does the same with Open System Settings only. While
-// a question is dictated (Amendment 11, task 063) the composer is a listening bar: a red dot, input level bars, the
-// live transcript and how to send or cancel; a dictated question shows with a mic mark.
-import { continuedNote, screenRecordingCard, userMessage, voicePermissionCard } from "../shared/errors";
+// nothing else.
+import { continuedNote, screenRecordingCard, userMessage } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
-import type { AssistantTurn, Thread, UserTurn, VoiceState } from "../shared/types";
+import type { AssistantTurn, Thread, UserTurn } from "../shared/types";
 import { renderAnswer } from "./render";
 
 declare global {
@@ -42,13 +40,8 @@ const list = document.getElementById("threads") as HTMLElement;
 const empty = document.getElementById("empty") as HTMLElement;
 const box = document.getElementById("follow-up") as HTMLTextAreaElement;
 const send = document.getElementById("send") as HTMLButtonElement;
-const composerBox = document.getElementById("composer-box") as HTMLElement;
-const listening = document.getElementById("listening") as HTMLElement;
-const voiceNote = document.getElementById("voice-note") as HTMLElement;
 /** At most this tall before the composer scrolls (about five lines). */
 const COMPOSER_MAX_PX = 120;
-/** How long a voice note ("Didn't catch that.") stays under the composer. */
-const VOICE_NOTE_MS = 4_000;
 
 interface PermissionCard {
   kind: "permission";
@@ -148,46 +141,21 @@ function createPermissionCard(thread: Thread): PermissionCard {
   return { kind: "permission", root, message, actions };
 }
 
-/**
- * Screen Recording: the buttons follow `prompted`, which can change while the card is shown (a later denied capture).
- * Voice: the refused permission, and Open System Settings at its pane.
- */
-function updatePermission(card: PermissionCard, permission: NonNullable<Thread["permission"]>): void {
-  const voice = "voice" in permission;
-  const model = voice ? voicePermissionCard(permission.voice) : screenRecordingCard(permission.prompted);
+/** The buttons follow `prompted`, which can change while the card is shown (a later denied capture). */
+function updatePermission(card: PermissionCard, prompted: boolean): void {
+  const model = screenRecordingCard(prompted);
   card.message.textContent = model.message;
   const buttons = model.actions.map((action) => {
     const button =
       action === "openSettings" ? el("button", "open-settings", "Open System Settings") : el("button", "relaunch", "Relaunch");
     button.type = "button";
     button.addEventListener("click", () => {
-      const done =
-        action === "relaunch" ? api.relaunch() : voice ? api.openVoiceSettings() : api.openScreenRecordingSettings();
+      const done = action === "openSettings" ? api.openScreenRecordingSettings() : api.relaunch();
       done.catch(() => flash(button, "Failed"));
     });
     return button;
   });
   card.actions.replaceChildren(...buttons);
-}
-
-/** The small mic shown before a dictated question. */
-function micMark(): SVGSVGElement {
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("class", "mic-mark");
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("width", "10");
-  svg.setAttribute("height", "11");
-  svg.setAttribute("viewBox", "0 0 12 14");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.6");
-  const body = document.createElementNS(ns, "rect");
-  for (const [k, v] of Object.entries({ x: "3.5", y: "1", width: "5", height: "8", rx: "2.5" })) body.setAttribute(k, v);
-  const stand = document.createElementNS(ns, "path");
-  stand.setAttribute("d", "M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2");
-  svg.append(body, stand);
-  return svg;
 }
 
 function flash(button: HTMLButtonElement, text: string): void {
@@ -233,11 +201,6 @@ function renderTurns(card: Card, thread: Thread): void {
       // A thread's opening screenshot is the card's thumbnail; later ones show where they joined.
       if (turn.kind === "screenshot") {
         if (turn !== first) nodes.push(thumbnail(thread.id, Number.parseInt(turn.file, 10)));
-      } else if (turn.voice) {
-        const asked = el("p", "question voice");
-        asked.title = "Dictated";
-        asked.append(micMark(), document.createTextNode(turn.text));
-        nodes.push(asked);
       } else {
         nodes.push(el("p", "question", turn.text));
       }
@@ -275,7 +238,7 @@ function update(threadId: string): void {
   const card = cards.get(threadId);
   if (!thread || !card) return;
   if (card.kind === "permission") {
-    updatePermission(card, thread.permission ?? { prompted: false });
+    updatePermission(card, thread.permission?.prompted ?? false);
     return;
   }
   const open = thread.id === newest || opened.has(thread.id);
@@ -382,35 +345,6 @@ function sendFollowUp(): void {
   });
 }
 
-let noteTimer: ReturnType<typeof setTimeout> | undefined;
-
-/** The composer while dictating: the listening bar instead of the text box; back to it when idle, with a note. */
-function showVoice(state: VoiceState): void {
-  clearTimeout(noteTimer);
-  const active = state.state !== "idle";
-  composerBox.hidden = active;
-  listening.hidden = !active;
-  listening.classList.toggle("stopping", state.state === "stopping");
-  voiceNote.hidden = true;
-  if (state.state === "idle") {
-    if (state.note) {
-      voiceNote.textContent = state.note;
-      voiceNote.hidden = false;
-      noteTimer = setTimeout(() => (voiceNote.hidden = true), VOICE_NOTE_MS);
-    }
-    return;
-  }
-  (listening.querySelector(".transcript") as HTMLElement).textContent = state.text || "Listening…";
-  (listening.querySelector(".hint") as HTMLElement).textContent =
-    state.state === "listening" ? `${state.key} to send · esc to cancel` : "Sending…";
-  const level = state.state === "listening" ? state.level : 0;
-  // Five bars, the middle ones tallest, scaled by the input level.
-  const shape = [0.5, 0.8, 1, 0.8, 0.5];
-  listening.querySelectorAll<HTMLElement>(".level").forEach((bar, i) => {
-    bar.style.height = `${Math.round(3 + 11 * level * shape[i])}px`;
-  });
-}
-
 /** Grows the composer with its text, up to COMPOSER_MAX_PX. */
 function fitComposer(): void {
   box.style.height = "auto";
@@ -425,11 +359,6 @@ box.addEventListener("keydown", (event) => {
 });
 box.addEventListener("input", fitComposer);
 send.addEventListener("click", sendFollowUp);
-// The mic buttons (title bar and composer) do what the voice hotkey does: start, and again stop and send.
-for (const id of ["voice", "composer-voice"]) {
-  (document.getElementById(id) as HTMLButtonElement).addEventListener("click", () => void api.toggleVoice().catch(() => undefined));
-}
-api.onVoice(showVoice);
 (document.getElementById("hide") as HTMLButtonElement).addEventListener("click", () => void api.hide().catch(() => undefined));
 // "+": main starts the next capture or question in a new thread; here every card becomes a row until it arrives.
 (document.getElementById("new-chat") as HTMLButtonElement).addEventListener("click", () => {

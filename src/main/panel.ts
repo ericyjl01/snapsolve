@@ -223,8 +223,6 @@ export interface PanelDeps {
   bounds: WindowBounds;
   /** Persists the whole map (`saveWindowBounds`); a rejection is logged. */
   saveBounds(saved: WindowBounds): Promise<void>;
-  /** A shown window was hidden (×, Esc, toggle, auto-hide), not the capture hide path: voice stops (task 063). */
-  onClose?: () => void;
 }
 
 export interface Panel {
@@ -360,7 +358,6 @@ export function createPanel(deps: PanelDeps): Panel {
     if (state === "hidden") return;
     state = "hidden";
     if (!win.isDestroyed()) win.hide();
-    deps.onClose?.();
   }
 
   const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;

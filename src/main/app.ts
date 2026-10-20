@@ -4,9 +4,9 @@
 // spawned. Runner events and the renderer's requests (SPEC §4.4) are relayed between runner and panel.
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { screenRecordingCard, SnapsolveError, voicePermissionCard } from "../shared/errors";
+import { screenRecordingCard, SnapsolveError } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
-import type { AssistantTurn, Config, Thread, VoiceDenial } from "../shared/types";
+import type { AssistantTurn, Config, Thread } from "../shared/types";
 import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
@@ -56,13 +56,6 @@ export interface App {
    * that says what to do; a later denial updates it, the next capture that works removes it.
    */
   onCaptureDenied(prompted: boolean): Promise<void>;
-  /**
-   * A dictated question (task 063): where a typed one would go — a follow-up to the current thread, or a new text
-   * thread when there is none or after "+". Marked as dictated. Resolves with the thread's id once it is queued.
-   */
-  onVoice(text: string): Promise<string>;
-  /** Voice was refused a permission: one unsaved card that says which to turn on; a dictation that works removes it. */
-  onVoiceDenied(denial: VoiceDenial): Promise<void>;
   /** The renderer's requests (arguments come from the renderer, so each is checked). */
   handlers: AppHandlers;
 }
@@ -78,8 +71,6 @@ export function createApp(deps: AppDeps): App {
   const known = new Map<string, Thread>();
   /** The Screen Recording card's id while it is shown; it lives only in `known`. */
   let permissionId: string | null = null;
-  /** The voice permission card's id while it is shown (task 063); also only in `known`. */
-  let voiceCardId: string | null = null;
 
   function remember(thread: Thread): void {
     known.set(thread.id, thread);
@@ -188,35 +179,6 @@ export function createApp(deps: AppDeps): App {
     return store.getThread(current).catch(() => null);
   }
 
-  /** A new thread whose first turn is a question (typed after "+", or dictated with no current thread). */
-  async function textThread(request: Extract<TurnRequest, { kind: "followUp" }>): Promise<string> {
-    const thread = await store.createThread({ model: config.model, effort: config.effort });
-    current = thread.id;
-    fresh = false;
-    remember(thread);
-    panel.open();
-    broadcast();
-    // The runner takes a follow-up as an empty thread's first turn: a new session with the text alone.
-    start(thread.id, request);
-    return thread.id;
-  }
-
-  /** A permission card: a panel-only thread whose one errored turn says what to do. */
-  function permissionCard(id: string, title: string, errorKind: AssistantTurn["errorKind"], errorMessage: string, permission: Thread["permission"]): Thread {
-    return {
-      id,
-      sessionId: id,
-      transcriptPath: null,
-      model: config.model,
-      effort: config.effort,
-      createdAt: new Date().toISOString(),
-      title,
-      status: "error",
-      turns: [{ role: "assistant", text: "", durationMs: 0, ttftMs: null, costUsd: null, isError: true, errorKind, errorMessage }],
-      permission,
-    };
-  }
-
   async function threadOf(threadId: unknown): Promise<Thread> {
     if (!isUuid(threadId)) throw new SnapsolveError("threadNotFound", "invalid thread id");
     return store.getThread(threadId);
@@ -254,7 +216,14 @@ export function createApp(deps: AppDeps): App {
         return;
       }
       if (typeof text !== "string" || text.trim() === "") throw new SnapsolveError("internal", "empty question");
-      await textThread({ kind: "followUp", text });
+      const thread = await store.createThread({ model: config.model, effort: config.effort });
+      current = thread.id;
+      fresh = false;
+      remember(thread);
+      panel.open();
+      broadcast();
+      // The runner takes a follow-up as an empty thread's first turn: a new session with the text alone.
+      start(thread.id, { kind: "followUp", text });
     },
 
     async openExternal(url) {
@@ -294,31 +263,29 @@ export function createApp(deps: AppDeps): App {
 
     async onCaptureDenied(prompted) {
       permissionId ??= randomUUID();
-      remember(permissionCard(permissionId, "Screen Recording", "screenRecordingDenied", screenRecordingCard(prompted).message, { prompted }));
-      panel.open();
-      broadcast();
-    },
-
-    async onVoice(text) {
-      if (typeof text !== "string" || text.trim() === "") throw new SnapsolveError("internal", "empty dictation");
-      if (voiceCardId) known.delete(voiceCardId);
-      voiceCardId = null;
-      const request = { kind: "followUp" as const, text, voice: true as const };
-      const target = await currentThread();
-      if (!target) return textThread(request);
-      fresh = false;
-      if (!known.has(target.id)) remember(target);
-      panel.open();
-      broadcast();
-      start(target.id, request);
-      return target.id;
-    },
-
-    async onVoiceDenied(denial) {
-      voiceCardId ??= randomUUID();
-      const title = denial === "microphone" ? "Microphone" : "Speech Recognition";
-      const errorKind = denial === "microphone" ? "microphoneDenied" : "speechDenied";
-      remember(permissionCard(voiceCardId, title, errorKind, voicePermissionCard(denial).message, { voice: denial }));
+      remember({
+        id: permissionId,
+        sessionId: permissionId,
+        transcriptPath: null,
+        model: config.model,
+        effort: config.effort,
+        createdAt: new Date().toISOString(),
+        title: "Screen Recording",
+        status: "error",
+        turns: [
+          {
+            role: "assistant",
+            text: "",
+            durationMs: 0,
+            ttftMs: null,
+            costUsd: null,
+            isError: true,
+            errorKind: "screenRecordingDenied",
+            errorMessage: screenRecordingCard(prompted).message,
+          },
+        ],
+        permission: { prompted },
+      });
       panel.open();
       broadcast();
     },

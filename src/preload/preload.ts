@@ -1,5 +1,5 @@
-// The renderer's whole view of main (SPEC §4.4 + Amendments 2, 9, 10 and 11): exactly the fifteen functions, each bound to
-// its one channel.
+// The renderer's whole view of main (SPEC §4.4 + Amendments 2, 9 and 10): exactly the twelve functions, each bound to its one
+// channel.
 // No generic send/invoke passthrough; listeners get the payload only, never the IPC event.
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { IPC, type IpcEvents, type SnapsolveApi } from "../shared/ipc";
@@ -26,9 +26,6 @@ const api: SnapsolveApi = {
   // No arguments cross: main opens a fixed URL / relaunches.
   openScreenRecordingSettings: () => ipcRenderer.invoke(IPC.screenRecordingSettingsOpen),
   relaunch: () => ipcRenderer.invoke(IPC.appRelaunch),
-  onVoice: subscribe(IPC.voiceState),
-  toggleVoice: () => ipcRenderer.invoke(IPC.voiceToggle),
-  openVoiceSettings: () => ipcRenderer.invoke(IPC.voiceSettingsOpen),
 };
 
 contextBridge.exposeInMainWorld("snapsolve", api);

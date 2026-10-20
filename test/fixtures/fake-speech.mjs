@@ -1,5 +1,6 @@
 // A stand-in for native/speech (task 063), run by Electron as node in e2e (SNAPSOLVE_TEST_SPEECH). It speaks the
-// helper's protocol: JSON lines on stdout; SIGINT or stdin closing stops it, printing the final text.
+// helper's protocol: JSON lines on stdout; SIGINT (sent only after "ready") or stdin closing stops it, printing the
+// final text.
 //   FAKE_SPEECH_SCENARIO  ok (default): ready, then one word per 80 ms as partials with a level
 //                         empty: ready, no words; the final text is ""
 //                         denied: an error line, kind micDenied, exit 1

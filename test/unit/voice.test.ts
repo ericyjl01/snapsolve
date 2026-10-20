@@ -189,6 +189,7 @@ describe("voice", () => {
   it("second Ctrl+Option+V sends: stop is SIGINT, a press while it finishes is ignored, the final text goes to send once", async () => {
     const t = setup();
     t.voice.toggle();
+    t.child().line({ type: "ready" });
     t.child().line({ type: "partial", text: "why the product" });
     await flush();
     t.voice.toggle();
@@ -210,6 +211,30 @@ describe("voice", () => {
     expect(t.spawn).toHaveBeenCalledTimes(2);
   });
 
+  it("a stop pressed before the helper is ready waits for its ready line, then SIGINT (a SIGINT before would kill it)", async () => {
+    const t = setup();
+    t.voice.toggle();
+    t.voice.toggle();
+    expect(t.child().signals).toEqual([]);
+    expect(t.last()).toEqual({ state: "stopping", text: "", key: "⌃⌥V" });
+    t.child().line({ type: "ready" });
+    await flush();
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send).toHaveBeenCalledWith(QUESTION);
+  });
+
+  it("a helper that never gets ready after the stop is killed at the stop timeout", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.voice.toggle();
+    t.voice.toggle();
+    vi.advanceTimersByTime(VOICE_STOP_TIMEOUT_MS);
+    expect(t.child().signals).toEqual(["SIGKILL"]);
+    expect(t.last()).toEqual({ state: "idle", note: userMessage("voiceFailed") });
+  });
+
   it("the final text is trimmed before it is sent", async () => {
     const t = setup();
     t.voice.toggle();
@@ -222,6 +247,8 @@ describe("voice", () => {
   it("a helper still running after its final line is stopped (no orphan process)", async () => {
     const t = setup();
     t.voice.toggle();
+    t.child().line({ type: "ready" });
+    await flush();
     t.voice.toggle();
     t.child().line({ type: "final", text: QUESTION });
     await flush();
@@ -248,6 +275,8 @@ describe("voice", () => {
   it("Esc also cancels while the helper is finishing", async () => {
     const t = setup();
     t.voice.toggle();
+    t.child().line({ type: "ready" });
+    await flush();
     t.voice.toggle();
     t.shortcut.press(ESCAPE);
     expect(t.child().signals).toEqual(["SIGINT", "SIGTERM"]);
@@ -338,9 +367,11 @@ describe("voice", () => {
   });
 
   it("a helper that never answers the stop is killed after the stop timeout, with the error note", async () => {
-    vi.useFakeTimers();
     const t = setup();
     t.voice.toggle();
+    t.child().line({ type: "ready" });
+    await flush();
+    vi.useFakeTimers();
     t.voice.toggle();
     vi.advanceTimersByTime(VOICE_STOP_TIMEOUT_MS - 1);
     expect(t.child().signals).toEqual(["SIGINT"]);

@@ -1,5 +1,5 @@
 // Error kinds and the text the card shows for each (SPEC §7.1). Shared by main and renderer: no Node imports.
-import type { Turn, VoiceDenial } from "./types";
+import type { Turn, VoiceCardKind } from "./types";
 
 export const ERROR_KINDS = [
   "claudeNotFound",
@@ -72,14 +72,18 @@ export function screenRecordingCard(prompted: boolean): ScreenRecordingCard {
     : { message: MESSAGES.screenRecordingDenied, actions: ["openSettings", "relaunch"] };
 }
 
-/** What a voice permission card shows (task 063): which permission to turn on, and Open System Settings. */
+/**
+ * What a voice card shows (task 063): which permission to turn on, with Open System Settings; or that the speech
+ * helper failed, with no button.
+ */
 export interface VoicePermissionCard {
   message: string;
   actions: "openSettings"[];
 }
 
-export function voicePermissionCard(denial: VoiceDenial): VoicePermissionCard {
-  return { message: MESSAGES[denial === "microphone" ? "microphoneDenied" : "speechDenied"], actions: ["openSettings"] };
+export function voicePermissionCard(kind: VoiceCardKind): VoicePermissionCard {
+  if (kind === "failed") return { message: MESSAGES.voiceFailed, actions: [] };
+  return { message: MESSAGES[kind === "microphone" ? "microphoneDenied" : "speechDenied"], actions: ["openSettings"] };
 }
 
 /** The one error type the app throws or returns. `message` is for the log; the UI shows `userMessage(kind)`. */

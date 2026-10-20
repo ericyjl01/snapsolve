@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { screenRecordingCard, SnapsolveError, voicePermissionCard } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
-import type { AssistantTurn, Config, Thread, VoiceDenial } from "../shared/types";
+import type { AssistantTurn, Config, Thread, VoiceCardKind, VoiceDenial } from "../shared/types";
 import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
@@ -63,6 +63,10 @@ export interface App {
   onVoice(text: string): Promise<string>;
   /** Voice was refused a permission: one unsaved card that says which to turn on; a dictation that works removes it. */
   onVoiceDenied(denial: VoiceDenial): Promise<void>;
+  /** The speech helper failed: the same card slot, saying so. */
+  onVoiceFailed(): Promise<void>;
+  /** The thread a capture or question would join is new, queued or running (a voice press is then ignored, 063). */
+  isAnswering(): boolean;
   /** The renderer's requests (arguments come from the renderer, so each is checked). */
   handlers: AppHandlers;
 }
@@ -217,6 +221,16 @@ export function createApp(deps: AppDeps): App {
     };
   }
 
+  /** The voice card (one at a time): a refused permission, or the helper failing. */
+  async function voiceCard(kind: VoiceCardKind): Promise<void> {
+    voiceCardId ??= randomUUID();
+    const title = kind === "microphone" ? "Microphone" : kind === "speechRecognition" ? "Speech Recognition" : "Voice input";
+    const errorKind = kind === "microphone" ? "microphoneDenied" : kind === "speechRecognition" ? "speechDenied" : "voiceFailed";
+    remember(permissionCard(voiceCardId, title, errorKind, voicePermissionCard(kind).message, { voice: kind }));
+    panel.open();
+    broadcast();
+  }
+
   async function threadOf(threadId: unknown): Promise<Thread> {
     if (!isUuid(threadId)) throw new SnapsolveError("threadNotFound", "invalid thread id");
     return store.getThread(threadId);
@@ -314,13 +328,13 @@ export function createApp(deps: AppDeps): App {
       return target.id;
     },
 
-    async onVoiceDenied(denial) {
-      voiceCardId ??= randomUUID();
-      const title = denial === "microphone" ? "Microphone" : "Speech Recognition";
-      const errorKind = denial === "microphone" ? "microphoneDenied" : "speechDenied";
-      remember(permissionCard(voiceCardId, title, errorKind, voicePermissionCard(denial).message, { voice: denial }));
-      panel.open();
-      broadcast();
+    onVoiceDenied: (denial) => voiceCard(denial),
+    onVoiceFailed: () => voiceCard("failed"),
+
+    isAnswering() {
+      if (fresh || !current) return false;
+      const thread = known.get(current);
+      return thread !== undefined && BUSY.has(thread.status);
     },
 
     handlers,

@@ -15,6 +15,8 @@ export const ESCAPE = "Escape";
 /** How long the helper may take to finish the transcript after the stop. */
 export const VOICE_STOP_TIMEOUT_MS = 15_000;
 export const VOICE_EMPTY_NOTE = "Didn't catch that.";
+/** A press while the current thread is still thinking or answering is ignored (063). */
+export const VOICE_BUSY_NOTE = "Wait for the answer, then ask.";
 /** The helper beside main.js (dist/ in dev, app/ when released). */
 export const SPEECH_HELPER = path.join("native", "snapsolve-speech");
 
@@ -99,6 +101,10 @@ export interface VoiceDeps {
   send: (text: string) => Promise<unknown>;
   /** The helper reported a refused permission: the panel's permission card. */
   onDenied: (denial: VoiceDenial) => void;
+  /** The helper crashed, could not start, failed or never finished: the panel's voice error card. */
+  onFailed: () => void;
+  /** The thread a question would join is thinking or answering (app.isAnswering): a press then is ignored. */
+  isAnswering: () => boolean;
   /** Shows the window without focus (panel.open). */
   showWindow: () => void;
   log: Pick<Logger, "info" | "warn" | "error">;
@@ -106,7 +112,10 @@ export interface VoiceDeps {
 }
 
 export interface Voice {
-  /** The voice hotkey and the mic buttons: idle → listening → (send) → idle; ignored while the helper finishes. */
+  /**
+   * The voice hotkey and the mic buttons: idle → listening → (send) → idle; ignored while the helper finishes, and a
+   * start is ignored while the current thread is thinking or answering.
+   */
   toggle(): void;
   /** Esc, or the window hidden: stop without sending. Idle: nothing. */
   cancel(): void;
@@ -167,7 +176,8 @@ export function createVoice(deps: VoiceDeps): Voice {
     if (run !== r) return;
     log.warn(event, fields);
     kill(r, "SIGTERM");
-    end(r, { state: "idle", note: userMessage("voiceFailed") });
+    end(r, { state: "idle" });
+    deps.onFailed();
   }
 
   function onMessage(r: Run, message: HelperMessage): void {
@@ -205,8 +215,11 @@ export function createVoice(deps: VoiceDeps): Voice {
         if (message.kind === "micDenied" || message.kind === "speechDenied") {
           end(r, { state: "idle" });
           deps.onDenied(message.kind === "micDenied" ? "microphone" : "speechRecognition");
+        } else if (message.kind === "unavailable") {
+          end(r, { state: "idle", note: userMessage("voiceUnavailable") });
         } else {
-          end(r, { state: "idle", note: userMessage(message.kind === "unavailable" ? "voiceUnavailable" : "voiceFailed") });
+          end(r, { state: "idle" });
+          deps.onFailed();
         }
         return;
     }
@@ -218,13 +231,19 @@ export function createVoice(deps: VoiceDeps): Voice {
       emit({ state: "idle", note: userMessage("voiceUnavailable") });
       return;
     }
+    if (deps.isAnswering()) {
+      log.info("voice.pressIgnored", { reason: "answering" });
+      emit({ state: "idle", note: VOICE_BUSY_NOTE });
+      return;
+    }
     deps.showWindow();
     let child: ChildProcess;
     try {
       child = deps.spawn(helper.path, helper.prefixArgs, { env: { ...deps.env }, stdio: ["pipe", "pipe", "pipe"] });
     } catch (e) {
       log.warn("voice.spawnFailed", { error: e });
-      emit({ state: "idle", note: userMessage("voiceFailed") });
+      emit({ state: "idle" });
+      deps.onFailed();
       return;
     }
     const r: Run = { child, text: "", level: 0, stopping: false, ready: false, exited: false, escHeld: false };
@@ -270,7 +289,8 @@ export function createVoice(deps: VoiceDeps): Voice {
       if (run !== r) return;
       log.warn("voice.stopTimedOut", { ms: stopTimeoutMs });
       kill(r, "SIGKILL");
-      end(r, { state: "idle", note: userMessage("voiceFailed") });
+      end(r, { state: "idle" });
+      deps.onFailed();
     }, stopTimeoutMs);
     show(r);
   }

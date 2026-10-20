@@ -214,6 +214,8 @@ async function start(): Promise<void> {
       voiceDenial = denial;
       void core.onVoiceDenied(denial);
     },
+    onFailed: () => void core.onVoiceFailed(),
+    isAnswering: () => core.isAnswering(),
     showWindow: () => panel.open(),
     log,
   });

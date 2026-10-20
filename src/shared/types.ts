@@ -86,13 +86,15 @@ export interface Thread {
   /**
    * Set only on a permission card: a panel-only entry (never saved) whose one errored turn says what to do. The macOS
    * Screen Recording card has `prompted`, which picks its buttons (`screenRecordingCard`); a voice card names the
-   * permission voice was refused (`voicePermissionCard`, task 063).
+   * permission voice was refused, or that the speech helper failed (`voicePermissionCard`, task 063).
    */
-  permission?: { prompted: boolean } | { voice: VoiceDenial };
+  permission?: { prompted: boolean } | { voice: VoiceCardKind };
 }
 
 /** The permission a dictation was refused (task 063). */
 export type VoiceDenial = "microphone" | "speechRecognition";
+/** What a voice card is about: a refused permission, or the speech helper failing. */
+export type VoiceCardKind = VoiceDenial | "failed";
 
 /**
  * main → renderer: the voice composer (task 063). `listening`: the helper records, `text` is the live transcript and

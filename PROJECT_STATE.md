@@ -3,13 +3,13 @@
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - 065 closed on the Mac 2026-10-20 (merge a3fb69b): a capture continues the current chat, "+" starts a new one,
-  no append key (⌃⌥⇧Q gone). Hand check (⌃⌥C twice → one card; + → new card) goes to the 032 checklist.
-- Found 072: the 032 checklist (only on keel/032) predates the redesign — bring it to master with the deferred
-  hand checks of 058–061, 064, 065. 063 (voice, swiftc 6.4 present) next per `tasks.py next`.
-- 032 waits for Eric to run the checklist. Backlog 033, 042, 053, 054, 056, 066–070.
+  no append key (⌃⌥⇧Q gone).
+- 072 closed: docs/checklists/macos.md is now on master — 032's 15 items with ⌃⌥C plus rows 16–21, the deferred
+  hand checks of 058–061, 064, 065. Eric runs that file for 032 (when 032 resumes, take master's copy).
+- Next: 073 (ARCHITECTURE app.ts line still names onAppend), then 063 (voice, swiftc 6.4 present).
+- Backlog 033, 042, 053, 054, 056, 066–070.
 
 ## Log
-2026-10-15 · 043 · closed · macOS config.json claudePath stores the resolved symlink (after realpath confirms it resolves) so Claude Code auto-updates do not break it; win32 keeps realpath; install passes platform (3f74473)
 2026-10-15 · 044 · closed · one SemVer compareVersions exported from steps.mjs (pre-release below release, build metadata ignored, null when unparsable) used by preflight, doctor and update; doctor warns it cannot compare unparsable versions (15f92c0)
 2026-10-15 · 045 · closed · steps.mjs exports renameRetrying, readJson, exists (follows links) and linkExists (dangling link counts); commands.mjs imports them and drops its copies; uninstall targets use linkExists (4baaef1)
 2026-10-15 · 046 · closed · findTranscript stats project dirs concurrently (32 workers, StoreDeps.stat injectable); same newest-mtime result and warnings (eea7d86)
@@ -49,3 +49,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)
 2026-10-19 · 071 · dropped · Eric chose option (b) — the two macOS-only e2e assertions stay as they are and 065 closes on the Mac, so there is nothing to platform-gate (-)
 2026-10-20 · 065 · closed · on the Mac: a capture continues the current chat (newest thread on disk after a restart), + starts a new one (preload newThread on thread:new, SPEC Amendment 10, twelve functions), a typed question after + starts a text thread, hotkeys.append removed and warned, neutral append text; .thumb[hidden]; hand check → 032; found 072 (a3fb69b)
+2026-10-20 · 072 · closed · docs/checklists/macos.md on master: 032's items with Ctrl+Option+C, follow-up and restart rows on the bottom composer, rows 16–21 for the deferred hand checks of 058, 059, 060, 061, 064, 065 (18ced94)

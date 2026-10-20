@@ -49,3 +49,4 @@
 2026-10-15 · 034 · closed · runner tests: a timed-out turn whose claude never closes settles at the SIGKILL (timeout + retry, queue moves on); a close after that settle emits nothing; found 042 (b7800f2)
 2026-10-15 · 043 · closed · macOS config.json claudePath stores the resolved symlink (after realpath confirms it resolves) so Claude Code auto-updates do not break it; win32 keeps realpath; install passes platform (3f74473)
 2026-10-15 · 044 · closed · one SemVer compareVersions exported from steps.mjs (pre-release below release, build metadata ignored, null when unparsable) used by preflight, doctor and update; doctor warns it cannot compare unparsable versions (15f92c0)
+2026-10-15 · 045 · closed · steps.mjs exports renameRetrying, readJson, exists (follows links) and linkExists (dangling link counts); commands.mjs imports them and drops its copies; uninstall targets use linkExists (4baaef1)

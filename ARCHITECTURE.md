@@ -18,13 +18,15 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `newThread`), the renderer's request handlers, runner events → panel, `resolveClaudeCommand`
   - `hotkeys.ts`: globalShortcut registration, debounce, pause/resume
   - `tray.ts`: tray menu and tooltip
-  - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the Screen Recording card's two actions (fixed settings URL, relaunch), hotkey labels per platform
-- `src/preload/preload.ts`: contextBridge exposing exactly the twelve functions of SPEC §4.4 as amended by Amendments 2, 9 and 10 (`copy` → `hide`; `newThread` added)
+  - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the permission cards' actions (fixed settings URLs: Screen Recording, Microphone, Speech Recognition; relaunch), hotkey labels per platform
+  - `voice.ts`: dictation (task 063): the speech helper's JSON-line protocol, listen → stop and send / Esc / hide cancel, the temporary Esc shortcut, `resolveSpeechHelper`
+- `src/preload/preload.ts`: contextBridge exposing exactly the fifteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10 and 11 (`copy` → `hide`; `newThread`; `onVoice`, `toggleVoice`, `openVoiceSettings`)
 - `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `styles.css`
 - `src/shared/`: `types.ts` (Thread, Turn, Config, events), `ipc.ts` (channel names), `errors.ts` (error kinds + user messages)
 - `prompts/system.md`: the system prompt
 - `assets/`: icons (tray, app)
-- `scripts/`: `build.mjs` (esbuild), `renderer-assets.mjs` (copies KaTeX CSS + fonts and the highlight.js theme into `dist/renderer/`), `smoke.mjs`, `make-problem-fixtures.ps1` (draws the live-test problem PNGs; Windows, run by hand); `release.mjs` (M2: assembles the plugin into a claude-skills marketplace folder, see `plugin/`)
+- `native/speech/` (063, macOS): `main.swift` (the on-device speech helper) and `Info.plist` (linked into it); built to `dist/native/snapsolve-speech`, released as `app/native/`
+- `scripts/`: `build.mjs` (esbuild; compiles `native/speech` on macOS), `renderer-assets.mjs` (copies KaTeX CSS + fonts and the highlight.js theme into `dist/renderer/`), `smoke.mjs`, `make-problem-fixtures.ps1` (draws the live-test problem PNGs; Windows, run by hand); `release.mjs` (M2: assembles the plugin into a claude-skills marketplace folder, see `plugin/`)
 - `test/`: `unit/`, `integration/` (fake claude), `e2e/` (Electron via playwright-core), `live/` (real claude), `fixtures/`
 - `plugin/` (M2): `.claude-plugin/plugin.json` (no `version`, in the repo or the release: claude-skills convention, DECISIONS 027), `skills/snapsolve/SKILL.md`, `skills/snapsolve/scripts/` (installer, plain Node ESM, built-ins only: `steps.mjs` = the install steps the commands compose, each taking its dependencies; its data-dir rules and config defaults mirror `paths.ts` / `config.ts`, kept in step by `test/unit/installer-steps.test.ts`; `commands.mjs` = the five commands over injected steps, returning `ok:`/`warn:`/`fail:` lines; `snapsolve.mjs` = the CLI the skill runs; `realSteps.mjs` = the real steps it wires, with the test hooks inert unless `SNAPSOLVE_TEST=1`; install state in `<data>/app/install.json`). Released as `<marketplace>/plugins/snapsolve/` = `plugin/` + `app/` (`main.js`, `preload.js`, `renderer/`, `prompts/`, `assets/`, `bootstrap/`, `package.json` with `main: "main.js"`, the root `package-lock.json`)
 - `bootstrap/` (M2): `boot.js` + `package.json` for the packaged launcher

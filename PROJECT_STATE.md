@@ -2,15 +2,14 @@
 
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- 065 closed on the Mac 2026-10-20 (merge a3fb69b): a capture continues the current chat, "+" starts a new one,
-  no append key (⌃⌥⇧Q gone).
-- 072 closed: docs/checklists/macos.md is now on master — 032's 15 items with ⌃⌥C plus rows 16–21, the deferred
-  hand checks of 058–061, 064, 065. Eric runs that file for 032 (when 032 resumes, take master's copy).
-- 073 closed (module map: app.ts names newThread, not onAppend). Next: 063 (voice, swiftc 6.4, macOS 26.6).
-- Backlog 033, 042, 053, 054, 056, 066–070.
+- Closed 2026-10-20: 065 (one chat + "+"), 072 (032 checklist on master), 073, 063 voice (merge 315f4c6):
+  ⌃⌥V dictates (on-device Apple Speech helper, native/speech, built by npm run build), again sends to the current
+  thread with a mic mark, Esc / hide cancel, ignored while the thread answers; preload 15 (SPEC Amendment 11).
+- Eric, on the Mac: run docs/checklists/macos.md (032) — rows 16–22 cover the redesign and voice. Voice in the
+  installed app needs a new release + /snapsolve update (or install) to ship the helper and usage strings.
+- Next: `tasks.py next`. Backlog 033, 042, 053, 054, 056, 066–070.
 
 ## Log
-2026-10-15 · 045 · closed · steps.mjs exports renameRetrying, readJson, exists (follows links) and linkExists (dangling link counts); commands.mjs imports them and drops its copies; uninstall targets use linkExists (4baaef1)
 2026-10-15 · 046 · closed · findTranscript stats project dirs concurrently (32 workers, StoreDeps.stat injectable); same newest-mtime result and warnings (eea7d86)
 2026-10-15 · 047 · closed · a failed turn that streamed an answer logs errors/stderr plus 'result: <n> chars omitted' instead of the result text; classification unchanged (473afe1)
 2026-10-17 · 048 · closed · macOS suite green: runner integration temp root realpath'd (macOS /var → /private/var), plus a symlinked-data-dir test; realSteps matches claude.exe by win32 basename so Windows paths match on any host (049 folded in) (9893090)
@@ -50,3 +49,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-20 · 065 · closed · on the Mac: a capture continues the current chat (newest thread on disk after a restart), + starts a new one (preload newThread on thread:new, SPEC Amendment 10, twelve functions), a typed question after + starts a text thread, hotkeys.append removed and warned, neutral append text; .thumb[hidden]; hand check → 032; found 072 (a3fb69b)
 2026-10-20 · 072 · closed · docs/checklists/macos.md on master: 032's items with Ctrl+Option+C, follow-up and restart rows on the bottom composer, rows 16–21 for the deferred hand checks of 058, 059, 060, 061, 064, 065 (18ced94)
 2026-10-20 · 073 · closed · ARCHITECTURE module map: app.ts's pipeline line names onCapture and newThread (onAppend was removed in 065); the edit rides the close commit (memory file) (3188a1a)
+2026-10-20 · 063 · closed · voice follow-up: hotkeys.voice Control+Alt+V shows the window and runs the on-device speech helper (native/speech Swift, SpeechAnalyzer/SFSpeechRecognizer, built by npm run build, released as app/native); listening bar with live transcript; the key again sends via the follow-up path to the current thread (or a text thread) as a voice-marked turn; Esc/hide cancel, ignored while the thread answers, empty → note, denied → settings card, failure → error card; preload 15 (Amendment 11); hand check → 032 row 22 (315f4c6)

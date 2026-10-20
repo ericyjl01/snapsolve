@@ -1644,7 +1644,7 @@
     {
       "id": "063",
       "title": "voice follow-up: Ctrl+Option+V starts, Ctrl+Option+V again sends to the newest thread",
-      "status": "open",
+      "status": "closed",
       "priority": 6,
       "milestone": 3,
       "deps": [
@@ -1653,17 +1653,22 @@
       ],
       "file": "docs/tasks/063-voice-follow-up.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 2,
+      "branch": "keel/063",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-20",
+      "commit": "315f4c6",
       "notes": "Eric 2026-10-17: ⌃⌥V starts and stops; Esc cancels; engine macOS built-in via Swift helper (DECISIONS speech-to-text).",
       "kind": "task",
-      "test_cmd": "npx vitest run test/unit/voice.test.ts test/unit/hotkeys.test.ts test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "test_cmd": "npx vitest run test/unit/voice.test.ts test/unit/hotkeys.test.ts test/unit/config.test.ts test/unit/app.test.ts test/unit/runner.test.ts test/unit/ipc.test.ts test/unit/panel.test.ts test/unit/macos.test.ts test/unit/errors.test.ts test/unit/installer-steps.test.ts test/unit/release.test.ts test/e2e/panel.e2e.test.ts test/e2e/lifecycle.e2e.test.ts",
+      "tests_commit": "f35351e48fa8baf6771fbb3d4e83c27e5c5f3263",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "bfec4966fad19ad516f31e6c9ed6b13c9dc2de22",
+        "reasons": "voice.test proves helper JSON-line parsing (malformed ignored), toggle start->SIGINT->send once, presses ignored while stopping or while the thread answers, Esc/hide cancel with Esc unregistered after send/cancel/error, empty->note, denied->onDenied, crash/spawn-fail/timeout->error card, no orphan helper, transcript never logged; config/hotkeys prove Control+Alt+V default, validation and clashes; app/runner prove reuse of the followUp path with voice mark (newest thread, text thread if none); panel e2e with fake helper proves hotkey->listening bar (no focus)->hotkey->mic-marked answered turn, Esc, mic buttons, empty, denied and crash cards; task tests and npm test green (Mac hand check is checklist row 22)",
+        "at": "2026-10-20"
+      }
     },
     {
       "id": "064",

@@ -1874,23 +1874,28 @@
     {
       "id": "073",
       "title": "ARCHITECTURE module map: app.ts no longer has onAppend (065)",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 3,
       "deps": [],
       "file": "docs/tasks/073-architecture-module-map-app-ts-no-longer.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/073",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-20",
+      "commit": "3188a1a",
       "notes": "",
       "kind": "task",
       "test_cmd": null,
       "tests_commit": null,
       "no_tests": "a one-word documentation fix in ARCHITECTURE.md's module map; no behavior",
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "383712a8b8a5a0d574ed10f05f13b40205bab8d5",
+        "reasons": "No-tests exemption legitimate (one-line ARCHITECTURE.md module-map doc fix, no behavior); branch tip 383712a has no code diff vs master, edit carried in the working tree as memory per keel; Done-when verified: grep -c onAppend ARCHITECTURE.md = 0, app.ts line 18 names onCapture and newThread, matching src/main/app.ts (no onAppend in src); only that line changed; npm test exit 0 (871 passed, 7 skipped)",
+        "at": "2026-10-20"
+      }
     }
   ]
 }

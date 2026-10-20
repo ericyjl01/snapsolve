@@ -204,6 +204,7 @@ async function start(): Promise<void> {
     [IPC.threadsList]: core.handlers.listThreads,
     [IPC.threadFollowUp]: core.handlers.followUp,
     [IPC.threadRetry]: core.handlers.retry,
+    [IPC.threadNew]: core.handlers.newThread,
     // The title bar's × hides as Esc does (SPEC Amendment 9).
     [IPC.panelHide]: async () => panel.close(),
     [IPC.externalOpen]: core.handlers.openExternal,
@@ -245,7 +246,6 @@ async function start(): Promise<void> {
     globalShortcut,
     config,
     onCapture: captureInto(core.onCapture),
-    onAppend: captureInto(core.onAppend),
     onToggle: () => panel.toggle(),
     notify,
     label: (accelerator) => hotkeyLabel(accelerator, process.platform),
@@ -262,10 +262,8 @@ async function start(): Promise<void> {
 
   if (test) {
     (globalThis as { snapsolveTest?: unknown }).snapsolveTest = {
-      /** Feeds a PNG file through the same path as a capture; resolves with the new thread's id. */
+      /** Feeds a PNG file through the same path as a capture; resolves with its thread's id. */
       captureFromFile: async (png: string) => core.onCapture({ png: readImage(png).toPNG() }),
-      /** The same through the append path (the most recent capture's thread). */
-      appendFromFile: async (png: string) => core.onAppend({ png: readImage(png).toPNG() }),
       hotkeyStatus: () => keys.status(),
       /** What the show/hide hotkey does. */
       toggle: () => panel.toggle(),

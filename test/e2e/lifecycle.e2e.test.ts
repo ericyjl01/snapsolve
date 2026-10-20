@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -66,9 +66,8 @@ function exitOf(app: ElectronApplication, timeoutMs: number): Promise<number | n
 const panelVisible = (app: ElectronApplication) => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible());
 
 type TestHooks = {
-  hotkeyStatus(): { capture: boolean; append: boolean; toggle: boolean; paused: boolean };
+  hotkeyStatus(): { capture: boolean; toggle: boolean; paused: boolean };
   captureFromFile(png: string): Promise<string>;
-  appendFromFile(png: string): Promise<string>;
 };
 
 describe("app lifecycle (e2e)", () => {
@@ -106,23 +105,23 @@ describe("app lifecycle (e2e)", () => {
     }
   }, 30_000);
 
-  it("the three hotkeys are registered at startup", async () => {
+  it("the two hotkeys are registered at startup; the old append key (065) is not", async () => {
     const first = await launch();
     try {
       const status = await first.app.evaluate(() => (globalThis as unknown as { snapsolveTest: TestHooks }).snapsolveTest.hotkeyStatus());
-      expect(status).toEqual({ capture: true, append: true, toggle: true, paused: false });
+      expect(status).toEqual({ capture: true, toggle: true, paused: false });
       const registered = await first.app.evaluate(({ globalShortcut }) => [
         globalShortcut.isRegistered("Control+Alt+C"),
         globalShortcut.isRegistered("Control+Alt+Shift+Q"),
         globalShortcut.isRegistered("Control+Alt+X"),
       ]);
-      expect(registered).toEqual([true, true, true]);
+      expect(registered).toEqual([true, false, true]);
     } finally {
       await first.close();
     }
   }, 60_000);
 
-  it("appendFromFile adds a screenshot to the most recent capture's thread", async () => {
+  it("a second capture joins the first capture's thread (065); there is no append hook", async () => {
     const first = await launch();
     try {
       const hooks = (fn: string) =>
@@ -130,14 +129,13 @@ describe("app lifecycle (e2e)", () => {
           (_e, [name, png]) => (globalThis as unknown as { snapsolveTest: Record<string, (p: string) => Promise<string>> }).snapsolveTest[name](png),
           [fn, PROBLEM] as const,
         );
-      const older = await hooks("captureFromFile");
+      expect(await first.app.evaluate(() => typeof (globalThis as unknown as { snapsolveTest: Record<string, unknown> }).snapsolveTest.appendFromFile)).toBe("undefined");
       const latest = await hooks("captureFromFile");
-      const appended = await hooks("appendFromFile");
-      expect(appended).toBe(latest);
-      expect(appended).not.toBe(older);
+      const again = await hooks("captureFromFile");
+      expect(again).toBe(latest);
       const dir = path.join(first.dataDir, "threads", latest);
       expect(existsSync(path.join(dir, "002.png"))).toBe(true);
-      expect(existsSync(path.join(first.dataDir, "threads", older, "002.png"))).toBe(false);
+      expect(readdirSync(path.join(first.dataDir, "threads"))).toEqual([latest]);
       await expect
         .poll(
           () => {

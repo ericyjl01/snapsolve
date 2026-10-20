@@ -18,6 +18,11 @@
         <path d="M5 8.5l2 2 4-5"></path>
       </svg>
       <span class="name">snapsolve</span>
+      <button id="new-chat" class="icon new-chat" type="button" aria-label="New chat" title="New chat">
+        <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path d="M7 2v10M2 7h10"></path>
+        </svg>
+      </button>
       <button id="hide" class="icon hide" type="button" aria-label="Hide window" title="Hide (Esc)">
         <svg aria-hidden="true" width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7">
           <path d="M3 3l8 8M11 3l-8 8"></path>
@@ -25,8 +30,8 @@
       </button>
     </header>
     <div id="content" class="content">
-      <main id="threads" aria-live="polite"></main>
       <p id="empty" class="empty">Press the snapsolve hotkey to solve what's on your screen.</p>
+      <main id="threads" aria-live="polite"></main>
     </div>
     <div id="composer" class="composer">
       <label class="visually-hidden" for="follow-up">Ask a follow-up</label>

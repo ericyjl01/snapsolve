@@ -141,10 +141,12 @@ describe("buildUserMessage", () => {
     expect(content(buildUserMessage("followUp", [], "Why divide by 2?"))).toEqual([{ type: "text", text: "Why divide by 2?" }]);
   });
 
-  it("append: the image, then 'Here is the next part.'; the media type is preserved", () => {
+  // 065: every capture continues the current thread, so the appended screenshot may be a new problem.
+  it("append: the image, then the neutral append text; the media type is preserved", () => {
+    expect(APPEND_TEXT).toBe("Here is another screenshot. If it is unrelated to the earlier problem, treat it as a new question.");
     expect(content(buildUserMessage("append", [JPEG]))).toEqual([
       { type: "image", source: { type: "base64", media_type: "image/jpeg", data: JPEG.data } },
-      { type: "text", text: "Here is the next part." },
+      { type: "text", text: "Here is another screenshot. If it is unrelated to the earlier problem, treat it as a new question." },
     ]);
   });
 

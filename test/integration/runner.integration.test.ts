@@ -260,7 +260,7 @@ describe("runner with the fake claude", () => {
     const text = blocks[2].text as string;
     expect(text).toContain("Earlier answers in this thread:");
     expect(text).toContain("Answer 1: saw 1 image(s).");
-    expect(text).toContain("Here is the next part.");
+    expect(text).toContain("Here is another screenshot. If it is unrelated to the earlier problem, treat it as a new question.");
 
     expect(after.transcriptPath).toBe(path.join(dataDir, "threads", t.id, `${after.sessionId}.jsonl`));
     const done = events.at(-1) as Extract<RunnerEvent, { type: "done" }>;

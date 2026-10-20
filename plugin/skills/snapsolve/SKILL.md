@@ -37,6 +37,7 @@ It checks Node, Claude Code and its login, installs the app into the user's loca
 When it succeeds, tell the user:
 
 - snapsolve runs in the notification area (Windows) or the menu bar (macOS), and the hotkey the output names (Ctrl+Alt+C on Windows, Ctrl+Option+C on macOS, unless they changed it) captures the screen and opens the answer panel.
+- **One chat**: each capture continues the chat on screen, so the answer can refer to the earlier screenshots. The **+** at the top right starts a new one; use it when the next question is unrelated, since a continuing chat resends the earlier screenshots and uses more of the plan.
 - **Show/hide**: Ctrl+Option+X (Ctrl+Alt+X on Windows; `hotkeys.toggle` in config.json) shows the snapsolve window or hides it completely; the menu-bar item Show/Hide snapsolve does the same.
 - **Screen Recording (macOS)**: walk them through it. The first capture makes macOS ask for Screen Recording; they turn snapsolve on in System Settings → Privacy & Security → Screen Recording, then click Relaunch on the snapsolve card (macOS only applies the grant to a restarted app). Until then the card offers Open System Settings and Relaunch.
 - **AltGr** (Windows): on German, French and Polish keyboard layouts Ctrl+Alt is the same as AltGr, so Ctrl+Alt+C also catches AltGr+C (that types ć on a Polish keyboard). If they need that key, change `hotkeys.capture` in the config.json the output names.

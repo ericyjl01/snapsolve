@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IPC, PRELOAD_CHANNELS } from "../../src/shared/ipc";
 
 describe("IPC contract", () => {
-  it("maps exactly the eleven preload functions (SPEC §4.4 + Amendments 2 and 9)", () => {
+  it("maps exactly the twelve preload functions (SPEC §4.4 + Amendments 2, 9 and 10)", () => {
     expect(Object.keys(PRELOAD_CHANNELS).sort()).toEqual(
       [
         "onDelta",
@@ -11,6 +11,7 @@ describe("IPC contract", () => {
         "listThreads",
         "followUp",
         "retry",
+        "newThread",
         "hide",
         "openExternal",
         "clearHistory",
@@ -25,6 +26,11 @@ describe("IPC contract", () => {
     expect(Object.values(IPC)).not.toContain("clipboard:copy");
     expect(Object.keys(PRELOAD_CHANNELS)).toContain("hide");
     expect(Object.values(IPC)).toContain("panel:hide");
+  });
+
+  it("New chat is one call on thread:new (065)", () => {
+    expect(PRELOAD_CHANNELS.newThread).toBe("thread:new");
+    expect(Object.values(IPC)).toContain("thread:new");
   });
 
   it("channel names are area:verb and unique", () => {

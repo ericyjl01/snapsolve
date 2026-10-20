@@ -1,14 +1,16 @@
-// The panel UI (SPEC §4.2, Amendment 9: mockup A2): one card per thread, newest first. Each card has a header row
-// (thumbnail, title, time); the newest thread's card is open below it — the conversation with rendered answers,
+// The panel UI (SPEC §4.2, Amendments 9–10: mockup A2): one card per thread, newest first. Each card has a header
+// row (thumbnail, title, time); the newest thread's card is open below it — the conversation with rendered answers,
 // "Thinking…" until the first text arrives, the streamed answer, Retry on error and a status line — and older
 // threads are one-line rows that open in place on click. One composer pinned at the bottom of the window sends
-// follow-ups to the newest thread, and the title bar's × hides the window (as Esc does in main). Talks to main only
+// follow-ups to the newest thread. The title bar's "+" starts a new chat: every card becomes a row until the next
+// capture or typed question starts a thread (the composer then starts a text thread). Its × hides the window (as
+// Esc does in main). Talks to main only
 // through `window.snapsolve` (SPEC §4.4); model output goes through render.ts. On macOS a missing Screen Recording
 // grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings / Relaunch,
 // nothing else.
 import { continuedNote, screenRecordingCard, userMessage } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
-import type { AssistantTurn, Thread } from "../shared/types";
+import type { AssistantTurn, Thread, UserTurn } from "../shared/types";
 import { renderAnswer } from "./render";
 
 declare global {
@@ -21,6 +23,9 @@ interface Card {
   kind: "thread";
   root: HTMLElement;
   header: HTMLButtonElement;
+  thumb: HTMLImageElement;
+  /** The header thumbnail did not load: a thread that began with a typed question has no first screenshot. */
+  thumbMissing: boolean;
   title: HTMLElement;
   time: HTMLElement;
   body: HTMLElement;
@@ -53,8 +58,12 @@ const streams = new Map<string, string>();
 const pending = new Set<string>();
 /** Older threads the user opened (the newest is always open). */
 const opened = new Set<string>();
-/** The newest thread that takes follow-ups: the composer's target; null with no threads. */
+/** The newest thread that takes follow-ups: the composer's target; null with no threads or after "+". */
 let newest: string | null = null;
+/** The newest thread on screen (whether or not "+" was clicked). */
+let top: string | null = null;
+/** Set by "+": `top` when it was clicked; cleared once another thread is on top. Undefined: not a new chat. */
+let freshAfter: string | null | undefined;
 
 const BUSY = new Set<Thread["status"]>(["new", "queued", "running"]);
 const isBusy = (t: Thread) => BUSY.has(t.status) || pending.has(t.id);
@@ -88,7 +97,8 @@ function createCard(thread: Thread): Card {
   const time = el("span", "card-time");
   const text = el("span", "card-text");
   text.append(title, time);
-  header.append(thumbnail(thread.id, 1), text);
+  const thumb = thumbnail(thread.id, 1);
+  header.append(thumb, text);
   const body = el("div", "card-body");
   const turns = el("div", "turns");
   const live = el("div", "live");
@@ -99,6 +109,11 @@ function createCard(thread: Thread): Card {
   const status = el("p", "status");
   body.append(turns, live, actions, status);
   root.append(header, body);
+  const card: Card = { kind: "thread", root, header, thumb, thumbMissing: false, title, time, body, turns, live, retry, status };
+  thumb.addEventListener("error", () => {
+    card.thumbMissing = true;
+    thumb.hidden = true;
+  });
 
   header.addEventListener("click", () => {
     if (thread.id === newest) return;
@@ -114,7 +129,7 @@ function createCard(thread: Thread): Card {
       update(thread.id);
     });
   });
-  return { kind: "thread", root, header, title, time, body, turns, live, retry, status };
+  return card;
 }
 
 function createPermissionCard(thread: Thread): PermissionCard {
@@ -149,7 +164,7 @@ function flash(button: HTMLButtonElement, text: string): void {
   setTimeout(() => (button.textContent = label), 1200);
 }
 
-/** The thread's own title, else the first line of its first answer as plain text, else "Screenshot". */
+/** The thread's own title, else the first line of its first answer as plain text, else its first question, else "Screenshot". */
 function titleOf(thread: Thread): string {
   if (thread.title.trim()) return thread.title.trim();
   const answer = thread.turns.find((t): t is AssistantTurn => t.role === "assistant" && !t.isError);
@@ -157,7 +172,12 @@ function titleOf(thread: Thread): string {
     .split("\n")
     .map((l) => l.replace(/[*_`#>$\\]/g, "").trim())
     .find(Boolean);
-  return line || "Screenshot";
+  const asked = firstUserTurn(thread);
+  return line || (asked?.kind === "text" ? asked.text.trim() : "") || "Screenshot";
+}
+
+function firstUserTurn(thread: Thread): UserTurn | undefined {
+  return thread.turns.find((t): t is UserTurn => t.role === "user");
 }
 
 /** "Just now", "5 min ago", a time today, else the date and time. */
@@ -173,14 +193,14 @@ function timeOf(thread: Thread, now = Date.now()): string {
 
 function renderTurns(card: Card, thread: Thread): void {
   const nodes: Node[] = [];
-  let screenshots = 0;
+  const first = firstUserTurn(thread);
   for (const turn of thread.turns) {
     if (turn.role === "user") {
       const note = continuedNote(turn);
       if (note) nodes.push(el("p", "note", note));
-      // The first screenshot is the card's thumbnail; appended ones show where they joined.
+      // A thread's opening screenshot is the card's thumbnail; later ones show where they joined.
       if (turn.kind === "screenshot") {
-        if (++screenshots > 1) nodes.push(thumbnail(thread.id, Number.parseInt(turn.file, 10)));
+        if (turn !== first) nodes.push(thumbnail(thread.id, Number.parseInt(turn.file, 10)));
       } else {
         nodes.push(el("p", "question", turn.text));
       }
@@ -225,6 +245,7 @@ function update(threadId: string): void {
   card.root.classList.toggle("older", thread.id !== newest);
   card.root.classList.toggle("collapsed", !open);
   card.header.setAttribute("aria-expanded", String(open));
+  card.thumb.hidden = card.thumbMissing || firstUserTurn(thread)?.kind === "text";
   card.body.hidden = !open;
   card.title.textContent = titleOf(thread);
   card.time.textContent = timeOf(thread);
@@ -241,8 +262,8 @@ function update(threadId: string): void {
 }
 
 function updateComposer(): void {
-  box.disabled = newest === null;
-  send.disabled = newest === null || box.value.trim() === "";
+  box.placeholder = newest === null ? "Ask a new question" : "Ask a follow-up";
+  send.disabled = box.value.trim() === "";
 }
 
 /** Puts the cards in newest-first order, moving only those out of place (a moved node would lose focus). */
@@ -256,7 +277,9 @@ function layout(): void {
       cards.delete(id);
     }
   }
-  newest = order.find((t) => !t.permission)?.id ?? null;
+  top = order.find((t) => !t.permission)?.id ?? null;
+  if (freshAfter !== undefined && top !== freshAfter) freshAfter = undefined;
+  newest = freshAfter === undefined ? top : null;
   for (const id of [...opened]) if (!threads.has(id) || id === newest) opened.delete(id);
   let previous: Element | null = null;
   for (const thread of order) {
@@ -270,7 +293,10 @@ function layout(): void {
     previous = card.root;
     update(thread.id);
   }
-  empty.hidden = threads.size > 0;
+  empty.textContent =
+    threads.size === 0 ? "Press the snapsolve hotkey to solve what's on your screen." : "New chat. Press the snapsolve hotkey or type a question.";
+  // Shown with no threads at all, and after "+" until the new thread arrives.
+  empty.hidden = threads.size > 0 && freshAfter === undefined;
   updateComposer();
 }
 
@@ -295,12 +321,20 @@ api.onDone(({ threadId, thread }) => {
   layout();
 });
 
+/** A follow-up to the newest thread; with none (no threads, or after "+") a new text thread. */
 function sendFollowUp(): void {
   const threadId = newest;
   const text = box.value.trim();
-  if (!threadId || !text) return;
+  if (!text) return;
   box.value = "";
   fitComposer();
+  if (!threadId) {
+    api.newThread(text).catch(() => {
+      box.value = text;
+      fitComposer();
+    });
+    return;
+  }
   pending.add(threadId);
   update(threadId);
   api.followUp(threadId, text).catch(() => {
@@ -326,6 +360,16 @@ box.addEventListener("keydown", (event) => {
 box.addEventListener("input", fitComposer);
 send.addEventListener("click", sendFollowUp);
 (document.getElementById("hide") as HTMLButtonElement).addEventListener("click", () => void api.hide().catch(() => undefined));
+// "+": main starts the next capture or question in a new thread; here every card becomes a row until it arrives.
+(document.getElementById("new-chat") as HTMLButtonElement).addEventListener("click", () => {
+  const was = freshAfter;
+  freshAfter = top;
+  layout();
+  api.newThread().catch(() => {
+    freshAfter = was;
+    layout();
+  });
+});
 // Relative times ("5 min ago") move on while the window is up.
 setInterval(() => {
   for (const [id, card] of cards) {

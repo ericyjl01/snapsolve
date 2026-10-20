@@ -1,21 +1,14 @@
 # PROJECT_STATE
 
 ## Now
-Everything is pushed to https://github.com/ericyjl01/snapsolve.git — master and keel/065. Work moves back to the Mac:
-Eric chose (b) on 2026-10-19 — the two macOS-only e2e assertions stay as they are, 071 is dropped, ⌃⌥⇧Q is gone (065
-already removes it), and 063 + 032 are his on the Mac. `npm test` is green there; in a Linux cloud session it is
-876/878 (panel.e2e content protection, userdata.e2e "without the override" — docs/issues.md 2026-10-18).
-- 065 is open and finished on keel/065 (caa71ef): tests db814a5 (red ok), code c0f97ed, 5ac3136 (`.thumb[hidden]` —
-  `display: block` beat the UA `[hidden]`, which is why the "+ button" e2e failed), f518147 (SKILL.md "One chat").
-  SPEC Amendment 10, 5 DECISIONS rows and the ARCHITECTURE preload line (twelve, `newThread`) are on master.
-- ON THE MAC, to finish 065: `git pull` → `tasks.py start 065` → run both Done-when commands → `tasks.py brief 065` +
-  a fresh Opus reviewer → `tasks.py close 065`. No review was recorded here on purpose: it binds to the branch tip,
-  and `start` on the Mac merges master in and moves that tip, which would make it stale at once.
-- Then `tasks.py next` → 063 (voice; needs swiftc). 032 still waits for your checklist results. Backlog 033, 042,
-  053, 054, 056, 066–070.
+Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
+- 065 closed on the Mac 2026-10-20 (merge a3fb69b): a capture continues the current chat, "+" starts a new one,
+  no append key (⌃⌥⇧Q gone). Hand check (⌃⌥C twice → one card; + → new card) goes to the 032 checklist.
+- Found 072: the 032 checklist (only on keel/032) predates the redesign — bring it to master with the deferred
+  hand checks of 058–061, 064, 065. 063 (voice, swiftc 6.4 present) next per `tasks.py next`.
+- 032 waits for Eric to run the checklist. Backlog 033, 042, 053, 054, 056, 066–070.
 
 ## Log
-2026-10-15 · 034 · closed · runner tests: a timed-out turn whose claude never closes settles at the SIGKILL (timeout + retry, queue moves on); a close after that settle emits nothing; found 042 (b7800f2)
 2026-10-15 · 043 · closed · macOS config.json claudePath stores the resolved symlink (after realpath confirms it resolves) so Claude Code auto-updates do not break it; win32 keeps realpath; install passes platform (3f74473)
 2026-10-15 · 044 · closed · one SemVer compareVersions exported from steps.mjs (pre-release below release, build metadata ignored, null when unparsable) used by preflight, doctor and update; doctor warns it cannot compare unparsable versions (15f92c0)
 2026-10-15 · 045 · closed · steps.mjs exports renameRetrying, readJson, exists (follows links) and linkExists (dangling link counts); commands.mjs imports them and drops its copies; uninstall targets use linkExists (4baaef1)
@@ -55,3 +48,4 @@ already removes it), and 063 + 032 are his on the Mac. `npm test` is green there
 2026-10-18 · 071 · blocked · platform-gating the two macOS-only e2e assertions is 065's own block question (option a), so it waits for Eric rather than me answering it myself → not started (-)
 2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)
 2026-10-19 · 071 · dropped · Eric chose option (b) — the two macOS-only e2e assertions stay as they are and 065 closes on the Mac, so there is nothing to platform-gate (-)
+2026-10-20 · 065 · closed · on the Mac: a capture continues the current chat (newest thread on disk after a restart), + starts a new one (preload newThread on thread:new, SPEC Amendment 10, twelve functions), a typed question after + starts a text thread, hotkeys.append removed and warned, neutral append text; .thumb[hidden]; hand check → 032; found 072 (a3fb69b)

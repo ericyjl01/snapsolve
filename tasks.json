@@ -1694,7 +1694,7 @@
     {
       "id": "065",
       "title": "threads: capture continues the chat, + button starts a new one, no append key",
-      "status": "open",
+      "status": "closed",
       "priority": 5,
       "milestone": 3,
       "deps": [
@@ -1705,14 +1705,19 @@
       "attempts": 1,
       "branch": "keel/065",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-20",
+      "commit": "a3fb69b",
       "notes": "Eric 2026-10-17 (DECISIONS conversation-model row).",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/capture.test.ts test/unit/app.test.ts test/unit/config.test.ts test/unit/hotkeys.test.ts test/unit/ipc.test.ts test/unit/runner.test.ts test/unit/installer-steps.test.ts test/integration/runner.integration.test.ts test/e2e/panel.e2e.test.ts test/e2e/lifecycle.e2e.test.ts",
       "tests_commit": "db814a5ad3a4635bb6ac5a5b0efe704378ee9bb1",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "ab35c9d1ecc3f8c502fb93571c34e36c8ff937da",
+        "reasons": "app.test proves a capture joins the current thread as an append turn, first capture starts one, + (newThread) makes only the next capture or typed question start a new thread, the newest thread on disk is current after restart, the cap rollover still seeds; config/hotkeys tests prove hotkeys.append is ignored with one warning and never registered; runner tests pin the neutral append text; panel e2e proves the + button (New chat, before the x) collapses the card and starts fresh threads via the twelfth preload call; task tests and npm test green on macOS",
+        "at": "2026-10-20"
+      }
     },
     {
       "id": "066",
@@ -1838,6 +1843,27 @@
       "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts test/e2e/userdata.e2e.test.ts",
       "tests_commit": null,
       "no_tests": null,
+      "review": null
+    },
+    {
+      "id": "072",
+      "title": "macOS checklist: add the redesign hand checks (058–061, 064, 065)",
+      "status": "open",
+      "priority": 5,
+      "milestone": 3,
+      "deps": [],
+      "file": "docs/tasks/072-macos-checklist-add-the-redesign-hand-ch.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "Found closing 065: docs/checklists/macos.md (only on parked keel/032, a402d20) predates the redesign — it says Ctrl+Option+Q and has none of the hand checks 058 (drag), 059 (resize), 060 (⌃⌥X show/hide), 061 (A2 look, × hides), 064 (⌃⌥C) and 065 (⌃⌥C twice → one card; + then ⌃⌥C → new card; ⌃⌥⇧Q does nothing) deferred to 032. Bring the checklist onto master with those items so Eric runs one current list.",
+      "kind": "task",
+      "test_cmd": null,
+      "tests_commit": null,
+      "no_tests": "a manual checklist document for Eric; no behavior to test",
       "review": null
     }
   ]

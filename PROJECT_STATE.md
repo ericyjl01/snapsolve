@@ -1,18 +1,17 @@
 # PROJECT_STATE
 
 ## Now
-Everything is pushed to https://github.com/ericyjl01/snapsolve.git — master and keel/065. Work moves back to the Mac:
-Eric chose (b) on 2026-10-19 — the two macOS-only e2e assertions stay as they are, 071 is dropped, ⌃⌥⇧Q is gone (065
-already removes it), and 063 + 032 are his on the Mac. `npm test` is green there; in a Linux cloud session it is
-876/878 (panel.e2e content protection, userdata.e2e "without the override" — docs/issues.md 2026-10-18).
-- 065 is open and finished on keel/065 (caa71ef): tests db814a5 (red ok), code c0f97ed, 5ac3136 (`.thumb[hidden]` —
-  `display: block` beat the UA `[hidden]`, which is why the "+ button" e2e failed), f518147 (SKILL.md "One chat").
-  SPEC Amendment 10, 5 DECISIONS rows and the ARCHITECTURE preload line (twelve, `newThread`) are on master.
-- ON THE MAC, to finish 065: `git pull` → `tasks.py start 065` → run both Done-when commands → `tasks.py brief 065` +
-  a fresh Opus reviewer → `tasks.py close 065`. No review was recorded here on purpose: it binds to the branch tip,
-  and `start` on the Mac merges master in and moves that tip, which would make it stale at once.
-- Then `tasks.py next` → 063 (voice; needs swiftc). 032 still waits for your checklist results. Backlog 033, 042,
-  053, 054, 056, 066–070.
+All pushed: master 7c6434e, keel/065 caa71ef. 065's code is finished; only its close is left, and per Eric's (b)
+(DECISIONS 2026-10-19) it closes on the Mac. A goal run on 2026-10-20 re-verified that and halted: 065's Done-when
+command on master is 1 failed | 377 passed — only panel.e2e "is content-protected" (`expected false to be true`,
+line 150), which fails on master too, where 065 is not merged. So it is the base branch's platform failure, not 065's;
+`npm test` here is 876/878 and keel's close gate can never pass in a Linux cloud session (docs/issues.md 2026-10-18).
+- 065 open on keel/065: tests db814a5 (red ok), code c0f97ed, 5ac3136 (`.thumb[hidden]` — `display: block` beat the
+  UA `[hidden]`, the "+ button" e2e failure), f518147 (SKILL.md "One chat"). Amendment 10 + 5 DECISIONS rows on master.
+- ON THE MAC: `git pull` → `tasks.py start 065` → both Done-when commands → `tasks.py brief 065` + a fresh Opus
+  reviewer → `tasks.py close 065`. No review is recorded on purpose: it binds to the branch tip, and `start` on the
+  Mac merges master in and moves that tip, which would make it stale at once.
+- Then 063 (voice; needs swiftc, absent here). 032 waits for your checklist results. Backlog 033, 042, 053–056, 066–070.
 
 ## Log
 2026-10-15 · 034 · closed · runner tests: a timed-out turn whose claude never closes settles at the SIGKILL (timeout + retry, queue moves on); a close after that settle emits nothing; found 042 (b7800f2)

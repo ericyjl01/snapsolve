@@ -1,11 +1,15 @@
-// The macOS pieces of startup and the Screen Recording card (SPEC §7.1, §9.1, Amendment 2): a menu-bar app without
-// a Dock icon whose claude gets the login shell's PATH, the two argument-free card actions, and hotkey names as
-// the platform writes them. The platform is a parameter; every other platform is left untouched.
+// The macOS pieces of startup and the permission cards (SPEC §7.1, §9.1, Amendments 2 and 11): a menu-bar app without
+// a Dock icon whose claude gets the login shell's PATH, the argument-free card actions, and hotkey names as the
+// platform writes them. The platform is a parameter; every other platform is left untouched.
+import type { VoiceDenial } from "../shared/types";
 import type { Logger } from "./log";
 import { type ExecFileSyncFn, withLoginShellPath } from "./runner";
 
 /** System Settings › Privacy & Security › Screen Recording. Fixed: the renderer never sends a URL. */
 export const SCREEN_RECORDING_SETTINGS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
+/** The panes a voice card opens (task 063), fixed in main like the one above. */
+export const MICROPHONE_SETTINGS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+export const SPEECH_RECOGNITION_SETTINGS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition";
 
 export interface StartupDeps<Tray> {
   platform: NodeJS.Platform;
@@ -39,12 +43,16 @@ export function darwinStartup<Tray>(deps: StartupDeps<Tray>): { env: Record<stri
 export interface PermissionHandlers {
   openScreenRecordingSettings(): Promise<void>;
   relaunch(): Promise<void>;
+  /** The voice card's Open System Settings: the pane of the permission voice was last refused (task 063). */
+  openVoiceSettings(): Promise<void>;
 }
 
-/** The card's two actions. Both ignore whatever arrives on their channel; the settings one is macOS only. */
+/** The cards' actions. Each ignores whatever arrives on its channel; the settings ones are macOS only. */
 export function createPermissionHandlers(deps: {
   platform: NodeJS.Platform;
-  /** `shell.openExternal`, here only ever with `SCREEN_RECORDING_SETTINGS_URL`. */
+  /** The permission the last dictation was refused; null before any. */
+  voiceDenial: () => VoiceDenial | null;
+  /** `shell.openExternal`, here only ever with one of the fixed settings URLs above. */
   openExternal: (url: string) => Promise<void>;
   relaunch: () => void;
   exit: () => void;
@@ -61,6 +69,13 @@ export function createPermissionHandlers(deps: {
     async relaunch() {
       deps.relaunch();
       deps.exit();
+    },
+    async openVoiceSettings() {
+      if (deps.platform !== "darwin") {
+        deps.log.info("app.settingsIgnored", { platform: deps.platform });
+        return;
+      }
+      await deps.openExternal(deps.voiceDenial() === "speechRecognition" ? SPEECH_RECOGNITION_SETTINGS_URL : MICROPHONE_SETTINGS_URL);
     },
   };
 }

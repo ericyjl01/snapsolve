@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Linked into the helper binary (__TEXT,__info_plist): the usage strings macOS needs before it asks (task 063). -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.snapsolve.speech</string>
+  <key>CFBundleName</key>
+  <string>snapsolve-speech</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>snapsolve listens while you dictate a question with the voice hotkey.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>snapsolve turns your dictated question into text on this Mac.</string>
+</dict>
+</plist>

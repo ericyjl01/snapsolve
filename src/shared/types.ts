@@ -7,6 +7,8 @@ export interface Hotkeys {
   capture: string;
   /** Shows or hides the window (task 060). */
   toggle: string;
+  /** Starts a dictated follow-up; pressed again, stops and sends it (task 063). */
+  voice: string;
 }
 
 /** `<data>/config.json` (SPEC §6.1). Loaded and validated by `src/main/config.ts`. */
@@ -39,7 +41,13 @@ export type UserTurn =
        */
       seed?: string;
     }
-  | { role: "user"; kind: "text"; text: string };
+  | {
+      role: "user";
+      kind: "text";
+      text: string;
+      /** Dictated with the voice hotkey or a mic button, not typed (task 063); the card shows a mic mark. */
+      voice?: true;
+    };
 
 export interface AssistantTurn {
   role: "assistant";
@@ -76,11 +84,25 @@ export interface Thread {
   /** Set when the first turn's transcript could not be adopted: the next turn takes the resume fallback. */
   transcriptMissing?: boolean;
   /**
-   * Set only on the macOS Screen Recording card: a panel-only entry (never saved) whose one errored turn says what
-   * to do; `prompted` picks the buttons (`screenRecordingCard`).
+   * Set only on a permission card: a panel-only entry (never saved) whose one errored turn says what to do. The macOS
+   * Screen Recording card has `prompted`, which picks its buttons (`screenRecordingCard`); a voice card names the
+   * permission voice was refused (`voicePermissionCard`, task 063).
    */
-  permission?: { prompted: boolean };
+  permission?: { prompted: boolean } | { voice: VoiceDenial };
 }
+
+/** The permission a dictation was refused (task 063). */
+export type VoiceDenial = "microphone" | "speechRecognition";
+
+/**
+ * main → renderer: the voice composer (task 063). `listening`: the helper records, `text` is the live transcript and
+ * `level` the input level (0…1); `stopping`: the key was pressed again and the final text is on its way; `idle`:
+ * the normal composer, with `note` for a moment ("Didn't catch that."). `key` names the voice hotkey ("⌃⌥V").
+ */
+export type VoiceState =
+  | { state: "idle"; note?: string }
+  | { state: "listening"; text: string; level: number; key: string }
+  | { state: "stopping"; text: string; key: string };
 
 /** main → renderer: a streamed chunk of answer text. */
 export interface AnswerDelta {

@@ -42,7 +42,7 @@ export interface SendImage {
 export type TurnRequest =
   | { kind: "new"; screenshot: string; seed?: string }
   | { kind: "append"; screenshot: string }
-  | { kind: "followUp"; text: string }
+  | { kind: "followUp"; text: string; voice?: true }
   | { kind: "retry" };
 
 /** A request that adds a user turn; a retry re-runs one of these. */
@@ -614,7 +614,7 @@ function imageBlock(image: SendImage): ContentBlock {
 }
 
 function userTurn(request: UserRequest): UserTurn {
-  if (request.kind === "followUp") return { role: "user", kind: "text", text: request.text };
+  if (request.kind === "followUp") return { role: "user", kind: "text", text: request.text, ...(request.voice ? { voice: true as const } : {}) };
   const turn: UserTurn = { role: "user", kind: "screenshot", file: request.screenshot };
   return request.kind === "new" && request.seed !== undefined ? { ...turn, seed: request.seed } : turn;
 }
@@ -654,7 +654,7 @@ export function retryTarget(thread: Thread): { request: UserRequest; index: numb
   }
   if (index < 0) return null;
   const turn = thread.turns[index] as UserTurn;
-  if (turn.kind === "text") return { request: { kind: "followUp", text: turn.text }, index };
+  if (turn.kind === "text") return { request: { kind: "followUp", text: turn.text, ...(turn.voice ? { voice: true as const } : {}) }, index };
   const first = !thread.turns.slice(0, index).some((t) => t.role === "user");
   if (!first) return { request: { kind: "append", screenshot: turn.file }, index };
   return { request: { kind: "new", screenshot: turn.file, ...(turn.seed !== undefined ? { seed: turn.seed } : {}) }, index };
@@ -667,6 +667,8 @@ function isAnswer(turn: Turn): turn is AssistantTurn {
 function requestProblem(request: TurnRequest): string | null {
   if (request.kind === "retry") return null;
   if (request.kind === "followUp") {
+    const voice: unknown = (request as { voice?: unknown }).voice;
+    if (voice !== undefined && voice !== true) return "invalid voice mark";
     return typeof request.text === "string" && request.text.trim() !== "" ? null : "empty follow-up";
   }
   if (request.kind === "new" || request.kind === "append") {

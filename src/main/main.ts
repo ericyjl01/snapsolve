@@ -22,6 +22,7 @@ import {
   Tray,
 } from "electron";
 import { SnapsolveError, userMessage } from "../shared/errors";
+import type { VoiceDenial } from "../shared/types";
 import { IPC } from "../shared/ipc";
 import { createApp, recoverBusyThreads, resolveClaudeCommand, type Shot } from "./app";
 import { checkAuth } from "./auth";
@@ -36,6 +37,7 @@ import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
 import { createStore } from "./store";
 import { createTray, drawTrayIcon, openHistoryFolder, type TrayControl } from "./tray";
+import { createVoice, resolveSpeechHelper, type Voice } from "./voice";
 
 // `electron dist/main.js` does not read package.json, so name and version are injected at build time.
 app.setName(__APP_NAME__);
@@ -160,6 +162,8 @@ async function start(): Promise<void> {
 
   // Before the panel's first listing and before any hotkey: threads an earlier run left busy get Retry (task 052).
   await recoverBusyThreads({ store, log });
+  // Hiding the window stops a dictation (task 063); voice is created below, once the app can take what it hears.
+  let voice: Voice | null = null;
   const panel = createPanel({
     BrowserWindow,
     screen,
@@ -170,6 +174,7 @@ async function start(): Promise<void> {
     log,
     bounds: await loadWindowBounds(paths.windowState, { log }),
     saveBounds: (saved) => saveWindowBounds(paths.windowState, saved),
+    onClose: () => voice?.cancel(),
   });
   const core = createApp({
     store,
@@ -193,8 +198,28 @@ async function start(): Promise<void> {
     onTurnEnded: () => panel.turnEnded(),
     onUsage: (usage) => tray?.setTooltip(usage),
   });
+  // Voice (task 063): the speech helper beside main.js (test mode: a node script Electron runs as node).
+  const fakeSpeech = test ? process.env.SNAPSOLVE_TEST_SPEECH : undefined;
+  const helper = await resolveSpeechHelper({ platform: process.platform, appDir: __dirname, execPath: process.execPath, testHelper: fakeSpeech, log });
+  let voiceDenial: VoiceDenial | null = null;
+  voice = createVoice({
+    helper,
+    spawn,
+    env: fakeSpeech ? { ...process.env, ELECTRON_RUN_AS_NODE: "1" } : process.env,
+    globalShortcut,
+    keyLabel: hotkeySymbols(config.hotkeys.voice, process.platform),
+    onState: (state) => panel.send(IPC.voiceState, state),
+    send: (text) => core.onVoice(text),
+    onDenied: (denial) => {
+      voiceDenial = denial;
+      void core.onVoiceDenied(denial);
+    },
+    showWindow: () => panel.open(),
+    log,
+  });
   const permissionHandlers = createPermissionHandlers({
     platform: process.platform,
+    voiceDenial: () => voiceDenial,
     openExternal: (url) => shell.openExternal(url),
     relaunch: () => app.relaunch(),
     exit: () => app.exit(0),
@@ -211,6 +236,9 @@ async function start(): Promise<void> {
     [IPC.historyClear]: core.handlers.clearHistory,
     [IPC.screenRecordingSettingsOpen]: permissionHandlers.openScreenRecordingSettings,
     [IPC.appRelaunch]: permissionHandlers.relaunch,
+    // The mic buttons do what the voice hotkey does (SPEC Amendment 11).
+    [IPC.voiceToggle]: async () => voice?.toggle(),
+    [IPC.voiceSettingsOpen]: permissionHandlers.openVoiceSettings,
   });
 
   // SPEC §1.1 "tray notification": a balloon on the Windows tray icon; a system notification on macOS. Test mode
@@ -247,6 +275,7 @@ async function start(): Promise<void> {
     config,
     onCapture: captureInto(core.onCapture),
     onToggle: () => panel.toggle(),
+    onVoice: () => voice?.toggle(),
     notify,
     label: (accelerator) => hotkeyLabel(accelerator, process.platform),
     log,
@@ -270,6 +299,10 @@ async function start(): Promise<void> {
       notifications: () => [...notices],
       /** A capture refused for want of the Screen Recording grant, as the capturer reports it. */
       denyCapture: (prompted: boolean) => core.onCaptureDenied(prompted),
+      /** What the voice hotkey does (063). */
+      voice: () => voice?.toggle(),
+      /** What the temporary Esc shortcut does while listening. */
+      voiceEscape: () => voice?.cancel(),
     };
   }
 

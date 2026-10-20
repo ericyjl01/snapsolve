@@ -243,3 +243,17 @@ Symptom: `tasks.py red 061` → "uncommitted code on keel/061 — commit the tes
 Cause:   Eric's switched-off Claude Code settings file (Foundry env, holds an API key) sat untracked in `.claude/`; keel counts any untracked file as code.
 Fix:     with Eric's OK ("its off right now so you ignore"), `.claude/settings.off.json` added to `.git/info/exclude` (local, never committed); red then accepted. DECISIONS 2026-10-18.
 Note:    never commit or `git add -A` that file; a new untracked personal file needs the same local exclude, asked first.
+
+## 2026-10-18 · task 065 · the "+ button" e2e failed: a `hidden` thumbnail was still on screen
+tags: e2e, renderer, css, hidden, thumb, 061, panel
+Symptom: `panel.e2e.test.ts` "+ button starts a fresh card … (065)" failed at `card-header img.thumb` `isVisible()` — expected false, got true — for a thread that began with a typed question. Two sessions: the renderer sets `card.thumb.hidden` in `update()` and it looked right.
+Cause:   `.thumb { display: block }` in styles.css beats the UA stylesheet's `[hidden] { display: none }` (author origin wins), so the attribute had no effect. `.card-body[hidden] { display: none }` was already in the file for exactly this reason.
+Fix:     `.thumb[hidden] { display: none }` (5ac3136).
+Note:    any element the renderer hides with the `hidden` attribute needs its own `[hidden]` rule if the stylesheet gives it a `display`. Check for `display:` on the class before trusting `el.hidden`.
+
+## 2026-10-18 · task 065 · a cloud session has no keel branch and no Electron binary
+tags: cloud, clone, keel, start, electron, proxy, xvfb, e2e, sandbox
+Symptom: three walls in the first cloud session. (1) `tasks.py start 065` said "previous branch keel/065 not found — starting fresh" — the paused work (db814a5 … c0f97ed) was not in the clone. (2) e2e: "Electron failed to install correctly"; `node node_modules/electron/install.js` died in undici (`assert(!this.paused)` in client-h1.js) through the agent proxy. (3) The binary then refused to run: "Running as root without --no-sandbox is not supported", and there is no display.
+Cause:   the container clones only the default branch, so `origin/keel/*` is unfetched; the Electron postinstall download does not survive the proxy; the container runs as root with no X server.
+Fix:     (1) `git fetch origin keel/<id>`, then on W `git branch -d keel/<id>` (it is master's tip, so no force) and `git branch keel/<id> origin/keel/<id>` — tasks.py's own fresh branch is discarded, no reset and no force. (2) `curl -L -o electron.zip https://github.com/electron/electron/releases/download/v44.7.2/electron-v44.7.2-linux-x64.zip`, unzip into `node_modules/electron/dist`, `printf electron > node_modules/electron/path.txt` (the file holds the path *inside* `dist/`, no newline). (3) run the suite as `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a npm test` (`ELECTRON_NO_SANDBOX` does not work; `xvfb-run` and `Xvfb` are installed).
+Note:    `git fetch origin keel/<id>` before `tasks.py start <id>` in a fresh cloud session. Then `npm test` is 876/878 there: only the two macOS-only e2e assertions fail — panel.e2e "is content-protected" and userdata.e2e "without the override". Eric's call (DECISIONS 2026-10-19): leave both as they are and close tasks on the Mac; 071, which would have platform-gated them, is dropped. So a cloud session can write and test code but cannot pass keel's close gate — hand the branch back for `brief` + reviewer + `close` there.

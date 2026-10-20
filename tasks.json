@@ -1818,6 +1818,27 @@
       "tests_commit": null,
       "no_tests": null,
       "review": null
+    },
+    {
+      "id": "071",
+      "title": "e2e in a Linux cloud session: the two macOS-only assertions",
+      "status": "dropped",
+      "priority": 5,
+      "milestone": 3,
+      "deps": [],
+      "file": "docs/tasks/071-e2e-in-a-linux-cloud-session-the-two-mac.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": "2026-10-19",
+      "commit": null,
+      "notes": "Blocks every close in a cloud session: npm test is 876/878 there, failing only (1) panel.e2e 'is content-protected' (Electron setContentProtection is macOS/Windows only: a probe on linux returns isContentProtected() === false) and (2) userdata.e2e 'without the override' (main exits with 'snapsolve: unsupported platform: linux', SPEC Amendment 4). Needs Eric's call: gate both assertions on platform (keeping them on darwin) or close only on the Mac. Also record the container setup: Electron's npm download dies in the proxy (undici assertion), so the zip is curled from GitHub releases and unzipped into node_modules/electron/dist with 'electron' in path.txt, and the suite runs as ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a npm test. | dropped: Eric chose option (b): leave the two macOS-only e2e assertions alone and close 065 on the Mac, where npm test is green. Nothing to platform-gate (DECISIONS 2026-10-19)",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts test/e2e/userdata.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

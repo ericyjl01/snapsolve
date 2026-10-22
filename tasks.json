@@ -1922,6 +1922,29 @@
       "tests_commit": null,
       "no_tests": null,
       "review": null
+    },
+    {
+      "id": "075",
+      "title": "theme setting (dark default) and a more translucent window",
+      "status": "open",
+      "priority": 0,
+      "milestone": 3,
+      "deps": [
+        "061"
+      ],
+      "file": "docs/tasks/075-theme-setting-dark-default-and-a-more-tr.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/unit/config.test.ts test/unit/panel.test.ts test/unit/installer-steps.test.ts test/unit/skill.test.ts test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

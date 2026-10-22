@@ -7,12 +7,12 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
   thread with a mic mark, Esc / hide cancel, ignored while the thread answers; preload 15 (SPEC Amendment 11).
 - 0.2.0 released to ~/dev/snapsolve-local 2026-10-21 (all of the above). Eric: restart Claude Code, /snapsolve
   update; then run docs/checklists/macos.md (032), rows 16–22 = redesign + voice (re-install if no mic prompt).
-- 2026-10-22: Eric updated to 0.2.0; voice SIGABRTs (old app bundle lacks NSSpeechRecognitionUsageDescription)
-  → backlog 074; workaround uninstall (keep history) + install.
-- Next: `tasks.py next`. Backlog 033, 042, 053, 054, 056, 066–070, 074.
+- 2026-10-22: Eric re-installed 0.2.0 (purged data; 074 = update must re-package for new Info.plist keys); his
+  config now opus/medium. Voice + capture work after a tccutil Screen Recording reset.
+- Next: 075 (priority 0) theme setting, dark default, ground ~55% (DECISIONS 2026-10-22); waits for /goal.
+  Backlog 033, 042, 053, 054, 056, 066–070, 074.
 
 ## Log
-2026-10-17 · 048 · closed · macOS suite green: runner integration temp root realpath'd (macOS /var → /private/var), plus a symlinked-data-dir test; realSteps matches claude.exe by win32 basename so Windows paths match on any host (049 folded in) (9893090)
 2026-10-17 · 015 · closed · npm test (unit + integration + e2e) is the full-suite gate again (keel.json, harness test); on Eric's Mac the Electron precondition is ok and the first full run of everything closed under the temporary gate is green (2218b7c)
 2026-10-17 · 009 · blocked · SPEC §4.3 × / tab click vs §4.4 nine-function preload — Amendment 3 togglePanel()? → keel/009 (-)
 2026-10-17 · 014 · closed · Electron userData is <data dir>/electron in every mode (resolveDataDir before ready); e2e covers the override and the platform default (HOME on macOS, LOCALAPPDATA on Windows); stale %APPDATA% cleanup left for the Windows PC (36c02ef)
@@ -52,3 +52,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-20 · 063 · closed · voice follow-up: hotkeys.voice Control+Alt+V shows the window and runs the on-device speech helper (native/speech Swift, SpeechAnalyzer/SFSpeechRecognizer, built by npm run build, released as app/native); listening bar with live transcript; the key again sends via the follow-up path to the current thread (or a text thread) as a voice-marked turn; Esc/hide cancel, ignored while the thread answers, empty → note, denied → settings card, failure → error card; preload 15 (Amendment 11); hand check → 032 row 22 (315f4c6)
 2026-10-21 · adhoc · released snapsolve 0.2.0 into ~/dev/snapsolve-local (redesign 058–061, ⌃⌥C 064, one chat + 065, voice 063 with app/native/snapsolve-speech); Eric: restart Claude Code, then /snapsolve update (b5a6c08)
 2026-10-22 · adhoc · backlog 074: update must re-package snapsolve.app when Info.plist keys change (0.2.0 voice helper SIGABRTs without NSSpeechRecognitionUsageDescription) (-)
+2026-10-22 · adhoc · queued 075: theme setting (dark default) and a more translucent window, Eric's choices (priority 0) (-)

@@ -1,8 +1,9 @@
-/* Panel styles (SPEC §4.2, Amendment 9: mockup A2 "Native macOS"): the floating window (058) over the OS's blur on
-   macOS (vibrancy; elsewhere an opaque window shows through the same translucent ground), shown or hidden (060). */
+/* Panel styles (SPEC §4.2, Amendment 9: mockup A2 "Native macOS"; Amendment 13): the floating window (058), a
+   transparent window on macOS under a ~88% solid ground, see-through like a terminal with no blur (elsewhere an opaque
+   window under the same ground), shown or hidden (060). */
 :root {
   color-scheme: light dark;
-  --ground: rgba(246, 246, 248, 0.56);
+  --ground: rgba(246, 246, 248, 0.88);
   --fg: #1d1d1f;
   --muted: #6e6e73;
   --hairline: rgba(0, 0, 0, 0.1);
@@ -17,18 +18,20 @@
   --on-accent: #ffffff;
   --error: #c4251a;
   --warning: #8a5a00;
+  --serif: ui-serif, "New York", Georgia, serif;
+  --mono: ui-monospace, Menlo, monospace;
   font: 13px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ground: rgba(30, 30, 32, 0.5);
+    --ground: rgba(24, 24, 24, 0.88);
     --fg: #f5f5f7;
     --muted: #a1a1a6;
     --hairline: rgba(255, 255, 255, 0.1);
     --edge: rgba(255, 255, 255, 0.16);
-    --card: rgba(58, 58, 60, 0.72);
-    --row: rgba(58, 58, 60, 0.45);
+    --card: rgba(44, 44, 46, 0.78);
+    --row: rgba(44, 44, 46, 0.5);
     --field: rgba(28, 28, 30, 0.9);
     --bubble: rgba(255, 255, 255, 0.12);
     --code: rgba(255, 255, 255, 0.07);
@@ -265,6 +268,7 @@ button[hidden] {
 /* A follow-up question: the user's bubble, on the right. */
 .question {
   align-self: flex-end;
+  font: 14px/1.5 var(--serif);
   max-width: 85%;
   margin: 0;
   padding: 5px 10px;
@@ -274,9 +278,17 @@ button[hidden] {
   overflow-wrap: anywhere;
 }
 
+/* Answers read like the Claude app (076): Apple's New York serif, code in Menlo. */
 .answer,
 .partial {
   overflow-wrap: anywhere;
+  font: 14px/1.55 var(--serif);
+}
+
+.answer code,
+.partial code {
+  font-family: var(--mono);
+  font-size: 12.5px;
 }
 
 .answer > :first-child,
@@ -298,7 +310,8 @@ button[hidden] {
   opacity: 0.7;
 }
 
-/* highlight.js paints the block itself (hljs-theme.css); the pre adds only the rounding and a hairline. */
+/* highlight.js paints the block itself (hljs-theme.css, or hljs-theme-dark.css in the dark theme); the pre adds only
+   the rounding and a hairline. */
 .answer pre {
   overflow: hidden;
   border: 0.5px solid var(--hairline);

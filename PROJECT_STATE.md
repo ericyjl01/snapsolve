@@ -3,13 +3,11 @@
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Closed 2026-10-22: 076 dark code blocks (github-dark via a media-scoped second hljs link), New York serif answers
-  14 px and Menlo code, no vibrancy with ~88% ground (SPEC Amendment 13). Released as 0.2.2 and installed on Eric's Mac 2026-10-22 (/snapsolve update).
+  14 px and Menlo code, no vibrancy with ~88% ground (SPEC Amendment 13). Released 0.2.2; then dark code blocks greyed to #202327 (Eric) and 0.2.3 released + installed 2026-10-22.
 - 070 (backlog, dark hljs theme) is now covered by 076 — candidate to drop.
 - 032 waits on Eric's checklist. Backlog 033, 042, 053, 054, 056, 066–070, 074.
 
 ## Log
-2026-10-17 · 011 · closed · auth.ts: claude auth status (output decides, identity fields never returned or logged), usage line 5h N% · 7d M%, block until resetsAt with a local reset time; runner rechecks auth after an error result, fails usage-blocked turns before spawning, saves warning/usage on answers; startup notice for not found / logged out; card warning + usage footer; tray tooltip usage (c0aa915)
-2026-10-17 · 013 · blocked · needs a Windows PC that runs snapsolve (ASR-blocked work PC; work is on the Mac): park, split neutral checks to run here, or run capture checks on macOS? (-)
 2026-10-17 · 030 · closed · macos.ts: darwinStartup hides the Dock before the tray and merges the login PATH once (warning logged), permission handlers (fixed Screen Recording settings URL, darwin only, args ignored; relaunch + exit), hotkeyLabel in the taken-hotkey notice; preload grows to eleven functions (Amendment 2); a denied capture shows an unsaved permission card in the panel; follow-up 053 (ce0a347)
 2026-10-17 · 032 · blocked · needs Eric to run the macOS checklist and report results → keel/032 (a402d20)
 2026-10-17 · 050 · closed · a Retry is a runner retry request: retryTarget re-runs the last user turn followed only by errored answers as the request that first ran it, without appending it again; resumes the owned transcript or takes the fresh-session fallback; nothing to retry → ok:false, no spawn (749b2df)
@@ -48,3 +46,5 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-22 · adhoc · queued 076: dark code blocks, New York serif answers, terminal-style see-through (Eric's choices; priority 0) (-)
 2026-10-22 · 076 · closed · dark code blocks (github-dark under prefers-color-scheme: dark), New York serif answers at 14 px with Menlo code, macOS window without vibrancy under an ~88% solid ground (Amendment 13) (604999c)
 2026-10-22 · adhoc · released snapsolve 0.2.2 into ~/dev/snapsolve-local (076 dark code blocks, New York serif, no-blur ~88% ground); updated on Eric's Mac (d5bec90)
+2026-10-22 · adhoc · dark-theme code blocks grey #202327 (Claude Code's code view) instead of github-dark's near-black; e2e pins it (bac44b8)
+2026-10-22 · adhoc · released snapsolve 0.2.3 into ~/dev/snapsolve-local (grey code blocks); updated on Eric's Mac (cb11abd)

@@ -1,6 +1,6 @@
 {
   "name": "snapsolve",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Press a hotkey, capture the screen, get a step-by-step solution from Claude in a side panel.",
   "main": "dist/main.js",

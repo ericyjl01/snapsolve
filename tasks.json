@@ -1926,7 +1926,7 @@
     {
       "id": "075",
       "title": "theme setting (dark default) and a more translucent window",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "milestone": 3,
       "deps": [
@@ -1934,17 +1934,22 @@
       ],
       "file": "docs/tasks/075-theme-setting-dark-default-and-a-more-tr.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/075",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-22",
+      "commit": "8388539",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/config.test.ts test/unit/panel.test.ts test/unit/installer-steps.test.ts test/unit/skill.test.ts test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "18dfaa659ddb1c438d49ece5ae311495f8af3296",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "e4826329f6b5ed25b3505666b7d0121f756bb00c",
+        "reasons": "config validates theme (dark default; light/system accepted; blue/1/null/Dark -> dark with one warning; missing key -> dark, file untouched); panel sets nativeTheme.themeSource before the window for all three values (ordered double); e2e on a Light Mac: no theme/dark -> prefers-color-scheme dark and ground 0.5, light -> not dark and ground 0.56; installer default has theme dark; SKILL.md names the key and its values; task tests and npm test green",
+        "at": "2026-10-22"
+      }
     }
   ]
 }

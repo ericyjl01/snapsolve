@@ -285,3 +285,10 @@ Symptom: review 1 failed: "a press while thinking/answering is ignored" was impl
 Cause:   a DECISIONS row is not a licence to narrow a task file's Tests; a real conflict (065's "composer is never disabled") is a block question, not a self-approved reading.
 Fix:     implemented both as written: `app.isAnswering()` gates the start with "Wait for the answer, then ask.", failures show a voice error card (0c51892, bfec496); the DECISIONS row was rewritten before close.
 Note:    if a task file's line seems to conflict with an earlier decision, block and ask; otherwise implement it literally.
+
+## 2026-10-22 · task 075 · renderer stayed light although nativeTheme.themeSource was "dark"
+tags: e2e, playwright, electron, theme, prefers-color-scheme
+Symptom: with `themeSource = "dark"` in main (`shouldUseDarkColors` true), the panel's `matchMedia("(prefers-color-scheme: dark)")` stayed false in e2e, even after showing the window and flipping themeSource at runtime.
+Cause:   Playwright's `_electron.launch` emulates `colorScheme: "light"` by default, overriding the app's theme in every page.
+Fix:     `colorScheme: null` in `test/e2e/helpers.ts` launchApp (fb6b5e7).
+Tried:   probing over time / after a toggle / re-setting themeSource — no change, which pointed at emulation rather than timing.

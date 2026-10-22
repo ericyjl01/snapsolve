@@ -1954,7 +1954,7 @@
     {
       "id": "076",
       "title": "dark code blocks, New York serif answers, terminal-style see-through window",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "milestone": 3,
       "deps": [
@@ -1962,17 +1962,22 @@
       ],
       "file": "docs/tasks/076-dark-code-blocks-new-york-serif-answers.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/076",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-22",
+      "commit": "604999c",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/panel.test.ts test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "1d9e1a0687df84117e85d2e82a512d16fed416b1",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "a785c4bd108fde688230d1bf7218337fa97b5903",
+        "reasons": "unit: macOS window has no vibrancy/visualEffectState, transparent #00000000, off-macOS unchanged; e2e: ground rgba(24,24,24,0.88)/rgba(246,246,248,0.88) per theme, python block near-black (lum<0.1) with non-github-light keyword color in dark and light (lum>0.9) in light, answer ui-serif 14px, code ui-monospace+Menlo, title bar -apple-system; render: github-dark copied as hljs-theme-dark.css. Task tests 118/118 and npm test (973 passed, 7 pre-existing win32 skips) green.",
+        "at": "2026-10-22"
+      }
     }
   ]
 }

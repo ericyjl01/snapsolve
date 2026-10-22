@@ -218,7 +218,7 @@ export interface PanelDeps {
   };
   platform: NodeJS.Platform;
   preloadPath: string;
-  /** Electron's `nativeTheme`: `themeSource` drives prefers-color-scheme and the vibrancy material (task 075). */
+  /** Electron's `nativeTheme`: `themeSource` drives prefers-color-scheme in the renderer (task 075). */
   nativeTheme: { themeSource: Theme };
   config: { autoHideSec: number; theme: Theme };
   log: Logger;
@@ -283,15 +283,13 @@ export function createPanel(deps: PanelDeps): Panel {
     alwaysOnTop: true,
     skipTaskbar: true,
     title: "snapsolve",
-    // macOS (061, mockup A2): the OS's blur behind a transparent window, kept while inactive (the window is shown
-    // with showInactive); elsewhere an opaque window.
+    // macOS (076, Amendment 13): a transparent window with no OS blur, see-through like a terminal under the
+    // renderer's ~88% solid ground; elsewhere an opaque window.
     ...(deps.platform === "darwin"
       ? {
           type: "panel",
           hiddenInMissionControl: true,
           acceptFirstMouse: true,
-          vibrancy: "under-window",
-          visualEffectState: "active",
           backgroundColor: "#00000000",
         }
       : { backgroundColor: "#ffffff" }),

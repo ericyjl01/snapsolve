@@ -4,6 +4,7 @@
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Closed 2026-10-22: 076 dark code blocks (github-dark via a media-scoped second hljs link), New York serif answers
   14 px and Menlo code, no vibrancy with ~88% ground (SPEC Amendment 13). Released 0.2.2; then dark code blocks greyed to #202327 (Eric) and 0.2.3 released + installed 2026-10-22.
+- Next: 077 (priority 0) tray Appearance submenu Dark/Light/Match macOS, live + saved (Amendment 14); waits for /goal.
 - 070 (backlog, dark hljs theme) is now covered by 076 — candidate to drop.
 - 032 waits on Eric's checklist. Backlog 033, 042, 053, 054, 056, 066–070, 074.
 

@@ -1978,6 +1978,27 @@
         "reasons": "unit: macOS window has no vibrancy/visualEffectState, transparent #00000000, off-macOS unchanged; e2e: ground rgba(24,24,24,0.88)/rgba(246,246,248,0.88) per theme, python block near-black (lum<0.1) with non-github-light keyword color in dark and light (lum>0.9) in light, answer ui-serif 14px, code ui-monospace+Menlo, title bar -apple-system; render: github-dark copied as hljs-theme-dark.css. Task tests 118/118 and npm test (973 passed, 7 pre-existing win32 skips) green.",
         "at": "2026-10-22"
       }
+    },
+    {
+      "id": "077",
+      "title": "tray Appearance menu: switch dark / light / match macOS live",
+      "status": "open",
+      "priority": 0,
+      "milestone": 3,
+      "deps": [],
+      "file": "docs/tasks/077-tray-appearance-menu.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/unit/tray.test.ts test/unit/config.test.ts test/unit/app.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

@@ -298,6 +298,7 @@ describe("panel (e2e)", () => {
       const lum = luminance(look.background);
       if (dark) {
         expect(lum, look.background).toBeLessThan(0.1);
+        expect(look.background).toBe("rgb(32, 35, 39)"); // grey #202327, not github-dark's near-black #0d1117
         expect(look.keyword).not.toBe("rgb(215, 58, 73)"); // github light's #d73a49
       } else {
         expect(lum, look.background).toBeGreaterThan(0.9);

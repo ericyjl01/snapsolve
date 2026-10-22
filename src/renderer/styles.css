@@ -323,6 +323,13 @@ button[hidden] {
   padding: 8px 10px;
 }
 
+/* Dark theme: a grey block (Claude Code's code view), a shade off the card, instead of github-dark's near-black. */
+@media (prefers-color-scheme: dark) {
+  .answer pre code.hljs {
+    background: #202327;
+  }
+}
+
 .answer .katex-display {
   overflow-x: auto;
   overflow-y: hidden;

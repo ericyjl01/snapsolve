@@ -2,7 +2,7 @@
    macOS (vibrancy; elsewhere an opaque window shows through the same translucent ground), shown or hidden (060). */
 :root {
   color-scheme: light dark;
-  --ground: rgba(246, 246, 248, 0.72);
+  --ground: rgba(246, 246, 248, 0.56);
   --fg: #1d1d1f;
   --muted: #6e6e73;
   --hairline: rgba(0, 0, 0, 0.1);
@@ -22,7 +22,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ground: rgba(30, 30, 32, 0.66);
+    --ground: rgba(30, 30, 32, 0.5);
     --fg: #f5f5f7;
     --muted: #a1a1a6;
     --hairline: rgba(255, 255, 255, 0.1);

@@ -9,6 +9,7 @@ import path from "node:path";
 import type { BrowserWindow, BrowserWindowConstructorOptions, Input, IpcMainInvokeEvent } from "electron";
 import { SnapsolveError } from "../shared/errors";
 import type { IpcEvents, IpcRequests } from "../shared/ipc";
+import type { Theme } from "../shared/types";
 import type { Logger } from "./log";
 import { isUuid, type Store, writeJsonAtomic } from "./store";
 
@@ -217,7 +218,9 @@ export interface PanelDeps {
   };
   platform: NodeJS.Platform;
   preloadPath: string;
-  config: { autoHideSec: number };
+  /** Electron's `nativeTheme`: `themeSource` drives prefers-color-scheme and the vibrancy material (task 075). */
+  nativeTheme: { themeSource: Theme };
+  config: { autoHideSec: number; theme: Theme };
   log: Logger;
   /** Saved floating-window bounds per display, as `loadWindowBounds` read them at startup. */
   bounds: WindowBounds;
@@ -264,6 +267,8 @@ export function createPanel(deps: PanelDeps): Panel {
   let hiddenForCapture = false;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Before the window exists, so its first paint already has the configured look (075).
+  deps.nativeTheme.themeSource = config.theme;
   const win = new deps.BrowserWindow({
     ...target,
     show: false,

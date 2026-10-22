@@ -3,6 +3,9 @@ import type { ErrorKind } from "./errors";
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
+/** The panel's look (task 075): fixed dark or light, or whatever macOS uses. */
+export type Theme = "dark" | "light" | "system";
+
 export interface Hotkeys {
   capture: string;
   /** Shows or hides the window (task 060). */
@@ -24,6 +27,7 @@ export interface Config {
   maxConcurrent: number;
   maxScreenshotsPerThread: number;
   timeoutSec: number;
+  theme: Theme;
 }
 
 /** `new`: created, no turn started yet. */

@@ -1901,6 +1901,27 @@
         "reasons": "No-tests exemption legitimate (one-line ARCHITECTURE.md module-map doc fix, no behavior); branch tip 383712a has no code diff vs master, edit carried in the working tree as memory per keel; Done-when verified: grep -c onAppend ARCHITECTURE.md = 0, app.ts line 18 names onCapture and newThread, matching src/main/app.ts (no onAppend in src); only that line changed; npm test exit 0 (871 passed, 7 skipped)",
         "at": "2026-10-20"
       }
+    },
+    {
+      "id": "074",
+      "title": "update re-packages snapsolve.app when its Info.plist keys change",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [],
+      "file": "docs/tasks/074-update-re-packages-snapsolve-app-when-it.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": null,
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

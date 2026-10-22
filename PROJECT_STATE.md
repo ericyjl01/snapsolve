@@ -4,12 +4,12 @@
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Closed 2026-10-22: 076 dark code blocks (github-dark via a media-scoped second hljs link), New York serif answers
   14 px and Menlo code, no vibrancy with ~88% ground (SPEC Amendment 13). Released 0.2.2; then dark code blocks greyed to #202327 (Eric) and 0.2.3 released + installed 2026-10-22.
-- Next: 077 (priority 0) tray Appearance submenu Dark/Light/Match macOS, live + saved (Amendment 14); waits for /goal.
+- Next: 077 (p0) tray Appearance submenu (Amendment 14); 078 (p1) conversation sidebar, one chat on screen, preload 16;
+  079 (p2) ChatGPT-style pill composer (Amendment 15, mockup claude.ai/artifact/RJd7MeYL52hZh2ry3aAJpe). Wait for /goal.
 - 070 (backlog, dark hljs theme) is now covered by 076 — candidate to drop.
 - 032 waits on Eric's checklist. Backlog 033, 042, 053, 054, 056, 066–070, 074.
 
 ## Log
-2026-10-17 · 030 · closed · macos.ts: darwinStartup hides the Dock before the tray and merges the login PATH once (warning logged), permission handlers (fixed Screen Recording settings URL, darwin only, args ignored; relaunch + exit), hotkeyLabel in the taken-hotkey notice; preload grows to eleven functions (Amendment 2); a denied capture shows an unsaved permission card in the panel; follow-up 053 (ce0a347)
 2026-10-17 · 032 · blocked · needs Eric to run the macOS checklist and report results → keel/032 (a402d20)
 2026-10-17 · 050 · closed · a Retry is a runner retry request: retryTarget re-runs the last user turn followed only by errored answers as the request that first ran it, without appending it again; resumes the owned transcript or takes the fresh-session fallback; nothing to retry → ok:false, no spawn (749b2df)
 2026-10-17 · 051 · closed · an append past maxScreenshotsPerThread starts a thread seeded with the previous thread's last successful answer (seed on the first screenshot turn: image + seededQuestion, kept on retry, first of the earlier answers in a fallback); the card shows CONTINUED_NOTE; no answer → plain new thread (09c9d4f)
@@ -49,3 +49,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-22 · adhoc · released snapsolve 0.2.2 into ~/dev/snapsolve-local (076 dark code blocks, New York serif, no-blur ~88% ground); updated on Eric's Mac (d5bec90)
 2026-10-22 · adhoc · dark-theme code blocks grey #202327 (Claude Code's code view) instead of github-dark's near-black; e2e pins it (bac44b8)
 2026-10-22 · adhoc · released snapsolve 0.2.3 into ~/dev/snapsolve-local (grey code blocks); updated on Eric's Mac (cb11abd)
+2026-10-22 · keel · queued · 077 tray Appearance menu, 078 conversation sidebar, 079 pill composer (Eric's choices, mockup approved) (-)

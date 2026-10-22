@@ -471,20 +471,16 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
     expect(win.options).toMatchObject({ movable: true, resizable: true, minWidth: 280, minHeight: 300, frame: false });
   });
 
-  // 061, mockup A2 "native macOS": the frosted look is the OS's own blur behind a window with no opaque fill.
-  // The window is shown inactive (showInactive), so the blur must not follow the window's key state.
-  it("macOS: frosted — vibrancy behind a transparent window background, kept while inactive (061)", () => {
+  // 076 (Amendment 13, supersedes 061's vibrancy): terminal-style see-through — no OS blur, only a transparent window
+  // under the renderer's ~88% solid ground.
+  it("macOS: see-through like a terminal — a transparent window with no vibrancy and no visualEffectState (076)", () => {
     const { win } = panelSetup();
-    expect(win.options).toMatchObject({
-      type: "panel",
-      vibrancy: "under-window",
-      visualEffectState: "active",
-      backgroundColor: "#00000000",
-    });
+    expect(win.options).toMatchObject({ type: "panel", backgroundColor: "#00000000" });
+    expect(win.options).not.toHaveProperty("vibrancy");
+    expect(win.options).not.toHaveProperty("visualEffectState");
   });
 
-  // 075: Electron's themeSource drives both prefers-color-scheme in the renderer and the vibrancy material, so it is
-  // set before the window exists.
+  // 075: Electron's themeSource drives prefers-color-scheme in the renderer, so it is set before the window exists.
   it.each(["dark", "light", "system"] as const)("theme %s sets nativeTheme.themeSource before the window is created (075)", (theme) => {
     const events: string[] = [];
     panelSetup({ theme, events });
@@ -494,6 +490,7 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
   it("off macOS: no vibrancy and an opaque background (061)", () => {
     const { win } = panelSetup({ platform: "win32" });
     expect(win.options.vibrancy).toBeUndefined();
+    expect(win.options.visualEffectState).toBeUndefined();
     expect(win.options.backgroundColor).toBe("#ffffff");
   });
 

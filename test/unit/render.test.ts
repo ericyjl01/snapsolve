@@ -238,6 +238,8 @@ describe("renderer assets copied by the build", () => {
         expect(existsSync(path.join(out, ref[1])), ref[1]).toBe(true);
       }
       expect(readFileSync(path.join(out, "hljs-theme.css"), "utf8")).toContain(".hljs");
+      // 076: github-dark beside github light, for the dark theme's code blocks.
+      expect(readFileSync(path.join(out, "hljs-theme-dark.css"), "utf8")).toContain("#0d1117");
     } finally {
       await rm(out, { recursive: true, force: true });
     }

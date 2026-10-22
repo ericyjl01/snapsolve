@@ -90,6 +90,15 @@ function capture(app: ElectronApplication): Promise<string> {
 
 const card = (id: string) => `[data-thread-id="${id}"]`;
 
+/** Relative luminance (WCAG) of a computed `rgb(…)`/`rgba(…)` color, 0 (black) to 1 (white). */
+function luminance(color: string): number {
+  const [r, g, b] = (color.match(/[\d.]+/g) ?? []).slice(0, 3).map((v) => {
+    const c = Number(v) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 /** What the voice hotkey does (063). */
 function voiceKey(app: ElectronApplication): Promise<void> {
   return app.evaluate(() => (globalThis as unknown as { snapsolveTest: { voice(): void } }).snapsolveTest.voice());
@@ -239,12 +248,13 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  // 075: config.json theme drives the look whatever macOS uses (dark when unset); the ground is a bit more see-through.
+  // 075: config.json theme drives the look whatever macOS uses (dark when unset); 076: the ground is ~88% solid,
+  // see-through like a terminal with no blur (Amendment 13).
   it.each([
-    { config: {}, dark: true, ground: "rgba(30, 30, 32, 0.5)" },
-    { config: { theme: "dark" }, dark: true, ground: "rgba(30, 30, 32, 0.5)" },
-    { config: { theme: "light" }, dark: false, ground: "rgba(246, 246, 248, 0.56)" },
-  ])("theme $config → dark $dark, ground $ground (075)", async ({ config, dark, ground }) => {
+    { config: {}, dark: true, ground: "rgba(24, 24, 24, 0.88)" },
+    { config: { theme: "dark" }, dark: true, ground: "rgba(24, 24, 24, 0.88)" },
+    { config: { theme: "light" }, dark: false, ground: "rgba(246, 246, 248, 0.88)" },
+  ])("theme $config → dark $dark, ground $ground (075, 076)", async ({ config, dark, ground }) => {
     const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
     writeFileSync(path.join(dataDir, "config.json"), JSON.stringify(config));
     const p = await launchPanel(dataDir);
@@ -252,6 +262,51 @@ describe("panel (e2e)", () => {
       expect(await p.page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches)).toBe(dark);
       expect(await p.page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(ground);
       expect(await p.app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)).toBe(dark);
+    } finally {
+      await p.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 60_000);
+
+  // 076: code blocks on near-black with github-dark colors in the dark theme (light keeps github); answers in the New
+  // York serif at 14 px, code in Menlo, the chrome in the system sans.
+  it.each([
+    { theme: "dark", dark: true },
+    { theme: "light", dark: false },
+  ])("theme $theme: a python block's background and keyword colors, and the answer/code/title bar fonts (076)", async ({ theme, dark }) => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    writeFileSync(path.join(dataDir, "config.json"), JSON.stringify({ theme }));
+    const p = await launchPanel(dataDir, { FAKE_ANSWER_SUFFIX: "\n\n```python\ndef f(x):\n    return x + 1\n```\n" });
+    try {
+      const id = await capture(p.app);
+      const code = p.page.locator(`${card(id)} .answer:not(.streaming) pre code.hljs`).first();
+      await code.waitFor({ state: "visible", timeout: 20_000 });
+      const look = await p.page.evaluate((sel) => {
+        const codeEl = document.querySelector(sel) as HTMLElement;
+        const answer = codeEl.closest(".answer") as HTMLElement;
+        const keyword = codeEl.querySelector(".hljs-keyword") as HTMLElement;
+        const style = (el: Element) => getComputedStyle(el);
+        return {
+          background: style(codeEl).backgroundColor,
+          keyword: style(keyword).color,
+          answerFont: style(answer).fontFamily,
+          answerSize: style(answer).fontSize,
+          codeFont: style(codeEl).fontFamily,
+          titleFont: style(document.querySelector("#titlebar") as Element).fontFamily,
+        };
+      }, `${card(id)} .answer:not(.streaming) pre code.hljs`);
+      const lum = luminance(look.background);
+      if (dark) {
+        expect(lum, look.background).toBeLessThan(0.1);
+        expect(look.keyword).not.toBe("rgb(215, 58, 73)"); // github light's #d73a49
+      } else {
+        expect(lum, look.background).toBeGreaterThan(0.9);
+      }
+      expect(look.answerFont.startsWith("ui-serif"), look.answerFont).toBe(true);
+      expect(look.answerSize).toBe("14px");
+      expect(look.codeFont.startsWith("ui-monospace"), look.codeFont).toBe(true);
+      expect(look.codeFont).toContain("Menlo");
+      expect(look.titleFont.startsWith("-apple-system"), look.titleFont).toBe(true);
     } finally {
       await p.close();
       rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

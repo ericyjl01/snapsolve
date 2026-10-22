@@ -6,11 +6,11 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
   reset). 074 (backlog): update must re-package the app when its Info.plist keys change.
 - Closed 2026-10-22: 075 theme (config.json "theme" dark|light|system, default dark, via nativeTheme.themeSource
   in createPanel; ground 0.56 light / 0.50 dark; SPEC Amendment 12). e2e launches with colorScheme: null.
-- 0.2.1 (075) released to ~/dev/snapsolve-local 2026-10-22; Eric: /snapsolve update.
-- Next: `tasks.py next`. 032 waits on Eric's checklist. Backlog 033, 042, 053, 054, 056, 066–070, 074.
+- 0.2.1 (075) released and installed on Eric's Mac 2026-10-22.
+- Next: 076 (priority 0) dark code blocks, New York serif, no-blur ~88% ground (DECISIONS 2026-10-22); waits for
+  /goal. 032 waits on Eric's checklist. Backlog 033, 042, 053, 054, 056, 066–070, 074.
 
 ## Log
-2026-10-17 · 014 · closed · Electron userData is <data dir>/electron in every mode (resolveDataDir before ready); e2e covers the override and the platform default (HOME on macOS, LOCALAPPDATA on Windows); stale %APPDATA% cleanup left for the Windows PC (36c02ef)
 2026-10-17 · 009 · closed · panel window per platform (content protection before first show, showInactive, 6-step 120 ms tab/open transitions, Esc in main), renderer served from snapsolve://app with thread thumbnails from snapsolve://thread, exactly the 9 preload functions, cards UI (Thinking…, streamed rendered answer, Copy, Retry, follow-up, status line), app.ts capture → store → runner → panel pipeline with event-ordered thread view, claude path resolution, captureFromFile test hook; follow-ups 050–052 (4ea2f32)
 2026-10-17 · 010 · closed · hotkeys (capture/append, 400 ms debounce, taken-key notice naming hotkeys.<name>; Windows as a tray balloon), tray drawn in code with 5 items (Open panel, Pause/Resume, Open history folder creating threads/ first, Clear history, Quit), single instance with --quit, pause/resume on suspend/lock with hotkey re-registration; manual tray/capture checks deferred to 013/032 (f2a5903)
 2026-10-17 · 011 · closed · auth.ts: claude auth status (output decides, identity fields never returned or logged), usage line 5h N% · 7d M%, block until resetsAt with a local reset time; runner rechecks auth after an error result, fails usage-blocked turns before spawning, saves warning/usage on answers; startup notice for not found / logged out; card warning + usage footer; tray tooltip usage (c0aa915)
@@ -50,3 +50,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-22 · adhoc · queued 075: theme setting (dark default) and a more translucent window, Eric's choices (priority 0) (-)
 2026-10-22 · 075 · closed · config.json theme dark|light|system (default dark) sets nativeTheme.themeSource before the window, so the panel and its blur are dark on a Light Mac; window ground more see-through (0.56 light, 0.50 dark); SPEC Amendment 12; e2e launches without Playwright's light emulation (8388539)
 2026-10-22 · adhoc · released snapsolve 0.2.1 into ~/dev/snapsolve-local (075 theme, dark default, more translucent ground) (1ea96da)
+2026-10-22 · adhoc · queued 076: dark code blocks, New York serif answers, terminal-style see-through (Eric's choices; priority 0) (-)

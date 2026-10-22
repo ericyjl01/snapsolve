@@ -1950,6 +1950,29 @@
         "reasons": "config validates theme (dark default; light/system accepted; blue/1/null/Dark -> dark with one warning; missing key -> dark, file untouched); panel sets nativeTheme.themeSource before the window for all three values (ordered double); e2e on a Light Mac: no theme/dark -> prefers-color-scheme dark and ground 0.5, light -> not dark and ground 0.56; installer default has theme dark; SKILL.md names the key and its values; task tests and npm test green",
         "at": "2026-10-22"
       }
+    },
+    {
+      "id": "076",
+      "title": "dark code blocks, New York serif answers, terminal-style see-through window",
+      "status": "open",
+      "priority": 0,
+      "milestone": 3,
+      "deps": [
+        "075"
+      ],
+      "file": "docs/tasks/076-dark-code-blocks-new-york-serif-answers.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/unit/panel.test.ts test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

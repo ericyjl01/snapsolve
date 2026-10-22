@@ -13,6 +13,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   Notification,
   powerMonitor,
   protocol,
@@ -166,6 +167,7 @@ async function start(): Promise<void> {
   let voice: Voice | null = null;
   const panel = createPanel({
     BrowserWindow,
+    nativeTheme,
     screen,
     ipcMain,
     platform: process.platform,

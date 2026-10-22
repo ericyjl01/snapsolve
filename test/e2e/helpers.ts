@@ -40,6 +40,8 @@ export async function launchApp(opts: LaunchOptions = {}): Promise<LaunchedApp> 
     env,
     cwd: repoRoot,
     timeout: 30_000,
+    // Playwright emulates a light prefers-color-scheme by default; the app's own theme (075) must show through.
+    colorScheme: null,
   });
 
   const close = async () => {

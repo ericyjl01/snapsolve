@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { link, mkdir, open, readFile, rm } from "node:fs/promises";
 import path from "node:path";
-import type { Config, Effort, Hotkeys } from "../shared/types";
+import type { Config, Effort, Hotkeys, Theme } from "../shared/types";
 import type { Logger } from "./log";
 
 export const DEFAULTS: Readonly<Config> = Object.freeze({
@@ -16,6 +16,7 @@ export const DEFAULTS: Readonly<Config> = Object.freeze({
   maxConcurrent: 2,
   maxScreenshotsPerThread: 6,
   timeoutSec: 180,
+  theme: "dark",
 });
 
 export interface LoadedConfig {
@@ -83,6 +84,7 @@ async function create(file: string): Promise<LoadedConfig> {
 type FieldKey = Exclude<keyof Config, "hotkeys">;
 
 const EFFORTS: readonly Effort[] = ["low", "medium", "high", "xhigh", "max"];
+const THEMES: readonly Theme[] = ["dark", "light", "system"];
 // An alias ("opus") or a full id ("claude-opus-5-5[1m]"); no spaces, so it stays one CLI argument.
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:[\]-]{0,99}$/;
 
@@ -104,6 +106,7 @@ const FIELDS: Record<FieldKey, { valid: (v: unknown) => boolean; expected: strin
   maxConcurrent: { valid: intIn(1, 8), expected: "an integer from 1 to 8" },
   maxScreenshotsPerThread: { valid: intIn(1, 20), expected: "an integer from 1 to 20" },
   timeoutSec: { valid: intIn(10, 3600), expected: "an integer from 10 to 3600" },
+  theme: { valid: (v) => THEMES.includes(v as Theme), expected: `one of ${THEMES.join(", ")}` },
 };
 
 function validate(raw: unknown): { config: Config; warnings: string[] } {

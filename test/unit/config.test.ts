@@ -16,6 +16,8 @@ const SPEC_DEFAULTS = {
   maxConcurrent: 2,
   maxScreenshotsPerThread: 6,
   timeoutSec: 180,
+  // 075: snapsolve is dark unless config.json says otherwise.
+  theme: "dark",
 };
 
 let dir: string;
@@ -119,6 +121,7 @@ describe("loadConfig", () => {
       maxConcurrent: 3,
       maxScreenshotsPerThread: 4,
       timeoutSec: 300,
+      theme: "light",
     };
     await writeConfig(custom);
     const before = await snapshot();
@@ -157,6 +160,10 @@ describe("loadConfig", () => {
     ["timeoutSec", -1],
     ["timeoutSec", "180"],
     ["hotkeys", "Control+Alt+Q"],
+    ["theme", "blue"],
+    ["theme", 1],
+    ["theme", null],
+    ["theme", "Dark"],
   ])("%s = %j → default, one warning naming it, file untouched", async (key, value) => {
     await writeConfig({ [key]: value });
     const before = await snapshot();
@@ -342,5 +349,35 @@ describe("loadConfig", () => {
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls.map((c) => c[0])).toEqual(["config.warning", "config.warning"]);
     expect(warn.mock.calls.map((c) => c[1].message)).toEqual(r.warnings);
+  });
+});
+
+describe("theme (075)", () => {
+  it("defaults to dark", () => {
+    expect(DEFAULTS.theme).toBe("dark");
+  });
+
+  it.each(["dark", "light", "system"])("%s is accepted without a warning", async (theme) => {
+    await writeConfig({ theme });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config).toEqual({ ...SPEC_DEFAULTS, theme });
+  });
+
+  it("an invalid value falls back to dark with one warning naming the allowed values", async () => {
+    await writeConfig({ theme: "blue" });
+    const r = await loadConfig(file);
+    expect(r.config.theme).toBe("dark");
+    expect(r.warnings).toHaveLength(1);
+    for (const word of ["theme", "dark", "light", "system"]) expect(r.warnings[0]).toContain(word);
+  });
+
+  it("an existing file without theme gets dark, no warning, and is not rewritten", async () => {
+    await writeConfig({ model: "opus", effort: "medium" });
+    const before = await snapshot();
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.theme).toBe("dark");
+    expect(await snapshot()).toEqual(before);
   });
 });

@@ -42,6 +42,7 @@ When it succeeds, tell the user:
 - **Voice** (macOS): Ctrl+Option+V (`hotkeys.voice`) starts listening; say the question and press it again to send it to the chat on screen, or Esc to cancel. The mic buttons in the window do the same. Speech is turned into text on the Mac and no audio is kept. The first time, macOS asks for Microphone and Speech Recognition; if either was refused, the card's Open System Settings goes to the right pane.
 - **Screen Recording (macOS)**: walk them through it. The first capture makes macOS ask for Screen Recording; they turn snapsolve on in System Settings → Privacy & Security → Screen Recording, then click Relaunch on the snapsolve card (macOS only applies the grant to a restarted app). Until then the card offers Open System Settings and Relaunch.
 - **AltGr** (Windows): on German, French and Polish keyboard layouts Ctrl+Alt is the same as AltGr, so Ctrl+Alt+C also catches AltGr+C (that types ć on a Polish keyboard). If they need that key, change `hotkeys.capture` in the config.json the output names.
+- **Look**: snapsolve is dark by default; `"theme"` in config.json can be `"dark"`, `"light"` or `"system"` (follow macOS). Restart snapsolve after changing it.
 - **Pro plan**: snapsolve answers with Opus at high effort, which uses a Pro plan's weekly Opus allowance faster. The tray tooltip shows the 5-hour and 7-day usage. To save allowance, set `"model": "sonnet"` in config.json and restart snapsolve.
 
 ## start

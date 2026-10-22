@@ -43,6 +43,7 @@ function defaultConfig() {
     maxConcurrent: 2,
     maxScreenshotsPerThread: 6,
     timeoutSec: 180,
+    theme: "dark",
   };
 }
 

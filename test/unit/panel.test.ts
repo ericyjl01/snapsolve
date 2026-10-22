@@ -22,6 +22,7 @@ import {
   type WindowBounds,
 } from "../../src/main/panel";
 import { createStore, type Store } from "../../src/main/store";
+import type { Theme } from "../../src/shared/types";
 
 const quietLog: Logger = { debug() {}, info() {}, warn() {}, error() {}, flush: async () => {} };
 /** A logger that records warning event names. */
@@ -382,13 +383,34 @@ const DISPLAY_A = { id: 1, workArea: { x: 0, y: 25, width: 1440, height: 875 } }
 const DISPLAY_B = { id: 2, workArea: { x: 1440, y: 0, width: 1920, height: 1080 } };
 
 function panelSetup(
-  options: { saved?: WindowBounds; cursorOn?: typeof DISPLAY_A; platform?: NodeJS.Platform; onClose?: () => void } = {},
+  options: {
+    saved?: WindowBounds;
+    cursorOn?: typeof DISPLAY_A;
+    platform?: NodeJS.Platform;
+    onClose?: () => void;
+    theme?: Theme;
+    /** Records "themeSource=<value>" and "window" in order. */
+    events?: string[];
+  } = {},
 ) {
+  const events = options.events ?? [];
+  const nativeTheme = {
+    set themeSource(value: string) {
+      events.push(`themeSource=${value}`);
+    },
+  };
+  class OrderedWindow extends FakeWindow {
+    constructor(windowOptions: Record<string, unknown>) {
+      events.push("window");
+      super(windowOptions);
+    }
+  }
   let cursorDisplay = options.cursorOn ?? DISPLAY_A;
   const displays = [DISPLAY_A, DISPLAY_B];
   const saves: WindowBounds[] = [];
   const deps = {
-    BrowserWindow: FakeWindow as unknown as PanelDeps["BrowserWindow"],
+    BrowserWindow: OrderedWindow as unknown as PanelDeps["BrowserWindow"],
+    nativeTheme,
     screen: {
       getCursorScreenPoint: () => ({ x: cursorDisplay.workArea.x + 5, y: cursorDisplay.workArea.y + 5 }),
       getDisplayNearestPoint: () => cursorDisplay,
@@ -400,7 +422,7 @@ function panelSetup(
     ipcMain: { handle() {} },
     platform: options.platform ?? ("darwin" as NodeJS.Platform),
     preloadPath: "/preload.js",
-    config: { autoHideSec: 0 },
+    config: { autoHideSec: 0, theme: options.theme ?? "dark" },
     log: quietLog,
     bounds: options.saved ?? {},
     saveBounds: vi.fn(async (b: WindowBounds) => void saves.push(structuredClone(b))),
@@ -459,6 +481,14 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
       visualEffectState: "active",
       backgroundColor: "#00000000",
     });
+  });
+
+  // 075: Electron's themeSource drives both prefers-color-scheme in the renderer and the vibrancy material, so it is
+  // set before the window exists.
+  it.each(["dark", "light", "system"] as const)("theme %s sets nativeTheme.themeSource before the window is created (075)", (theme) => {
+    const events: string[] = [];
+    panelSetup({ theme, events });
+    expect(events).toEqual([`themeSource=${theme}`, "window"]);
   });
 
   it("off macOS: no vibrancy and an opaque background (061)", () => {

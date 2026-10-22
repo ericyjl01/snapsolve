@@ -239,6 +239,25 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
+  // 075: config.json theme drives the look whatever macOS uses (dark when unset); the ground is a bit more see-through.
+  it.each([
+    { config: {}, dark: true, ground: "rgba(30, 30, 32, 0.5)" },
+    { config: { theme: "dark" }, dark: true, ground: "rgba(30, 30, 32, 0.5)" },
+    { config: { theme: "light" }, dark: false, ground: "rgba(246, 246, 248, 0.56)" },
+  ])("theme $config → dark $dark, ground $ground (075)", async ({ config, dark, ground }) => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    writeFileSync(path.join(dataDir, "config.json"), JSON.stringify(config));
+    const p = await launchPanel(dataDir);
+    try {
+      expect(await p.page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches)).toBe(dark);
+      expect(await p.page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(ground);
+      expect(await p.app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)).toBe(dark);
+    } finally {
+      await p.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 60_000);
+
   it("older threads are one-line rows (title and time) that open on click, and the composer follows up the newest thread (061)", async () => {
     const p = await launchPanel();
     try {

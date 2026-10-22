@@ -1028,6 +1028,7 @@ describe("writeClaudePath", () => {
     expect(written).toEqual({ ...DEFAULTS, claudePath: claudeReal });
     expect(written.hotkeys.capture).toBe("Control+Alt+C");
     expect(written.hotkeys.voice).toBe("Control+Alt+V");
+    expect(written.theme).toBe("dark");
     expect(r).toEqual({ claudePath: claudeReal, warning: null });
 
     const loaded = await loadConfig(configFile);

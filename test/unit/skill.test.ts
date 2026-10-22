@@ -178,6 +178,9 @@ describe("SKILL.md install and doctor notes", () => {
     expect(install).toMatch(/5-hour/);
     expect(install).toMatch(/7-day/);
     expect(install).toContain('"model": "sonnet"');
+    // 075: the theme key and its three values.
+    expect(install).toMatch(/`"theme"`|"theme"/);
+    for (const value of ['"dark"', '"light"', '"system"']) expect(install).toContain(value);
     expect(install).toMatch(/AltGr/);
     for (const layout of ["German", "French", "Polish"]) expect(install).toContain(layout);
     for (const variable of ["ELECTRON_MIRROR", "HTTPS_PROXY", "NODE_EXTRA_CA_CERTS"]) expect(install).toContain(variable);

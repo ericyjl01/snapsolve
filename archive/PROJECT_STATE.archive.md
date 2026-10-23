@@ -76,3 +76,4 @@
 2026-10-17 · adhoc · 065 added: capture continues the current chat, + button starts a new one, append hotkey removed (Eric's decision) (-)
 2026-10-17 · 062 · closed · speech-to-text is macOS built-in (Apple Speech on-device via a Swift helper); Approved libraries updated; 063 scoped and queued in M3 (-)
 2026-10-17 · 064 · blocked · review failed 3 times (last: doctor Mac line unasserted in skill.test.ts); reopen for a test-only fix? → keel/064 (3b6bb68)
+2026-10-17 · 058 · closed · floating 360 × 460 window (SPEC Amendment 6): movable, 36 px drag-region title bar, opens at the cursor display's saved rect or 24 px from top-right, saved per display id in window.json after a drag rests (never from a transition), clamped into the work area on open/redock, hide keeps the position, tray Reset window position; Mac drag check deferred to 032; backlog 066 (panelWidth) (18f6a6e)

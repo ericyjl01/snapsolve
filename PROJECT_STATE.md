@@ -2,15 +2,14 @@
 
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.3. Merged since, not released: 077 tray Appearance, 078 Chats sidebar, 079 pill composer.
+- Installed on Eric's Mac: 0.2.4 (2026-10-23): 077 tray Appearance, 078 Chats sidebar, 079 pill composer.
 - Closed 2026-10-23: 079 ChatGPT-style pill composer (mic left, round send right, listening bar same shape,
   "Ask anything" / "Ask a follow-up"). M3 queue now: only 032 (blocked on Eric's checklist).
 - Backlog: 080 serialize theme saves; 081 composer label follows placeholder; 070 covered by 076 (drop candidate).
-- Next: tell Eric 077–079 are merged; a release (0.2.4) + /snapsolve update needs his go-ahead.
+- Next: Eric tries 0.2.4; 032 checklist results when he has them.
 - Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081.
 
 ## Log
-2026-10-17 · 052 · closed · recoverBusyThreads runs before the panel and hotkeys: threads an earlier run left new/queued/running become error with Retry (done when already answered), logged; unreadable threads untouched; follow-up 054 (backlog) (ad247a9)
 2026-10-17 · 013 · dropped · Windows archived (Amendment 4): Mac only from now on (-)
 2026-10-17 · 026 · dropped · Windows archived (Amendment 4); the first release moves to 055 on the Mac (-)
 2026-10-17 · adhoc · macOS live run: opus/high 4/4 correct; rates once 60.3 s (claude 34.4 s), rerun 5.6 s (-)
@@ -50,3 +49,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · 077 · closed · tray Appearance submenu (Dark / Light / Match macOS radio items after Reset window position) applies the theme live via nativeTheme.themeSource and saves only theme into config.json atomically (saveTheme); follow-up 080 (backlog) (2a20b35)
 2026-10-23 · 078 · closed · Chats sidebar: one chat on screen, the others listed newest first under Today / Yesterday / Previous 7 days / Older; overlay over a scrim below 600 px (starts closed), docked from 600 px (starts open); choosing a chat shows it and openThread (preload 16, thread:open) makes main continue it on the next capture; sidebar New chat = + (0e082df)
 2026-10-23 · 079 · closed · pill composer: rounded 20 px bar with the mic at the left, the text, a round fg-colored send at the right (faded when empty), buttons bottom-aligned as it grows; listening bar the same pill; placeholder Ask anything / Ask a follow-up; follow-up 081 (backlog) (d650089)
+2026-10-23 · adhoc · released snapsolve 0.2.4 into ~/dev/snapsolve-local (077 Appearance menu, 078 Chats sidebar, 079 pill composer); updated on Eric's Mac (e4e2b27)

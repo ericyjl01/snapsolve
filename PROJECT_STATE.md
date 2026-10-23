@@ -2,14 +2,12 @@
 
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.6 (2026-10-23): 084 chat column/composer widen with the window; doctor all ok.
-- Closed 2026-10-23, not yet released (0.2.6 lacks it): 085 answer footer = model · response time only (Amendment 19);
-  usage stays in the tray tooltip. DESIGN.md footer lines noted on backlog 068.
-- Next: `tasks.py next` (expected all blocked — 032).
+- Installed on Eric's Mac: 0.2.7 (2026-10-23): 085 answer footer = model · response time only (Amendment 19);
+  doctor all ok. (0.2.6: 084 chat widens with the window.) DESIGN.md footer lines noted on backlog 068.
+- Queue: all blocked — 032.
 - Blocked: 032 (Eric's macOS checklist). Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081.
 
 ## Log
-2026-10-17 · 064 · blocked · review failed 3 times (last: doctor Mac line unasserted in skill.test.ts); reopen for a test-only fix? → keel/064 (3b6bb68)
 2026-10-17 · 058 · closed · floating 360 × 460 window (SPEC Amendment 6): movable, 36 px drag-region title bar, opens at the cursor display's saved rect or 24 px from top-right, saved per display id in window.json after a drag rests (never from a transition), clamped into the work area on open/redock, hide keeps the position, tray Reset window position; Mac drag check deferred to 032; backlog 066 (panelWidth) (18f6a6e)
 2026-10-17 · 059 · closed · resize from any edge or corner (SPEC Amendment 7): resizable + 280 × 300 minimum only while open and at rest, moved/resized share the save path (per display, never from a transition), under-minimum sizes put back and not saved, saved sizes raised to the minimum then clamped, drawn grip; hand drag deferred to 032; found 067 (backlog e2e flake) (1bf32d2)
 2026-10-17 · 060 · closed · show/hide hotkey Control+Alt+X (SPEC Amendment 8): hidden = win.hide(), starts hidden, tab and transitions removed, always resizable with the minimum; hotkeys.toggle validated (clash across all three → defaults), registered/paused/re-registered; tray Show/Hide snapsolve (⌃⌥X) via hotkeySymbols; installer default + SKILL.md; red re-run via revert (docs/issues.md); hand keypress → 032; found 068 (1ba1151)
@@ -49,3 +47,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · adhoc · released snapsolve 0.2.6 into ~/dev/snapsolve-local (084 chat widens with the window); updated on Eric's Mac (2eea53d)
 2026-10-23 · keel · queued · 085 answer footer shows only the model and the response time (Eric, 0.2.6) (-)
 2026-10-23 · 085 · closed · the answer footer is the model and the newest answer's response time only (no TTFT, no usage); usage stays in the tray tooltip (6c1f64f)
+2026-10-23 · adhoc · released snapsolve 0.2.7 into ~/dev/snapsolve-local (085 footer: model and response time); updated on Eric's Mac (6f91a80)

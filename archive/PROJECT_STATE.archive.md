@@ -75,3 +75,4 @@
 2026-10-17 · adhoc · hotkeys decided (capture ⌃⌥C, toggle ⌃⌥Z, voice ⌃⌥V start+stop): 060/062/063 updated, 064 added; Eric's config.json capture set to Control+Alt+C (-)
 2026-10-17 · adhoc · 065 added: capture continues the current chat, + button starts a new one, append hotkey removed (Eric's decision) (-)
 2026-10-17 · 062 · closed · speech-to-text is macOS built-in (Apple Speech on-device via a Swift helper); Approved libraries updated; 063 scoped and queued in M3 (-)
+2026-10-17 · 064 · blocked · review failed 3 times (last: doctor Mac line unasserted in skill.test.ts); reopen for a test-only fix? → keel/064 (3b6bb68)

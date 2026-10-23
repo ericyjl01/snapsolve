@@ -521,7 +521,10 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
 
   // 090: the ground's alpha is 1 − transparency, injected as CSS (no IPC), again after every page load.
   const injected = (win: FakeWindow) => [...win.webContents.css.values()];
-  const settle = () => new Promise((r) => setTimeout(r, 0));
+  // These tests run under fake timers: let the insertCSS / removeInsertedCSS promise chain run instead of a timer.
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  };
 
   it("on dom-ready the page gets the configured ground: 20 → --ground-alpha 0.8 (090)", async () => {
     const { win } = panelSetup({ transparency: 20 });

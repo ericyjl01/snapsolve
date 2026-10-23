@@ -124,6 +124,7 @@ describe("loadConfig", () => {
       maxScreenshotsPerThread: 4,
       timeoutSec: 300,
       theme: "light",
+      transparency: 50,
     };
     await writeConfig(custom);
     const before = await snapshot();

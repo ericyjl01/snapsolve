@@ -71,3 +71,4 @@
 2026-10-17 · 055 · closed · snapsolve 0.1.0 released into private marketplace ~/dev/snapsolve-local and installed in Claude Code as snapsolve@snapsolve-local (user scope); doctor ok for Node/claude/auth; skill is snapsolve:snapsolve; found 056 (backlog, widened to plugin.json) and 057 (flaky panel e2e) (3b5bed8)
 2026-10-17 · 057 · closed · the continued note shows from the seeded turn's start: runner emits turn (the saved user turn) and app broadcasts it; the 051/057 e2e wait for the saved first answer, not the streaming .answer; 10/10 panel e2e runs (d1e5294)
 2026-10-17 · adhoc · backlog 058 (drag to move the open panel) and 059 (resize it), Eric's asks after first use of 0.1.0 (-)
+2026-10-17 · adhoc · backlog redesign from mockup A2: 058/059 rewritten as floating window + resize; 060 toggle hotkey, no tab; 061 native restyle, no Copy; 062 voice engine clarify (blocked); 063 voice follow-up (-)

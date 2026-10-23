@@ -292,3 +292,10 @@ Symptom: with `themeSource = "dark"` in main (`shouldUseDarkColors` true), the p
 Cause:   Playwright's `_electron.launch` emulates `colorScheme: "light"` by default, overriding the app's theme in every page.
 Fix:     `colorScheme: null` in `test/e2e/helpers.ts` launchApp (fb6b5e7).
 Tried:   probing over time / after a toggle / re-setting themeSource — no change, which pointed at emulation rather than timing.
+
+## 2026-10-23 · task 084 · e2e "docked at 1100 px" measured a 360 px layout
+tags: e2e, playwright, electron, resize, capture, window-size, 059, 084
+Symptom: after `resizeTo(p, 1100)` then `capture(p.app)`, every box measured 360 px wide (sidebar right edge 232 read from before), so the docked-width check failed although the CSS cap was gone.
+Cause:   a capture shows the window at its saved size (059); `win.setBounds` in tests never emits `resized`, so the saved size stays the 360 px default and the capture shrinks the window back.
+Fix:     resize after the capture (or again after it) before measuring (b043233). A temporary PROBE log of the boxes found it in one run.
+Note:    any e2e that sets the width and then captures must re-apply the width after the capture.

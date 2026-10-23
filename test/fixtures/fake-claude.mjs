@@ -7,6 +7,7 @@
 // Writes transcripts like claude: `--session-id <sid>` → $FAKE_PROJECTS/<encoded cwd>/<sid>.jsonl, `--resume <path>`
 // → appends to <path> (missing or unparsable → "No conversation found"). Logs start/end, argv, env names, cwd and
 // stdin as JSON lines to $FAKE_LOG. FAKE_ANSWER_SUFFIX is appended to every answer (e.g. math for the panel e2e).
+// FAKE_DURATION_STEP_MS adds that much to the reported duration_ms (1234) per earlier answer in the transcript (085).
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -136,7 +137,9 @@ async function main() {
   appendFileSync(transcript, `${JSON.stringify({ type: "assistant", sessionId: sid, message: { role: "assistant", content: [{ type: "text", text: answer }] } })}\n`);
   emit({ type: "stream_event", event: { type: "message_stop" }, session_id: sid });
   emit({ type: "rate_limit_event", rate_limit_info: { status: "allowed", resetsAt: 1791996600, rateLimitType: "five_hour", unifiedWindows: { five_hour: { utilization: 0.12, resetsAt: 1791996600 }, seven_day: { utilization: 0.34, resetsAt: 1792530000 } } } });
-  emit({ type: "result", subtype: "success", is_error: false, result: answer, session_id: sid, duration_ms: 1234, duration_api_ms: 1100, ttft_ms: 321, total_cost_usd: 0.0123 });
+  const earlier = readFileSync(transcript, "utf8").split("\n").filter((line) => line.includes('"type":"assistant"')).length - 1;
+  const durationMs = 1234 + Number(process.env.FAKE_DURATION_STEP_MS || 0) * earlier;
+  emit({ type: "result", subtype: "success", is_error: false, result: answer, session_id: sid, duration_ms: durationMs, duration_api_ms: 1100, ttft_ms: 321, total_cost_usd: 0.0123 });
   finish(0);
 }
 

@@ -247,13 +247,10 @@ function renderLive(card: Card, thread: Thread): void {
   else card.live.replaceChildren(el("p", "thinking", thread.status === "queued" ? "Queued…" : "Thinking…"));
 }
 
+/** The card footer: the model, then the newest answer's response time (085; usage is in the tray tooltip). */
 function statusLine(thread: Thread): string {
   const turn = thread.turns.filter((t): t is AssistantTurn => t.role === "assistant").at(-1);
-  const parts = [thread.model];
-  if (turn?.ttftMs != null) parts.push(`TTFT ${(turn.ttftMs / 1000).toFixed(1)} s`);
-  if (turn) parts.push(`${(turn.durationMs / 1000).toFixed(1)} s`);
-  if (turn?.usage) parts.push(turn.usage);
-  return parts.join(" · ");
+  return turn ? `${thread.model} · ${(turn.durationMs / 1000).toFixed(1)} s` : thread.model;
 }
 
 function update(threadId: string): void {

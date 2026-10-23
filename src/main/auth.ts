@@ -1,5 +1,5 @@
 // Claude Code's login and usage (SPEC §3.6): `claude auth status` (at startup and after an error result) and the
-// rate-limit windows from `rate_limit_event` as the tray tooltip and card footer show them.
+// rate-limit windows from `rate_limit_event` as the tray tooltip shows them.
 import type { Logger } from "./log";
 import type { Command } from "./runner";
 import type { RateWindow } from "./stream";

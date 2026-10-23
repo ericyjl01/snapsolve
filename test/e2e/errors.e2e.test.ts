@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ElectronApplication, Page } from "playwright-core";
 import { describe, expect, it } from "vitest";
+import type { AssistantTurn, Thread } from "../../src/shared/types";
 import { fixturesDir } from "../paths";
 import { launchApp, type LaunchedApp } from "./helpers";
 
@@ -96,12 +97,25 @@ describe("error states (e2e)", () => {
     }
   });
 
-  it("an answer's card footer shows the usage; a logged-in claude raises no startup notice", async () => {
+  // 085 (Amendment 19): the footer is the model and the response time only; usage stays in the tray tooltip.
+  it("an answer's card footer is the model and the response time only, no TTFT or usage; a logged-in claude raises no startup notice (085)", async () => {
     const p = await launch();
     try {
       const id = await capture(p.app);
       await p.page.locator(`${card(id)} .answer`).first().waitFor({ state: "visible", timeout: 15_000 });
-      await expect.poll(() => p.page.locator(`${card(id)} .status`).textContent(), { timeout: 5_000 }).toContain("5h 12% · 7d 34%");
+      const threadFile = path.join(p.dataDir, "threads", id, "thread.json");
+      await expect.poll(() => existsSync(threadFile) && (JSON.parse(readFileSync(threadFile, "utf8")) as Thread).status, { timeout: 10_000 }).toBe("done");
+      const thread = JSON.parse(readFileSync(threadFile, "utf8")) as Thread;
+      const turn = thread.turns.filter((t): t is AssistantTurn => t.role === "assistant").at(-1)!;
+      // The fake reported usage and a TTFT for this turn; the footer leaves both out.
+      expect(turn.usage).toBe("5h 12% · 7d 34%");
+      expect(turn.ttftMs).toBe(321);
+      const expected = `${thread.model} · ${(turn.durationMs / 1000).toFixed(1)} s`;
+      await expect.poll(() => p.page.locator(`${card(id)} .status`).textContent(), { timeout: 5_000 }).toBe(expected);
+      const footer = (await p.page.locator(`${card(id)} .status`).textContent())!;
+      expect(footer).not.toContain("TTFT");
+      expect(footer).not.toContain("%");
+      expect(footer).not.toContain("5h");
       expect(await notifications(p.app)).toEqual([]);
     } finally {
       await p.close();

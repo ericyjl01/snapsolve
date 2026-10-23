@@ -67,7 +67,7 @@ export interface AssistantTurn {
   note?: "resumeFallback";
   /** Set when this turn billed to an API key although `allowApiKey` is false (SPEC §3.6). */
   warning?: "apiKeyInUse";
-  /** The usage after this turn, as the card footer shows it ("5h N% · 7d M%"). */
+  /** The usage after this turn ("5h N% · 7d M%"), as the tray tooltip shows it; the card footer leaves it out (085). */
   usage?: string;
 }
 

@@ -388,9 +388,10 @@ describe("panel (e2e)", () => {
   // 075: config.json theme drives the look whatever macOS uses (dark when unset); 076: the ground is ~88% solid,
   // see-through like a terminal with no blur (Amendment 13).
   it.each([
-    { config: {}, dark: true, ground: "rgba(24, 24, 24, 0.88)" },
-    { config: { theme: "dark" }, dark: true, ground: "rgba(24, 24, 24, 0.88)" },
-    { config: { theme: "light" }, dark: false, ground: "rgba(246, 246, 248, 0.88)" },
+    // 090 (Amendment 24): the ground is 1 − transparency; the default transparency 20 → 0.8 (was 076's 0.88).
+    { config: {}, dark: true, ground: "rgba(24, 24, 24, 0.8)" },
+    { config: { theme: "dark" }, dark: true, ground: "rgba(24, 24, 24, 0.8)" },
+    { config: { theme: "light" }, dark: false, ground: "rgba(246, 246, 248, 0.8)" },
   ])("theme $config → dark $dark, ground $ground (075, 076)", async ({ config, dark, ground }) => {
     const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
     writeFileSync(path.join(dataDir, "config.json"), JSON.stringify(config));
@@ -415,7 +416,7 @@ describe("panel (e2e)", () => {
       await p.page.evaluate(() => ((window as unknown as { __marker: number }).__marker = 77));
       await p.app.evaluate((_electron) => (globalThis as unknown as { snapsolveTest: { setTheme(t: string): Promise<void> } }).snapsolveTest.setTheme("light"));
       await expect.poll(() => p.page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches), { timeout: 5_000 }).toBe(false);
-      await expect.poll(() => p.page.evaluate(() => getComputedStyle(document.body).backgroundColor), { timeout: 5_000 }).toBe("rgba(246, 246, 248, 0.88)");
+      await expect.poll(() => p.page.evaluate(() => getComputedStyle(document.body).backgroundColor), { timeout: 5_000 }).toBe("rgba(246, 246, 248, 0.8)");
       // Same document: restyled without a reload.
       expect(await p.page.evaluate(() => (window as unknown as { __marker?: number }).__marker)).toBe(77);
       await expect

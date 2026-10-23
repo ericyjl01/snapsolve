@@ -2008,7 +2008,7 @@
     {
       "id": "078",
       "title": "conversation sidebar: collapsible chat list, one chat on screen",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "milestone": 3,
       "deps": [
@@ -2016,17 +2016,22 @@
       ],
       "file": "docs/tasks/078-conversation-sidebar.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/078",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-23",
+      "commit": "0e082df",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/app.test.ts test/unit/ipc.test.ts test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "333f62e0ae310fc3e93ed48aa151cf3da4183f68",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "bd7ddf5757ab2fde0d667dfd2752232e25ef100a",
+        "reasons": "app unit: openThread routes the next capture/dictation to the chosen thread, clears a pending +, rejects unknown/non-uuid/non-string ids with no change, and keeps 051's full-thread split and errored append; ipc: thread:open mapped (sixteen); e2e at 360px: one chat on screen, Show chats overlay over a scrim with rows newest first under Today and aria-current, scrim closes it, choosing the older chat shows it and closes the overlay, then a typed follow-up and the next capture land in it (thread.json); sidebar New chat; docked at 760px and an overlay again at 360px; a non-current finish leaves the main area alone; four day groups; sidebar vs chat background in both themes; task tests 113/113 and npm test 1010 passed",
+        "at": "2026-10-23"
+      }
     },
     {
       "id": "079",

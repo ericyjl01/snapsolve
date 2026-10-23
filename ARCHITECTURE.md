@@ -20,7 +20,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `tray.ts`: tray menu and tooltip
   - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the permission cards' actions (fixed settings URLs: Screen Recording, Microphone, Speech Recognition; relaunch), hotkey labels per platform
   - `voice.ts`: dictation (task 063): the speech helper's JSON-line protocol, listen → stop and send / Esc / hide cancel, the temporary Esc shortcut, `resolveSpeechHelper`
-- `src/preload/preload.ts`: contextBridge exposing exactly the fifteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10 and 11 (`copy` → `hide`; `newThread`; `onVoice`, `toggleVoice`, `openVoiceSettings`)
+- `src/preload/preload.ts`: contextBridge exposing exactly the sixteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10, 11 and 15 (`copy` → `hide`; `newThread`; `onVoice`, `toggleVoice`, `openVoiceSettings`; `openThread`)
 - `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `styles.css`
 - `src/shared/`: `types.ts` (Thread, Turn, Config, events), `ipc.ts` (channel names), `errors.ts` (error kinds + user messages)
 - `prompts/system.md`: the system prompt

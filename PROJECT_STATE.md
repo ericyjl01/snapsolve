@@ -2,15 +2,14 @@
 
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.3 (076 + grey #202327 code blocks). 077 is merged but not released yet.
-- Closed 2026-10-23: 077 tray Appearance › Dark / Light / Match macOS (live via nativeTheme, saved by saveTheme).
-- Next: 078 (p1) conversation sidebar, one chat on screen, preload 16 (Amendment 15); then 079 (p2) pill composer.
-  Mockup claude.ai/artifact/RJd7MeYL52hZh2ry3aAJpe.
-- Backlog: 080 serialize theme saves (review note); 070 now covered by 076 (candidate to drop).
+- Installed on Eric's Mac: 0.2.3. Merged since, not released: 077 tray Appearance menu, 078 Chats sidebar.
+- Closed 2026-10-23: 078 one chat on screen + Chats sidebar (overlay < 600 px, docked ≥ 600 px; Today / Yesterday /
+  Previous 7 days / Older), preload 16 with openThread so captures continue the chosen chat (Amendment 15).
+- Next: 079 (p2) ChatGPT-style pill composer; mockup claude.ai/artifact/RJd7MeYL52hZh2ry3aAJpe.
+- Backlog: 080 serialize theme saves; 070 covered by 076 (candidate to drop).
 - 032 waits on Eric's checklist. Backlog 033, 042, 053, 054, 056, 066–070, 074, 080.
 
 ## Log
-2026-10-17 · 050 · closed · a Retry is a runner retry request: retryTarget re-runs the last user turn followed only by errored answers as the request that first ran it, without appending it again; resumes the owned transcript or takes the fresh-session fallback; nothing to retry → ok:false, no spawn (749b2df)
 2026-10-17 · 051 · closed · an append past maxScreenshotsPerThread starts a thread seeded with the previous thread's last successful answer (seed on the first screenshot turn: image + seededQuestion, kept on retry, first of the earlier answers in a fallback); the card shows CONTINUED_NOTE; no answer → plain new thread (09c9d4f)
 2026-10-17 · 052 · closed · recoverBusyThreads runs before the panel and hotkeys: threads an earlier run left new/queued/running become error with Retry (done when already answered), logged; unreadable threads untouched; follow-up 054 (backlog) (ad247a9)
 2026-10-17 · 013 · dropped · Windows archived (Amendment 4): Mac only from now on (-)
@@ -50,3 +49,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-22 · adhoc · released snapsolve 0.2.3 into ~/dev/snapsolve-local (grey code blocks); updated on Eric's Mac (cb11abd)
 2026-10-22 · keel · queued · 077 tray Appearance menu, 078 conversation sidebar, 079 pill composer (Eric's choices, mockup approved) (-)
 2026-10-23 · 077 · closed · tray Appearance submenu (Dark / Light / Match macOS radio items after Reset window position) applies the theme live via nativeTheme.themeSource and saves only theme into config.json atomically (saveTheme); follow-up 080 (backlog) (2a20b35)
+2026-10-23 · 078 · closed · Chats sidebar: one chat on screen, the others listed newest first under Today / Yesterday / Previous 7 days / Older; overlay over a scrim below 600 px (starts closed), docked from 600 px (starts open); choosing a chat shows it and openThread (preload 16, thread:open) makes main continue it on the next capture; sidebar New chat = + (0e082df)

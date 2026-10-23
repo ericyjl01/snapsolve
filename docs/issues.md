@@ -313,3 +313,10 @@ Symptom: after the failed-save path made `turns.length === 0` mean "first turn",
 Cause:   the unit tests' fake runner writes no turns, so a chat with screenshots (or a text thread) looks empty on disk; disk state cannot tell it from a chat whose first save failed.
 Fix:     app.ts remembers those chats in memory (`unstarted`) for the run (4b3d902).
 Note:    test/git-clean-setup.ts fails a run when a tracked file that was clean when the run started is edited during it (the red run flagged PROJECT_STATE.md): edit memory files before starting a suite, not while it runs.
+
+## 2026-10-23 · task 090 · the see-through ground read nearly solid: html and body both painted it
+tags: renderer, css, transparency, ground, alpha, e2e, 076, 090
+Symptom: review 1 measured a transparent Electron window: transparency 40 rendered 0.84 opaque (not 0.60), the default 20 → 0.96, so the window still looked solid on Eric's Mac. Every e2e passed.
+Cause:   styles.css set `background: var(--ground)` on `html, body`; two coats stack to 1 − (t/100)². The e2e read only body's computed colour, which is right per element and blind to the stack.
+Fix:     the ground is on html alone, body transparent; the 090 e2e reads html and body stacked, 075/076/078 read html and require body rgba(0, 0, 0, 0) (5a8fcdf).
+Note:    for any alpha on screen, assert what composites (every layer that covers the window), not one element's computed value.

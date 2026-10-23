@@ -1,8 +1,10 @@
-// The macOS pieces of startup and the permission cards (SPEC §7.1, §9.1, Amendments 2 and 11): a menu-bar app without
-// a Dock icon whose claude gets the login shell's PATH, the argument-free card actions, and hotkey names as the
-// platform writes them. The platform is a parameter; every other platform is left untouched.
+// The macOS pieces of startup and the permission cards (SPEC §7.1, §9.1, Amendments 2, 11 and 22): a menu-bar app
+// without a Dock icon whose claude gets the login shell's PATH, the displays' physical sizes for the default window
+// (091), the argument-free card actions, and hotkey names as the platform writes them. The platform is a parameter;
+// every other platform is left untouched.
 import type { VoiceDenial } from "../shared/types";
 import type { Logger } from "./log";
+import type { PhysicalSize } from "./panel";
 import { type ExecFileSyncFn, withLoginShellPath } from "./runner";
 
 /** System Settings › Privacy & Security › Screen Recording. Fixed: the renderer never sends a URL. */
@@ -38,6 +40,50 @@ export function darwinStartup<Tray>(deps: StartupDeps<Tray>): { env: Record<stri
   });
   if (warning) deps.log.warn("app.loginPath", { warning });
   return { env, tray };
+}
+
+export type ExecFileFn = (file: string, args: string[], options: { timeout: number }) => Promise<{ stdout: string | Buffer }>;
+
+/** osascript's JavaScript bridge: `[{ id, width, height }]`, each screen's CGDirectDisplayID and CGDisplayScreenSize (mm). */
+const DISPLAY_SIZES_JXA = [
+  'ObjC.import("AppKit");',
+  'ObjC.import("CoreGraphics");',
+  "var screens = $.NSScreen.screens, out = [];",
+  "for (var i = 0; i < screens.count; i++) {",
+  '  var id = screens.objectAtIndex(i).deviceDescription.objectForKey("NSScreenNumber").unsignedIntValue;',
+  "  var mm = $.CGDisplayScreenSize(id);",
+  "  out.push({ id: id, width: mm.width, height: mm.height });",
+  "}",
+  "JSON.stringify(out);",
+].join("\n");
+const DISPLAY_SIZES_TIMEOUT_MS = 3000;
+
+/**
+ * On darwin: each display's physical size in millimetres by display id (Electron's `Display.id` is the
+ * CGDirectDisplayID), from one osascript run; a display that reports 0 mm (virtual, some projectors) is left out.
+ * A failure is logged and gives no sizes (the window then assumes 110 pt/in). Elsewhere: no sizes, nothing run.
+ */
+export async function readDisplaySizes(deps: {
+  platform: NodeJS.Platform;
+  execFile: ExecFileFn;
+  log: Pick<Logger, "warn">;
+}): Promise<Map<number, PhysicalSize>> {
+  const sizes = new Map<number, PhysicalSize>();
+  if (deps.platform !== "darwin") return sizes;
+  try {
+    const { stdout } = await deps.execFile("osascript", ["-l", "JavaScript", "-e", DISPLAY_SIZES_JXA], { timeout: DISPLAY_SIZES_TIMEOUT_MS });
+    const list: unknown = JSON.parse(String(stdout));
+    if (!Array.isArray(list)) throw new Error("not a list");
+    const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+    for (const entry of list as Record<string, unknown>[]) {
+      if (!entry || !finite(entry.id) || !finite(entry.width) || !finite(entry.height)) continue;
+      if (entry.width > 0 && entry.height > 0) sizes.set(entry.id, { width: entry.width, height: entry.height });
+    }
+  } catch (e) {
+    deps.log.warn("display.sizesFailed", { error: e });
+    sizes.clear();
+  }
+  return sizes;
 }
 
 export interface PermissionHandlers {

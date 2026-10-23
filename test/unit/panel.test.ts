@@ -11,10 +11,12 @@ import {
   defaultBounds,
   isSafeExternalUrl,
   loadWindowBounds,
+  FALLBACK_POINTS_PER_INCH,
   MIN_SIZE,
-  OPEN_INSET,
-  OPEN_SIZE,
+  OPEN_INCHES,
   type PanelDeps,
+  type PhysicalSize,
+  pointsPerInch,
   type Rect,
   resolveSnapsolveUrl,
   SAVE_DEBOUNCE_MS,
@@ -32,26 +34,95 @@ function recordingLog(): Logger & { warnings: string[] } {
 }
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
+// 091 (Amendment 22, replaces 058's 360 × 460 at the top-right): about 9 in × 6 in real size, centred in the work area.
 describe("defaultBounds", () => {
-  const primary = { id: 1, workArea: { x: 0, y: 0, width: 1280, height: 800 } };
+  /** `r`'s margins inside `area` differ by at most 1 px each way: centred, whole pixels. */
+  const expectCentred = (r: Rect, area: Rect) => {
+    for (const v of Object.values(r)) expect(Number.isInteger(v)).toBe(true);
+    expect(Math.abs(r.x - area.x - (area.x + area.width - r.x - r.width))).toBeLessThanOrEqual(1);
+    expect(Math.abs(r.y - area.y - (area.y + area.height - r.y - r.height))).toBeLessThanOrEqual(1);
+  };
+  const near = (value: number, expected: number) => {
+    expect(value).toBeGreaterThanOrEqual(expected * 0.98);
+    expect(value).toBeLessThanOrEqual(expected * 1.02);
+  };
 
-  it("first show is 360 × 460 at the top-right of the cursor's display (24 px in from the right and top)", () => {
-    expect(OPEN_SIZE).toEqual({ width: 360, height: 460 });
-    expect(OPEN_INSET).toBe(24);
-    expect(defaultBounds(primary)).toEqual({ x: 1280 - 24 - 360, y: 24, width: 360, height: 460 });
+  it("9 in × 6 in, 110 pt per inch when the physical size is unknown", () => {
+    expect(OPEN_INCHES).toEqual({ width: 9, height: 6 });
+    expect(FALLBACK_POINTS_PER_INCH).toBe(110);
+  });
+
+  it("a 34-inch ultrawide (3440 × 1440, 800 × 335 mm): about 983 × 655, centred", () => {
+    const display = { bounds: { x: 0, y: 0, width: 3440, height: 1440 }, workArea: { x: 0, y: 0, width: 3440, height: 1440 } };
+    const r = defaultBounds(display, pointsPerInch(display, { width: 800, height: 335 }));
+    near(r.width, 983);
+    near(r.height, 655);
+    expectCentred(r, display.workArea);
+  });
+
+  it("a 14-inch MacBook at default scaling (1512 wide, 302 × 189 mm, 1512 × 945 work area): about 1145 × 763, centred", () => {
+    const display = { bounds: { x: 0, y: 0, width: 1512, height: 982 }, workArea: { x: 0, y: 37, width: 1512, height: 945 } };
+    const r = defaultBounds(display, pointsPerInch(display, { width: 302, height: 189 }));
+    near(r.width, 1145);
+    near(r.height, 763);
+    expectCentred(r, display.workArea);
+  });
+
+  it("points per inch is the display's width in points over its width in inches", () => {
+    expect(pointsPerInch({ bounds: { x: 0, y: 0, width: 2540, height: 1000 } }, { width: 508, height: 200 })).toBeCloseTo(127, 10);
+  });
+
+  it.each([
+    { mm: undefined, why: "missing" },
+    { mm: { width: 0, height: 0 }, why: "0 mm (virtual or mirrored)" },
+    { mm: { width: -5, height: 100 }, why: "negative" },
+    { mm: { width: Number.NaN, height: 100 }, why: "not a number" },
+  ] as { mm: PhysicalSize | undefined; why: string }[])("physical size $why → unknown (no points per inch)", ({ mm }) => {
+    expect(pointsPerInch({ bounds: { x: 0, y: 0, width: 1440, height: 900 } }, mm)).toBeUndefined();
+  });
+
+  it("unknown physical size → 990 × 660 (110 pt per inch), centred", () => {
+    const area = { x: 0, y: 25, width: 1440, height: 875 };
+    const r = defaultBounds({ workArea: area });
+    expect(r).toEqual({ x: 225, y: 133, width: 990, height: 660 });
+    expect(defaultBounds({ workArea: area }, undefined)).toEqual(r);
+    expectCentred(r, area);
+  });
+
+  it("centred in the work area, not the screen: a menu bar and a Dock on the left offset it", () => {
+    const area = { x: 80, y: 25, width: 1360, height: 875 };
+    const r = defaultBounds({ workArea: area });
+    expect(r).toEqual({ x: 80 + 185, y: 133, width: 990, height: 660 });
+    expectCentred(r, area);
   });
 
   it("respects a second display's offsets (left of, and above, the primary)", () => {
-    expect(defaultBounds({ id: 2, workArea: { x: -1920, y: -200, width: 1920, height: 1040 } })).toEqual({ x: -384, y: -176, width: 360, height: 460 });
-    expect(defaultBounds({ id: 3, workArea: { x: 1280, y: 25, width: 1440, height: 875 } })).toEqual({ x: 2336, y: 49, width: 360, height: 460 });
+    const area = { x: -1920, y: -200, width: 1920, height: 1040 };
+    const r = defaultBounds({ workArea: area });
+    expect(r).toEqual({ x: -1920 + 465, y: -200 + 190, width: 990, height: 660 });
   });
 
-  it("a display smaller than the window: the window is clamped into the work area", () => {
-    expect(defaultBounds({ id: 4, workArea: { x: 0, y: 0, width: 300, height: 400 } })).toEqual({ x: 0, y: 0, width: 300, height: 400 });
+  it("a work area smaller than 9 × 6 in: shrunk to fit, same centre", () => {
+    const wide = { x: 0, y: 25, width: 1024, height: 575 };
+    expect(defaultBounds({ workArea: wide })).toEqual({ x: 17, y: 25, width: 990, height: 575 });
+    const small = { x: 0, y: 0, width: 800, height: 500 };
+    expect(defaultBounds({ workArea: small })).toEqual({ x: 0, y: 0, width: 800, height: 500 });
   });
 
-  it("always returns whole pixels (odd heights, fractional work areas)", () => {
-    for (const v of Object.values(defaultBounds({ id: 5, workArea: { x: 0.5, y: 0, width: 1279.5, height: 801 } }))) {
+  it("never below 280 × 300: a display that reports a huge physical size (a projector) still gets the minimum", () => {
+    const display = { bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
+    const r = defaultBounds(display, pointsPerInch(display, { width: 3000, height: 1700 }));
+    expect(r.width).toBe(MIN_SIZE.width);
+    expect(r.height).toBe(MIN_SIZE.height);
+    expectCentred(r, display.workArea);
+  });
+
+  it("a display smaller than the minimum: the window is clamped into the work area", () => {
+    expect(defaultBounds({ workArea: { x: 0, y: 0, width: 260, height: 280 } })).toEqual({ x: 0, y: 0, width: 260, height: 280 });
+  });
+
+  it("always returns whole pixels (odd heights, fractional work areas and points per inch)", () => {
+    for (const v of Object.values(defaultBounds({ workArea: { x: 0.5, y: 0, width: 1279.5, height: 801 } }, 113.37))) {
       expect(Number.isInteger(v)).toBe(true);
     }
   });
@@ -396,8 +467,11 @@ class FakeWindow extends EventEmitter {
   }
 }
 
-const DISPLAY_A = { id: 1, workArea: { x: 0, y: 25, width: 1440, height: 875 } };
-const DISPLAY_B = { id: 2, workArea: { x: 1440, y: 0, width: 1920, height: 1080 } };
+const DISPLAY_A = { id: 1, bounds: { x: 0, y: 0, width: 1440, height: 900 }, workArea: { x: 0, y: 25, width: 1440, height: 875 } };
+const DISPLAY_B = { id: 2, bounds: { x: 1440, y: 0, width: 1920, height: 1080 }, workArea: { x: 1440, y: 0, width: 1920, height: 1080 } };
+/** 091: with no physical size the default is 990 × 660 (110 pt per inch), centred in A's or B's work area. */
+const DEFAULT_A = { x: 225, y: 133, width: 990, height: 660 };
+const DEFAULT_B = { x: 1905, y: 210, width: 990, height: 660 };
 
 function panelSetup(
   options: {
@@ -407,6 +481,9 @@ function panelSetup(
     onClose?: () => void;
     theme?: Theme;
     transparency?: number;
+    /** Each display's physical size in mm (091); none by default. */
+    physicalSize?: (displayId: number) => PhysicalSize | undefined;
+    log?: Logger;
     /** Records "themeSource=<value>" and "window" in order. */
     events?: string[];
   } = {},
@@ -441,9 +518,10 @@ function panelSetup(
     platform: options.platform ?? ("darwin" as NodeJS.Platform),
     preloadPath: "/preload.js",
     config: { autoHideSec: 0, theme: options.theme ?? "dark", transparency: options.transparency ?? 20 },
-    log: quietLog,
+    log: options.log ?? quietLog,
     bounds: options.saved ?? {},
     saveBounds: vi.fn(async (b: WindowBounds) => void saves.push(structuredClone(b))),
+    ...(options.physicalSize ? { physicalSize: options.physicalSize } : {}),
     ...(options.onClose ? { onClose: options.onClose } : {}),
   } satisfies PanelDeps;
   const panel = createPanel(deps);
@@ -606,10 +684,10 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
   it("toggle back shows it exactly where the user left it, before the save has run", () => {
     const { panel, win } = panelSetup();
     panel.toggle();
-    win.userMove(700, 400);
+    win.userMove(300, 100);
     panel.toggle();
     panel.toggle();
-    expect(win.getBounds()).toEqual({ x: 700, y: 400, width: 360, height: 460 });
+    expect(win.getBounds()).toEqual({ x: 300, y: 100, width: 990, height: 660 });
   });
 
   it("capture shows a hidden window (open), at the cursor display's saved rect, without focus", () => {
@@ -659,10 +737,44 @@ describe("createPanel: floating window bounds (058)", () => {
     vi.useRealTimers();
   });
 
-  it("first open is 360 × 460 at the top-right of the cursor's display", () => {
+  // 091 (Amendment 22): the default is 9 × 6 in on the cursor's display, centred in its work area.
+  it("first open is the 9 × 6 in default, centred on the cursor's display (990 × 660 with no physical size)", () => {
     const { panel, win } = panelSetup();
     panel.open();
-    expect(win.getBounds()).toEqual({ x: 1440 - 24 - 360, y: 25 + 24, width: 360, height: 460 });
+    expect(win.getBounds()).toEqual(DEFAULT_A);
+  });
+
+  it("first open uses the display's physical size: 1440 points across 286 mm is 127.9 pt per inch → 1151 × 767", () => {
+    const sizes: Record<number, PhysicalSize> = { 1: { width: 286, height: 179 } };
+    const { panel, win } = panelSetup({ physicalSize: (id) => sizes[id] });
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 145, y: 79, width: 1151, height: 767 });
+    expect(win.getBounds()).toEqual(defaultBounds(DISPLAY_A, pointsPerInch(DISPLAY_A, sizes[1])));
+  });
+
+  it("each display's own physical size: A known, B unknown → B at 110 pt per inch, and the fallback is logged once for B", () => {
+    const infos: [string, unknown][] = [];
+    const log: Logger = { ...quietLog, info: (event: string, data?: unknown) => void infos.push([event, data]) };
+    const { panel, win, moveCursorTo } = panelSetup({ physicalSize: (id) => (id === 1 ? { width: 286, height: 179 } : undefined), log });
+    panel.open();
+    expect(infos.filter(([e]) => e === "panel.physicalSizeUnknown")).toEqual([]);
+    panel.close();
+    moveCursorTo(DISPLAY_B);
+    panel.open();
+    expect(win.getBounds()).toEqual(DEFAULT_B);
+    panel.resetPosition();
+    expect(win.getBounds()).toEqual(DEFAULT_B);
+    expect(infos.filter(([e]) => e === "panel.physicalSizeUnknown")).toEqual([
+      ["panel.physicalSizeUnknown", { display: 2, pointsPerInch: FALLBACK_POINTS_PER_INCH }],
+    ]);
+  });
+
+  it("the physical size is read when the default is needed, not only when the window was made", () => {
+    let sizes: Record<number, PhysicalSize> = {};
+    const { panel, win } = panelSetup({ physicalSize: (id) => sizes[id] });
+    sizes = { 1: { width: 286, height: 179 } };
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 145, y: 79, width: 1151, height: 767 });
   });
 
   it("open uses saved bounds for the display", () => {
@@ -681,28 +793,28 @@ describe("createPanel: floating window bounds (058)", () => {
     const { panel, win, moveCursorTo } = panelSetup({ saved: { "1": { x: 500, y: 300, width: 360, height: 460 } } });
     moveCursorTo(DISPLAY_B);
     panel.open();
-    expect(win.getBounds()).toEqual({ x: 1440 + 1920 - 24 - 360, y: 24, width: 360, height: 460 });
+    expect(win.getBounds()).toEqual(DEFAULT_B);
   });
 
   it("a user move is saved for its display after the debounce, and the next open comes back there", () => {
     const { panel, win, saves, rest } = panelSetup();
     panel.open();
-    win.userMove(600, 200);
-    win.userMove(620, 210);
+    win.userMove(100, 80);
+    win.userMove(120, 90);
     expect(saves).toEqual([]);
     rest();
-    expect(saves).toEqual([{ "1": { x: 620, y: 210, width: 360, height: 460 } }]);
+    expect(saves).toEqual([{ "1": { x: 120, y: 90, width: 990, height: 660 } }]);
     panel.close();
     panel.open();
-    expect(win.getBounds()).toEqual({ x: 620, y: 210, width: 360, height: 460 });
+    expect(win.getBounds()).toEqual({ x: 120, y: 90, width: 990, height: 660 });
   });
 
   it("open while already shown on the same display keeps the window where it is", () => {
     const { panel, win } = panelSetup();
     panel.open();
-    win.userMove(700, 400);
+    win.userMove(300, 100);
     panel.open();
-    expect(win.getBounds()).toEqual({ x: 700, y: 400, width: 360, height: 460 });
+    expect(win.getBounds()).toEqual({ x: 300, y: 100, width: 990, height: 660 });
   });
 
   it("bounds main sets itself (open, clamping) are not saved as user moves", () => {
@@ -717,25 +829,25 @@ describe("createPanel: floating window bounds (058)", () => {
   it("hide/show around a capture keeps the position", () => {
     const { panel, win } = panelSetup();
     panel.open();
-    win.userMove(300, 300);
+    win.userMove(300, 100);
     panel.hide();
     expect(win.isVisible()).toBe(false);
-    expect(win.getBounds()).toEqual({ x: 300, y: 300, width: 360, height: 460 });
+    expect(win.getBounds()).toEqual({ x: 300, y: 100, width: 990, height: 660 });
     panel.show();
     panel.open();
-    expect(win.getBounds()).toEqual({ x: 300, y: 300, width: 360, height: 460 });
+    expect(win.getBounds()).toEqual({ x: 300, y: 100, width: 990, height: 660 });
   });
 
   it("redock clamps instead of snapping: a position that still fits is kept, one that does not is moved inside", () => {
     const { panel, win } = panelSetup();
     panel.open();
-    win.userMove(400, 300);
+    win.userMove(400, 100);
     panel.redock();
-    expect(win.getBounds()).toEqual({ x: 400, y: 300, width: 360, height: 460 });
-    DISPLAY_A.workArea.width = 600;
+    expect(win.getBounds()).toEqual({ x: 400, y: 100, width: 990, height: 660 });
+    DISPLAY_A.workArea.width = 1200;
     try {
       panel.redock();
-      expect(win.getBounds()).toEqual({ x: 240, y: 300, width: 360, height: 460 });
+      expect(win.getBounds()).toEqual({ x: 210, y: 100, width: 990, height: 660 });
     } finally {
       DISPLAY_A.workArea.width = 1440;
     }
@@ -808,10 +920,10 @@ describe("createPanel: resizing the floating window (059)", () => {
     expect(MIN_SIZE).toEqual({ width: 280, height: 300 });
   });
 
-  it("no saved size uses 360 × 460", () => {
+  it("no saved size uses the 9 × 6 in default (091)", () => {
     const { panel, win } = panelSetup({ saved: { "2": { x: 1500, y: 50, width: 700, height: 800 } } });
     panel.open();
-    expect(win.getBounds()).toMatchObject({ width: 360, height: 460 });
+    expect(win.getBounds()).toEqual(DEFAULT_A);
   });
 
   it("resize saves width and height (and the x/y a left or top edge moved) for that display", () => {
@@ -873,11 +985,22 @@ describe("createPanel: resizing the floating window (059)", () => {
     }
   });
 
-  it("reset also resets the size to 360 × 460", () => {
+  it("reset also resets the size to the 9 × 6 in default (091)", () => {
     const { panel, win, saves } = panelSetup({ saved: { "1": { x: 100, y: 100, width: 700, height: 700 } } });
     panel.open();
     panel.resetPosition();
     expect(saves).toEqual([{}]);
-    expect(win.getBounds()).toEqual(defaultBounds(DISPLAY_A));
+    expect(win.getBounds()).toEqual(DEFAULT_A);
+  });
+
+  it("reset with a known physical size returns to that display's 9 × 6 in, centred (091)", () => {
+    const { panel, win } = panelSetup({
+      saved: { "1": { x: 100, y: 100, width: 700, height: 700 } },
+      physicalSize: (id) => (id === 1 ? { width: 286, height: 179 } : undefined),
+    });
+    panel.open();
+    expect(win.getBounds()).toEqual({ x: 100, y: 100, width: 700, height: 700 });
+    panel.resetPosition();
+    expect(win.getBounds()).toEqual({ x: 145, y: 79, width: 1151, height: 767 });
   });
 });

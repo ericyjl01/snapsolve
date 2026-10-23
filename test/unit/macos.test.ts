@@ -9,6 +9,7 @@ import {
   hotkeyLabel,
   hotkeySymbols,
   MICROPHONE_SETTINGS_URL,
+  readDisplaySizes,
   SCREEN_RECORDING_SETTINGS_URL,
   SPEECH_RECOGNITION_SETTINGS_URL,
 } from "../../src/main/macos";
@@ -363,5 +364,67 @@ describe("screenRecordingDenied card in the panel", () => {
     await app.handlers.retry(card.id).catch(() => undefined);
     await app.handlers.followUp(card.id, "hello").catch(() => undefined);
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+// 091 (Amendment 22): each display's physical size (CGDisplayScreenSize, mm) for the 9 × 6 in default window.
+describe("readDisplaySizes", () => {
+  const OUT = JSON.stringify([
+    { id: 2, width: 801.6146668600379, height: 329.5135085647171 },
+    { id: 69734272, width: 302, height: 189 },
+    { id: 7, width: 0, height: 0 },
+  ]);
+  const exec = (stdout: string | Buffer) => vi.fn(async (_file: string, _args: readonly string[], _options: { timeout: number }) => ({ stdout }));
+
+  it("darwin: one osascript run (JavaScript, with a timeout) gives each display's millimetres by display id; 0 mm displays left out", async () => {
+    const { log, warnings } = recordingLog();
+    const execFile = exec(OUT);
+    const sizes = await readDisplaySizes({ platform: "darwin", execFile, log });
+    expect([...sizes]).toEqual([
+      [2, { width: 801.6146668600379, height: 329.5135085647171 }],
+      [69734272, { width: 302, height: 189 }],
+    ]);
+    expect(execFile).toHaveBeenCalledTimes(1);
+    const [file, args, options] = execFile.mock.calls[0];
+    expect(file).toBe("osascript");
+    expect(args.slice(0, 3)).toEqual(["-l", "JavaScript", "-e"]);
+    expect(args[3]).toContain("CGDisplayScreenSize");
+    expect(args).toHaveLength(4);
+    expect(options.timeout).toBeGreaterThan(0);
+    expect(options.timeout).toBeLessThanOrEqual(3000);
+    expect(warnings).toEqual([]);
+  });
+
+  it("stdout as a Buffer is read the same", async () => {
+    const { log } = recordingLog();
+    const sizes = await readDisplaySizes({ platform: "darwin", execFile: exec(Buffer.from(OUT)), log });
+    expect(sizes.get(2)).toEqual({ width: 801.6146668600379, height: 329.5135085647171 });
+  });
+
+  it("entries that are not { id, width, height } numbers are skipped", async () => {
+    const { log } = recordingLog();
+    const out = JSON.stringify([{ id: "2", width: 800, height: 300 }, { id: 3, width: "800", height: 300 }, { id: 4, width: 600 }, null, { id: 5, width: 600, height: 340 }]);
+    const sizes = await readDisplaySizes({ platform: "darwin", execFile: exec(out), log });
+    expect([...sizes]).toEqual([[5, { width: 600, height: 340 }]]);
+  });
+
+  it.each([
+    { why: "osascript fails", execFile: vi.fn(async () => Promise.reject(new Error("osascript: timed out"))) },
+    { why: "the output is not JSON", execFile: vi.fn(async () => ({ stdout: "execution error: -2700" })) },
+    { why: "the output is not a list", execFile: vi.fn(async () => ({ stdout: '{"id":2}' })) },
+  ])("$why → no sizes, logged, never thrown", async ({ execFile }) => {
+    const { log, warnings } = recordingLog();
+    const sizes = await readDisplaySizes({ platform: "darwin", execFile, log });
+    expect(sizes.size).toBe(0);
+    expect(warnings.map((w) => w.event)).toEqual(["display.sizesFailed"]);
+  });
+
+  it.each(["win32", "linux"] as NodeJS.Platform[])("%s: no sizes and nothing run", async (platform) => {
+    const { log, warnings } = recordingLog();
+    const execFile = exec(OUT);
+    const sizes = await readDisplaySizes({ platform, execFile, log });
+    expect(sizes.size).toBe(0);
+    expect(execFile).not.toHaveBeenCalled();
+    expect(warnings).toEqual([]);
   });
 });

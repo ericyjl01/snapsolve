@@ -32,7 +32,7 @@ import { loadConfig, saveTheme, saveTransparency } from "./config";
 import { encodeForModel } from "./encode";
 import { createHotkeys } from "./hotkeys";
 import { createLogger, type Logger } from "./log";
-import { createPermissionHandlers, darwinStartup, hotkeyLabel, hotkeySymbols } from "./macos";
+import { createPermissionHandlers, darwinStartup, hotkeyLabel, hotkeySymbols, readDisplaySizes } from "./macos";
 import { createPanel, loadWindowBounds, resolveSnapsolveUrl, saveWindowBounds, SCHEME } from "./panel";
 import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
@@ -107,6 +107,15 @@ async function start(): Promise<void> {
   // SPEC §9.1: on macOS no Dock icon (hidden before the tray appears) and claude gets the login shell's PATH. The
   // tray is created this early, before the hotkeys register (their failure notification is a balloon on it); its
   // menu handlers reach the panel, app and hotkeys created below only when clicked.
+  // 091: the displays' physical sizes for the 9 × 6 in default window, read while the rest starts (one osascript run).
+  const readSizes = () =>
+    readDisplaySizes({
+      platform: process.platform,
+      execFile: promisify(execFile),
+      log,
+    });
+  const displaySizes = readSizes();
+
   const startup = darwinStartup({
     platform: process.platform,
     app,
@@ -172,6 +181,7 @@ async function start(): Promise<void> {
 
   // Before the panel's first listing and before any hotkey: threads an earlier run left busy get Retry (task 052).
   await recoverBusyThreads({ store, log });
+  let sizes = await displaySizes;
   // Hiding the window stops a dictation (task 063); voice is created below, once the app can take what it hears.
   let voice: Voice | null = null;
   const panel = createPanel({
@@ -185,6 +195,7 @@ async function start(): Promise<void> {
     log,
     bounds: await loadWindowBounds(paths.windowState, { log }),
     saveBounds: (saved) => saveWindowBounds(paths.windowState, saved),
+    physicalSize: (id) => sizes.get(id),
     onClose: () => voice?.cancel(),
   });
   const core = createApp({
@@ -302,6 +313,8 @@ async function start(): Promise<void> {
   for (const event of ["display-added", "display-removed", "display-metrics-changed"] as const) {
     screen.on(event as "display-added", () => panel.redock());
   }
+  // A new display's physical size, for its first default.
+  screen.on("display-added", () => void readSizes().then((read) => (sizes = read)));
 
   if (test) {
     (globalThis as { snapsolveTest?: unknown }).snapsolveTest = {
@@ -319,6 +332,8 @@ async function start(): Promise<void> {
       denyCapture: (prompted: boolean) => core.onCaptureDenied(prompted),
       /** What the tray's Appearance items do (077). */
       setTheme: (theme: Theme) => setTheme(theme),
+      /** What the tray's Reset window position does (091). */
+      resetPosition: () => panel.resetPosition(),
       /** What the tray's Transparency steps do (090). */
       setTransparency: (transparency: number) => setTransparency(transparency),
       /** What the voice hotkey does (063). */

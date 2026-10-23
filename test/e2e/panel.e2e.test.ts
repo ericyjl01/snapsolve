@@ -1,8 +1,12 @@
+import { execFile } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { ElectronApplication, Page } from "playwright-core";
 import { describe, expect, it } from "vitest";
+import { readDisplaySizes } from "../../src/main/macos";
+import { defaultBounds, pointsPerInch } from "../../src/main/panel";
 import { CONTINUED_NOTE } from "../../src/shared/errors";
 import type { Thread } from "../../src/shared/types";
 import { fixturesDir } from "../paths";
@@ -83,6 +87,20 @@ async function windowInfo(app: ElectronApplication) {
   });
 }
 
+/**
+ * 091 (Amendment 22): where a fresh window should open on the window's display, 9 × 6 in from the physical size this
+ * test reads itself (osascript, as main does).
+ */
+async function expectedDefault(app: ElectronApplication) {
+  const display = await app.evaluate(({ BrowserWindow, screen }) => {
+    const d = screen.getDisplayMatching(BrowserWindow.getAllWindows()[0].getBounds());
+    return { id: d.id, bounds: d.bounds, workArea: d.workArea };
+  });
+  const sizes = await readDisplaySizes({ platform: process.platform, execFile: promisify(execFile), log: { warn() {} } });
+  const mm = sizes.get(display.id);
+  return { display, mm, expected: defaultBounds(display, pointsPerInch(display, mm)) };
+}
+
 function capture(app: ElectronApplication): Promise<string> {
   return app.evaluate(
     (_electron, png) => (globalThis as unknown as { snapsolveTest: { captureFromFile(p: string): Promise<string> } }).snapsolveTest.captureFromFile(png),
@@ -145,6 +163,21 @@ function setWindowWidth(app: ElectronApplication, width: number): Promise<void> 
   }, width);
 }
 
+/**
+ * 078's narrow window (the sidebar an overlay), as a user's edge drag leaves it: 360 × 460, then `resized`, so a shown
+ * window saves it and later captures reopen at it. 091's default (9 × 6 in) is wider than 600 px.
+ */
+async function narrowWindow(p: { app: ElectronApplication; page: Page }): Promise<void> {
+  await p.app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    const { x, y } = win.getBounds();
+    win.setBounds({ x, y, width: 360, height: 460 });
+    win.emit("resized");
+  });
+  await expect.poll(() => p.page.evaluate(() => window.innerWidth), { timeout: 5_000 }).toBe(360);
+  await p.page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+}
+
 /** Resizes the window and waits until the page has laid out at the new width (082): a "still closed" check is then meaningful. */
 async function resizeTo(p: { app: ElectronApplication; page: Page }, width: number): Promise<void> {
   await setWindowWidth(p.app, width);
@@ -192,19 +225,14 @@ describe("panel (e2e)", () => {
       await thinking.waitFor({ state: "visible", timeout: 5_000 });
       expect(await p.page.locator(`${card(id)} .answer`).count()).toBe(0);
 
-      await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(360);
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
       const info = await windowInfo(p.app);
       expect(info.count).toBe(1);
       expect(info.visible).toBe(true);
       expect(info.focused).toBe(false);
       expect(info.alwaysOnTop).toBe(true);
-      // The floating window's first open (058): 360 × 460, 24 px in from the work area's right and top.
-      expect(info.bounds).toEqual({
-        x: info.workArea.x + info.workArea.width - 24 - 360,
-        y: info.workArea.y + 24,
-        width: 360,
-        height: 460,
-      });
+      // The floating window's first open (091, Amendment 22; was 058's 360 × 460 at the top-right): 9 × 6 in, centred.
+      expect(info.bounds).toEqual((await expectedDefault(p.app)).expected);
 
       // The thumbnail comes through snapsolve://thread/<id>/1.png and actually loads.
       const thumb = p.page.locator(`${card(id)} img.thumb`).first();
@@ -226,7 +254,7 @@ describe("panel (e2e)", () => {
       const content = await p.page.locator("#content").boundingBox();
       const composer = await p.page.locator("#composer").boundingBox();
       expect(composer && content && composer.y >= content.y + content.height - 1).toBe(true);
-      expect(composer && Math.round(composer.y + composer.height)).toBe(460);
+      expect(composer && Math.round(composer.y + composer.height)).toBe(info.bounds.height);
       // Shift+Enter is a new line, not a send.
       await box.fill("Why");
       await box.press("Shift+Enter");
@@ -277,7 +305,7 @@ describe("panel (e2e)", () => {
       await p.page.locator(`${card(id)} .answer .katex`).first().waitFor({ state: "visible", timeout: 20_000 });
       await expect.poll(() => p.page.locator(`${card(id)} .thinking`).count(), { timeout: 5_000 }).toBe(0);
       await new Promise((r) => setTimeout(r, 2_000));
-      expect((await windowInfo(p.app)).bounds.width).toBe(360);
+      expect((await windowInfo(p.app)).bounds).toEqual((await expectedDefault(p.app)).expected);
 
       await p.page.locator(`${card(id)} .answer`).first().click();
       // A real key press reaches main's before-input-event; Playwright's keyboard (CDP) bypasses it, so the key is
@@ -500,12 +528,13 @@ describe("panel (e2e)", () => {
   }, 60_000);
 
   // 078 (Amendment 15, replaces 061's "Earlier" rows): one chat on screen; the others are in the Chats sidebar,
-  // an overlay at the default 360 px. Choosing one shows it, and the composer and the next capture continue it.
+  // an overlay in a narrow (360 px) window. Choosing one shows it, and the composer and the next capture continue it.
   it("narrow: one chat on screen, Show chats opens the overlay newest first under Today, choosing the older one shows it and follow-ups and captures land in it (078)", async () => {
     const p = await launchPanel();
     const nav = p.page.locator('nav[aria-label="Chats"]');
     try {
       const older = await capture(p.app);
+      await narrowWindow(p);
       await p.page.locator(`${card(older)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       await newChat(p.page);
       const newest = await capture(p.app);
@@ -559,6 +588,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel();
     try {
       const first = await capture(p.app);
+      await narrowWindow(p);
       await p.page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       await showChats(p.page);
       await p.page.locator('nav[aria-label="Chats"]').getByRole("button", { name: "New chat" }).click();
@@ -643,6 +673,7 @@ describe("panel (e2e)", () => {
     const nav = p.page.locator('nav[aria-label="Chats"]');
     try {
       const id = await capture(p.app);
+      await narrowWindow(p);
       await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
 
       await showChats(p.page);
@@ -871,9 +902,12 @@ describe("panel (e2e)", () => {
     const nav = p.page.locator('nav[aria-label="Chats"]');
     try {
       const id = await capture(p.app);
+      // 091's default is wider than 600 px: narrow it first, so "360 px fills it" is measured at 360 px.
+      await narrowWindow(p);
       const answer = p.page.locator(`${card(id)} .answer:not(.streaming)`).first();
       await answer.waitFor({ state: "visible", timeout: 20_000 });
       const width = async () => (await answer.boundingBox())!.width;
+      expect(await p.page.evaluate(() => window.innerWidth)).toBe(360);
       expect(await width()).toBeGreaterThanOrEqual(360 - 2 * 10 - 2);
 
       await resizeTo(p, 760);
@@ -930,6 +964,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel(dataDir);
     try {
       await p.page.locator(`[data-chat-id="${ids.today}"]`).waitFor({ state: "attached", timeout: 10_000 });
+      await narrowWindow(p);
       await showChats(p.page);
       const order = await p.page
         .locator('nav[aria-label="Chats"] .chat-group, nav[aria-label="Chats"] [data-chat-id]')
@@ -954,6 +989,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel(dataDir);
     try {
       await p.page.locator("[data-chat-id]").first().waitFor({ state: "attached", timeout: 10_000 });
+      await narrowWindow(p);
       await showChats(p.page);
       const [sidebar, ground] = await p.page.evaluate(() => [
         getComputedStyle(document.querySelector('nav[aria-label="Chats"]') as Element).backgroundColor,
@@ -1179,6 +1215,7 @@ describe("panel (e2e)", () => {
     try {
       let p = await launchPanel(dataDir);
       let target = { x: 0, y: 0 };
+      let size = { width: 0, height: 0 };
       let displayId = 0;
       try {
         expect(await p.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isMovable())).toBe(true);
@@ -1186,9 +1223,11 @@ describe("panel (e2e)", () => {
         expect(await bar.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("drag");
 
         await capture(p.app);
-        await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(360);
+        await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
         expect((await bar.boundingBox())?.height).toBe(36);
-        const { workArea } = await windowInfo(p.app);
+        const { workArea, bounds } = await windowInfo(p.app);
+        // A drag keeps the size: the default (091).
+        size = { width: bounds.width, height: bounds.height };
         target = { x: workArea.x + 100, y: workArea.y + 120 };
         // The title bar drag itself is the window server's (no synthetic input reaches it): move the window the way a
         // drag ends, a new position then Electron's `moved`.
@@ -1206,7 +1245,7 @@ describe("panel (e2e)", () => {
               return null;
             }
           }, { timeout: 5_000 })
-          .toEqual({ ...target, width: 360, height: 460 });
+          .toEqual({ ...target, ...size });
 
         // Collapse (Esc in the focused window), then the next capture reopens where it was left.
         await p.page.locator("#threads").click();
@@ -1217,7 +1256,7 @@ describe("panel (e2e)", () => {
         });
         await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
         await capture(p.app);
-        await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual({ ...target, width: 360, height: 460 });
+        await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual({ ...target, ...size });
       } finally {
         await p.close();
       }
@@ -1225,7 +1264,7 @@ describe("panel (e2e)", () => {
       p = await launchPanel(dataDir);
       try {
         await capture(p.app);
-        await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual({ ...target, width: 360, height: 460 });
+        await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual({ ...target, ...size });
       } finally {
         await p.close();
       }
@@ -1239,7 +1278,7 @@ describe("panel (e2e)", () => {
     const stateFile = path.join(p.dataDir, "window.json");
     try {
       await capture(p.app);
-      await expect.poll(async () => (await windowInfo(p.app)).bounds.width, { timeout: 5_000 }).toBe(360);
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
       await p.page.locator(".grip").waitFor({ state: "attached", timeout: 5_000 });
       expect(await p.app.evaluate(({ BrowserWindow }) => {
         const win = BrowserWindow.getAllWindows()[0];
@@ -1294,6 +1333,51 @@ describe("panel (e2e)", () => {
     }
   }, 120_000);
 
+  // 091 (Amendment 22): a fresh data dir opens at about 9 in × 6 in on its display, centred in the work area; tray ›
+  // Reset window position brings it back there after a drag.
+  it("fresh: opens centred at 9 × 6 in for its display (physical size from osascript); Reset window position returns there after a drag (091)", async () => {
+    const p = await launchPanel();
+    const stateFile = path.join(p.dataDir, "window.json");
+    const savedRects = () => {
+      try {
+        return JSON.parse(readFileSync(stateFile, "utf8")).displays;
+      } catch {
+        return null;
+      }
+    };
+    try {
+      await capture(p.app);
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
+      const { display, mm, expected } = await expectedDefault(p.app);
+      if (process.platform === "darwin") expect(mm, "the display reports its physical size").toBeDefined();
+      await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual(expected);
+      const { bounds, workArea } = await windowInfo(p.app);
+      expect(Math.abs(bounds.x - workArea.x - (workArea.x + workArea.width - bounds.x - bounds.width))).toBeLessThanOrEqual(1);
+      expect(Math.abs(bounds.y - workArea.y - (workArea.y + workArea.height - bounds.y - bounds.height))).toBeLessThanOrEqual(1);
+      // About 9 in × 6 in on this screen, when it fits.
+      if (mm && bounds.width < workArea.width && bounds.height < workArea.height) {
+        const perInch = display.bounds.width / (mm.width / 25.4);
+        expect(bounds.width / perInch).toBeCloseTo(9, 1);
+        expect(bounds.height / perInch).toBeCloseTo(6, 1);
+      }
+
+      // The window server's drag: a new position, then `moved`; it is saved for the display.
+      const target = { x: workArea.x + 40, y: workArea.y + 30 };
+      await p.app.evaluate(({ BrowserWindow }, to) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        win.setPosition(to.x, to.y);
+        win.emit("moved");
+      }, target);
+      await expect.poll(savedRects, { timeout: 5_000 }).toEqual({ [String(display.id)]: { ...target, width: expected.width, height: expected.height } });
+
+      await p.app.evaluate(() => (globalThis as unknown as { snapsolveTest: { resetPosition(): void } }).snapsolveTest.resetPosition());
+      await expect.poll(async () => (await windowInfo(p.app)).bounds, { timeout: 5_000 }).toEqual(expected);
+      await expect.poll(savedRects, { timeout: 5_000 }).toEqual({});
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
   it("toggle hides with nothing visible, then restores at the same bounds without taking focus (060)", async () => {
     const p = await launchPanel();
     const toggle = () => p.app.evaluate(() => (globalThis as unknown as { snapsolveTest: { toggle(): void } }).snapsolveTest.toggle());
@@ -1303,7 +1387,7 @@ describe("panel (e2e)", () => {
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
       const shown = await windowInfo(p.app);
       expect(shown.focused).toBe(false);
-      expect(shown.bounds).toEqual({ x: shown.workArea.x + shown.workArea.width - 24 - 360, y: shown.workArea.y + 24, width: 360, height: 460 });
+      expect(shown.bounds).toEqual((await expectedDefault(p.app)).expected);
 
       await toggle();
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);

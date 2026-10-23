@@ -1780,7 +1780,7 @@
       "stash": null,
       "closed_at": null,
       "commit": null,
-      "notes": "",
+      "notes": "also DESIGN.md:120-121,184: the card status line is model · total s only since 085 (Amendment 19); usage is tray-only",
       "kind": "task",
       "test_cmd": null,
       "tests_commit": null,
@@ -2184,23 +2184,28 @@
     {
       "id": "085",
       "title": "answer footer shows only the model and the response time",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "milestone": 3,
       "deps": [],
       "file": "docs/tasks/085-footer-model-time.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/085",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-23",
+      "commit": "6c1f64f",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/e2e/errors.e2e.test.ts test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "01d55bf0e293280dd6fd68b49d7aed74b554a0a8",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "285001cea436a1b12266d8544b5ee23ffb1eb982",
+        "reasons": "errors e2e asserts the footer equals exactly '<thread.model> · <durationMs/1000 1dp> s' read from thread.json for a turn with usage and ttftMs 321, with no TTFT/%/5h; panel e2e asserts the model alone before any answer and the second answer's 3.2 s (not 1.2 s) after a follow-up; tray usage stays covered by tray unit and errors integration tests; task tests and npm test green",
+        "at": "2026-10-23"
+      }
     }
   ]
 }

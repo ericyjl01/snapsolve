@@ -550,10 +550,10 @@ describe("IPC handlers", () => {
   });
 
   // The Copy button and `copy` handler are gone with the restyle (061): nothing writes to the clipboard.
-  it("exposes exactly the six renderer handlers, none of them copy (061), newThread added (065)", () => {
+  it("exposes exactly the seven renderer handlers, none of them copy (061), newThread added (065), openThread added (078)", () => {
     const app = createApp(deps);
     expect(Object.keys(app.handlers).sort()).toEqual(
-      ["listThreads", "followUp", "retry", "openExternal", "clearHistory", "newThread"].sort(),
+      ["listThreads", "followUp", "retry", "openExternal", "clearHistory", "newThread", "openThread"].sort(),
     );
   });
 
@@ -809,8 +809,10 @@ describe("openThread (078)", () => {
     expect(second).not.toBe(first);
     await app.handlers.openThread(first);
     expect(await app.onCapture({ png: PNG2 })).toBe(first);
-    expect((await store.getThread(first)).turns.filter((t) => t.role === "user")).toHaveLength(2);
-    expect((await store.getThread(second)).turns.filter((t) => t.role === "user")).toHaveLength(1);
+    // The fake runner writes no turns: the append is the enqueued request and the saved PNG.
+    expect(deps.runner.enqueue.mock.calls.at(-1)).toStrictEqual([first, { kind: "append", screenshot: "002.png" }]);
+    expect(await readFile(store.screenshotPath(first, 2))).toEqual(Buffer.from(PNG2));
+    expect(existsSync(store.screenshotPath(second, 2))).toBe(false);
   });
 
   it("clears a pending \"+\": after newThread() then openThread, a capture continues the chosen thread", async () => {
@@ -854,7 +856,9 @@ describe("openThread (078)", () => {
     deps.config.maxScreenshotsPerThread = 1;
     const app = createApp(deps);
     const first = await app.onCapture({ png: PNG });
-    await store.appendTurn(first, answer("The root is 4."));
+    for (const turn of [{ role: "user", kind: "screenshot", file: "001.png" }, answer("The root is 4.")] as Thread["turns"]) {
+      await store.appendTurn(first, turn);
+    }
     await app.handlers.newThread();
     const other = await app.onCapture({ png: PNG2 });
     await app.handlers.openThread(first);
@@ -865,8 +869,9 @@ describe("openThread (078)", () => {
 
   it("an errored chosen thread takes the capture as today (appended)", async () => {
     const app = createApp(deps);
+    const captured = await app.onCapture({ png: PNG });
     const errored = await erroredThread([{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn]);
-    await app.onCapture({ png: PNG });
+    expect(captured).not.toBe(errored.id);
     await app.handlers.openThread(errored.id);
     expect(await app.onCapture({ png: PNG2 })).toBe(errored.id);
   });
@@ -874,9 +879,9 @@ describe("openThread (078)", () => {
   it("isAnswering follows the chosen thread", async () => {
     deps.runner.enqueue.mockImplementation(() => new Promise(() => undefined));
     const app = createApp(deps);
+    const captured = await app.onCapture({ png: PNG });
     const errored = await erroredThread([{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn]);
-    await app.onCapture({ png: PNG });
-    listener?.({ type: "status", threadId: (await store.listThreads()).find((t) => t.id !== errored.id)!.id, status: "running" });
+    listener?.({ type: "status", threadId: captured, status: "running" });
     await new Promise((r) => setTimeout(r, 20));
     expect(app.isAnswering()).toBe(true);
     await app.handlers.openThread(errored.id);

@@ -1,9 +1,13 @@
-/* Panel styles (SPEC §4.2, Amendment 9: mockup A2 "Native macOS"; Amendment 13): the floating window (058), a
-   transparent window on macOS under a ~88% solid ground, see-through like a terminal with no blur (elsewhere an opaque
-   window under the same ground), shown or hidden (060). */
+/* Panel styles (SPEC §4.2, Amendment 9: mockup A2 "Native macOS"; Amendments 13, 23): the floating window (058), a
+   transparent window on macOS under a ground that is `transparency` percent see-through like a terminal, with no blur
+   (elsewhere an opaque window under the same ground), shown or hidden (060). Main sets --ground-alpha from
+   config.json (090); text stays opaque and the boxes on the ground (bubble, code, text bar) keep alpha ≥ 0.85. */
 :root {
   color-scheme: light dark;
-  --ground: rgba(246, 246, 248, 0.88);
+  /* 1 − transparency; this default is transparency 20 until main's rule arrives. */
+  --ground-alpha: 0.8;
+  --ground: rgba(246, 246, 248, var(--ground-alpha));
+  --ground-solid: rgb(246, 246, 248);
   --fg: #1d1d1f;
   --muted: #6e6e73;
   --hairline: rgba(0, 0, 0, 0.1);
@@ -28,15 +32,16 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ground: rgba(24, 24, 24, 0.88);
+    --ground: rgba(24, 24, 24, var(--ground-alpha));
+    --ground-solid: rgb(24, 24, 24);
     --fg: #f5f5f7;
     --muted: #a1a1a6;
     --hairline: rgba(255, 255, 255, 0.1);
     --edge: rgba(255, 255, 255, 0.16);
-    --card: rgba(44, 44, 46, 0.78);
+    --card: rgba(44, 44, 46, 0.9);
     --row: rgba(44, 44, 46, 0.5);
     --field: rgba(28, 28, 30, 0.9);
-    --bubble: rgba(255, 255, 255, 0.12);
+    --bubble: rgba(52, 52, 54, 0.92);
     --code: rgba(255, 255, 255, 0.07);
     --hover: rgba(255, 255, 255, 0.1);
     --sidebar: rgba(32, 32, 34, 0.98);
@@ -525,7 +530,7 @@ button[hidden] {
 
 .composer .send {
   background: var(--fg);
-  color: var(--ground);
+  color: var(--ground-solid);
 }
 
 .composer .send:hover {

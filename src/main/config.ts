@@ -1,5 +1,6 @@
 // config.json: defaults (SPEC §6.1), per-field validation, created if missing, never rewritten once it exists —
-// except by `saveTheme`, the tray's Appearance choice (077, Amendment 14), which changes only `theme`.
+// except by the tray's choices, which each change only their own key: `saveTheme` (Appearance, 077, Amendment 14)
+// and `saveTransparency` (Transparency, 090, Amendments 23, 24).
 import { randomUUID } from "node:crypto";
 import { link, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
@@ -18,6 +19,7 @@ export const DEFAULTS: Readonly<Config> = Object.freeze({
   maxScreenshotsPerThread: 6,
   timeoutSec: 180,
   theme: "dark",
+  transparency: 20,
 });
 
 export interface LoadedConfig {
@@ -82,16 +84,25 @@ async function create(file: string): Promise<LoadedConfig> {
   }
 }
 
+type SaveResult = { ok: true } | { ok: false; error: string };
+type SaveFs = { rename: (from: string, to: string) => Promise<void> };
+
+/** Saves `theme` into config.json (tray Appearance, SPEC Amendment 14), as `saveKey` does. */
+export function saveTheme(file: string, theme: Theme, fs: SaveFs = { rename }): Promise<SaveResult> {
+  return saveKey(file, "theme", theme, fs);
+}
+
+/** Saves `transparency` into config.json (tray Transparency, SPEC Amendments 23, 24), as `saveKey` does. */
+export function saveTransparency(file: string, transparency: number, fs: SaveFs = { rename }): Promise<SaveResult> {
+  return saveKey(file, "transparency", transparency, fs);
+}
+
 /**
- * Saves `theme` into config.json (tray Appearance, SPEC Amendment 14): every other key and value stays as it is.
- * A missing file is written with the defaults plus the theme. An unreadable, malformed or non-object file is left
- * untouched and the error returned. Atomic: a synced temp file beside `file` is renamed over it.
+ * Sets one key in config.json: every other key and value stays as it is. A missing file is written with the
+ * defaults plus that key. An unreadable, malformed or non-object file is left untouched and the error returned.
+ * Atomic: a synced temp file beside `file` is renamed over it.
  */
-export async function saveTheme(
-  file: string,
-  theme: Theme,
-  fs: { rename: (from: string, to: string) => Promise<void> } = { rename },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+async function saveKey<K extends "theme" | "transparency">(file: string, key: K, value: Config[K], fs: SaveFs): Promise<SaveResult> {
   let raw: Record<string, unknown>;
   try {
     const parsed: unknown = JSON.parse((await readFile(file, "utf8")).replace(/^﻿/, ""));
@@ -102,7 +113,7 @@ export async function saveTheme(
     else if (e instanceof SyntaxError) return { ok: false, error: `config.json is not valid JSON (${describe(e)}); not changed` };
     else return { ok: false, error: `cannot read config.json (${describe(e)})` };
   }
-  raw.theme = theme;
+  raw[key] = value;
   const temp = `${file}.${randomUUID()}.tmp`;
   try {
     await mkdir(path.dirname(file), { recursive: true });
@@ -148,6 +159,7 @@ const FIELDS: Record<FieldKey, { valid: (v: unknown) => boolean; expected: strin
   maxScreenshotsPerThread: { valid: intIn(1, 20), expected: "an integer from 1 to 20" },
   timeoutSec: { valid: intIn(10, 3600), expected: "an integer from 10 to 3600" },
   theme: { valid: (v) => THEMES.includes(v as Theme), expected: `one of ${THEMES.join(", ")}` },
+  transparency: { valid: (v) => intIn(0, 90)(v) && (v as number) % 10 === 0, expected: "0, 10, 20 … 90 (percent)" },
 };
 
 function validate(raw: unknown): { config: Config; warnings: string[] } {

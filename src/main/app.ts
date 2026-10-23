@@ -483,6 +483,29 @@ function schemeOf(url: unknown): string {
 
 
 /**
+ * Tray Transparency (090, SPEC Amendments 23, 24): the open window's ground changes at once (`panel.setTransparency`),
+ * `config.transparency` follows, then the choice is saved. A failed save is logged; the value still holds for this run.
+ */
+export async function applyTransparency(
+  transparency: number,
+  deps: {
+    panel: { setTransparency(transparency: number): void };
+    config: Pick<Config, "transparency">;
+    save: (transparency: number) => Promise<{ ok: true } | { ok: false; error: string }>;
+    log: Pick<Logger, "warn">;
+  },
+): Promise<void> {
+  deps.panel.setTransparency(transparency);
+  deps.config.transparency = transparency;
+  try {
+    const result = await deps.save(transparency);
+    if (!result.ok) deps.log.warn("transparency.saveFailed", { transparency, error: result.error });
+  } catch (e) {
+    deps.log.warn("transparency.saveFailed", { transparency, error: e });
+  }
+}
+
+/**
  * Tray Appearance (077, SPEC Amendment 14): the theme applies at once through Electron's `nativeTheme.themeSource`
  * (the open window restyles via prefers-color-scheme), `config.theme` follows for any later window, then the choice
  * is saved. A failed save is logged; the theme still holds for this run.

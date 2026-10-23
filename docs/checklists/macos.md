@@ -39,6 +39,7 @@ prompt).
 | 26 | Text bar (079) | Look at the box at the bottom with no chat on screen and with one; type and send | A rounded pill: mic on the left, round send button on the right; it says "Ask anything" with no chat and "Ask a follow-up" in one | |
 | 27 | Text fills a wide window (084) | Drag the window to about 1100 px wide, with the sidebar open and closed | The answer and the text bar widen with the window; no fixed-width column | |
 | 28 | Window shows at once (088) | Hide the window (Ctrl+Option+Z), press Ctrl+Option+C on a problem; do it again a few times. Then paste the `capture.timing` lines from `logs/snapsolve.log` | The window appears right after the press with "Thinking…" in the chat, before the thumbnail; the answer follows as before. Each capture logs one `capture.timing` line with grabMs, pngMs, encodeMs, saveMs, shownMs | |
+| 29 | See-through window, Transparency (090) | Put a window with text behind snapsolve. Tray › Transparency › 20%, then 50%, then 0% (solid), then 90%; drag a window edge to resize | At 20% the window behind shows faintly through the background, more at 50%, not at all at 0%; at 90% the answers' text, code blocks, your question bubbles and the text bar stay readable. Each change is immediate; the checked step is kept after a restart. Resizing from an edge still works; note whether the window has a shadow | |
 
 ## Notes
 

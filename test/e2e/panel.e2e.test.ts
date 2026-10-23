@@ -968,6 +968,114 @@ describe("panel (e2e)", () => {
     }
   });
 
+  // 079 (Amendment 15): the composer is a ChatGPT-style pill — mic at the left, the text, a round send at the right.
+  it.each([{ theme: "dark" }, { theme: "light" }])("theme $theme: the composer is a pill with the mic left of the text and a round send right of it (079)", async ({ theme }) => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    writeFileSync(path.join(dataDir, "config.json"), JSON.stringify({ theme }));
+    const p = await launchPanel(dataDir);
+    try {
+      const corners = await p.page.locator("#composer-box").evaluate((el) => {
+        const s = getComputedStyle(el);
+        return [s.borderTopLeftRadius, s.borderTopRightRadius, s.borderBottomRightRadius, s.borderBottomLeftRadius].map((v) => Number.parseFloat(v));
+      });
+      for (const r of corners) expect(r).toBeGreaterThanOrEqual(18);
+
+      const boxRect = (await p.page.locator("#composer-box").boundingBox())!;
+      const mic = (await p.page.locator("#composer-voice").boundingBox())!;
+      const text = (await p.page.locator("#follow-up").boundingBox())!;
+      const send = (await p.page.locator("#send").boundingBox())!;
+      expect(mic.x + mic.width).toBeLessThanOrEqual(text.x + 0.5);
+      expect(send.x).toBeGreaterThanOrEqual(text.x + text.width - 0.5);
+      for (const r of [mic, text, send]) {
+        expect(r.x).toBeGreaterThanOrEqual(boxRect.x);
+        expect(r.x + r.width).toBeLessThanOrEqual(boxRect.x + boxRect.width + 0.5);
+        expect(r.y).toBeGreaterThanOrEqual(boxRect.y);
+        expect(r.y + r.height).toBeLessThanOrEqual(boxRect.y + boxRect.height + 0.5);
+      }
+
+      // Round send, faded until there is something to send.
+      const sendLook = () =>
+        p.page.locator("#send").evaluate((el) => {
+          const s = getComputedStyle(el);
+          return { radius: Number.parseFloat(s.borderTopLeftRadius), width: el.getBoundingClientRect().width, opacity: Number(s.opacity) };
+        });
+      const empty = await sendLook();
+      expect(empty.radius).toBeGreaterThanOrEqual(empty.width / 2);
+      expect(empty.opacity).toBeLessThan(1);
+      await p.page.locator("#follow-up").fill("x");
+      expect((await sendLook()).opacity).toBe(1);
+    } finally {
+      await p.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 60_000);
+
+  it("the composer says Ask anything with no chat on screen and Ask a follow-up with one (079)", async () => {
+    const p = await launchPanel();
+    const placeholder = () => p.page.locator("#follow-up").getAttribute("placeholder");
+    try {
+      expect(await placeholder()).toBe("Ask anything");
+      const id = await capture(p.app);
+      await p.page.locator(`${card(id)} .thinking, ${card(id)} .answer`).first().waitFor({ state: "visible", timeout: 10_000 });
+      await expect.poll(placeholder, { timeout: 5_000 }).toBe("Ask a follow-up");
+      await newChat(p.page);
+      await expect.poll(placeholder, { timeout: 5_000 }).toBe("Ask anything");
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
+  it("five lines grow the pill; the mic and send stay at its bottom, level with each other (079)", async () => {
+    const p = await launchPanel();
+    try {
+      const box = p.page.locator("#composer-box");
+      const before = (await box.boundingBox())!.height;
+      await p.page.locator("#follow-up").fill("one\ntwo\nthree\nfour\nfive");
+      await expect.poll(async () => (await box.boundingBox())!.height, { timeout: 5_000 }).toBeGreaterThan(before + 40);
+      const b = (await box.boundingBox())!;
+      const mic = (await p.page.locator("#composer-voice").boundingBox())!;
+      const send = (await p.page.locator("#send").boundingBox())!;
+      const micGap = b.y + b.height - (mic.y + mic.height);
+      const sendGap = b.y + b.height - (send.y + send.height);
+      expect(Math.abs(micGap - sendGap)).toBeLessThanOrEqual(1);
+      expect(sendGap).toBeGreaterThanOrEqual(0);
+      expect(sendGap).toBeLessThanOrEqual(8);
+      // Still rounded when tall.
+      expect(Number.parseFloat(await box.evaluate((el) => getComputedStyle(el).borderTopLeftRadius))).toBeGreaterThanOrEqual(18);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
+  it("the listening bar takes the composer's pill shape (079)", async () => {
+    const p = await launchPanel();
+    try {
+      const pill = await p.page.locator("#composer-box").evaluate((el) => getComputedStyle(el).borderTopLeftRadius);
+      await voiceKey(p.app);
+      const bar = p.page.locator("#listening");
+      await bar.waitFor({ state: "visible", timeout: 5_000 });
+      expect(await bar.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe(pill);
+      await voiceEscape(p.app);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
+  it("wide: the pill is centred under the chat column (079)", async () => {
+    const p = await launchPanel();
+    try {
+      await setWindowWidth(p.app, 760);
+      await p.page.locator('nav[aria-label="Chats"]').waitFor({ state: "visible", timeout: 5_000 });
+      const column = (await p.page.locator("#content").boundingBox())!;
+      const b = (await p.page.locator("#composer-box").boundingBox())!;
+      const left = b.x - column.x;
+      const right = column.x + column.width - (b.x + b.width);
+      expect(Math.abs(left - right)).toBeLessThanOrEqual(2);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
   it("voice: hotkey → listening bar with the live transcript → hotkey again → the question in the newest card with a mic mark, answered (063)", async () => {
     const p = await launchPanel();
     const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();

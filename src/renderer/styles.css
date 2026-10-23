@@ -475,8 +475,9 @@ button[hidden] {
   font-size: 12px;
 }
 
-.status {
-  margin: 0;
+/* Under each finished answer: its model and time (086), close to it (the turns' 8 px gap less 6). */
+.footer {
+  margin: -6px 0 0;
   font-size: 11px;
   color: var(--muted);
 }

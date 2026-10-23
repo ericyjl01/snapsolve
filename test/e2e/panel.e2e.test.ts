@@ -664,34 +664,84 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  // 085 (Amendment 19): the footer is the model, then the newest answer's response time.
-  it("footer: the model alone before any answer, then model · the newest answer's time after a follow-up (085)", async () => {
+  // 086 (Amendment 20): every finished answer has its own footer directly under it, `<model> · <its time> s`; an
+  // answer still thinking or streaming has none, and there is no chat-wide status line.
+  it("each answer has its own footer under it with its own time; while the second is thinking only the first has one (086)", async () => {
     const p = await launchPanel(undefined, { FAKE_DELAY_MS: "1500", FAKE_DURATION_STEP_MS: "2000" });
     try {
       const id = await capture(p.app);
-      const status = p.page.locator(`${card(id)} .status`);
+      const footers = p.page.locator(`${card(id)} .footer`);
       const threadFile = path.join(p.dataDir, "threads", id, "thread.json");
       const read = () => JSON.parse(readFileSync(threadFile, "utf8")) as Thread;
       await p.page.locator(`${card(id)} .thinking`).waitFor({ state: "visible", timeout: 5_000 });
+      // The fake reports the --model it was given: the thread's alias, shown as given.
       const model = read().model;
       expect(model.length).toBeGreaterThan(0);
-      expect(await status.textContent()).toBe(model);
+      expect(await footers.count()).toBe(0);
+      expect(await p.page.locator(`${card(id)} .status`).count()).toBe(0);
 
       await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
-      await expect.poll(() => status.textContent(), { timeout: 5_000 }).toBe(`${model} · 1.2 s`);
+      await expect.poll(() => footers.allTextContents(), { timeout: 5_000 }).toEqual([`${model} · 1.2 s`]);
 
       const box = p.page.locator("#composer textarea");
       await box.fill("And the other root?");
       await box.press("Enter");
+      await p.page.locator(`${card(id)} .thinking`).waitFor({ state: "visible", timeout: 5_000 });
+      expect(await footers.allTextContents()).toEqual([`${model} · 1.2 s`]);
+      await p.page.locator(`${card(id)} .answer.streaming`).waitFor({ state: "visible", timeout: 20_000 });
+      expect(await footers.allTextContents()).toEqual([`${model} · 1.2 s`]);
+
       await expect.poll(() => p.page.locator(`${card(id)} .answer:not(.streaming)`).count(), { timeout: 20_000 }).toBe(2);
-      // The second answer took 1234 + 2000 ms (the fake's step), so the footer is its time, not the first's.
-      await expect.poll(() => status.textContent(), { timeout: 5_000 }).toBe(`${model} · 3.2 s`);
+      // The second answer took 1234 + 2000 ms (the fake's step): its own time, under it; the first keeps its own.
+      await expect.poll(() => footers.allTextContents(), { timeout: 5_000 }).toEqual([`${model} · 1.2 s`, `${model} · 3.2 s`]);
+      const next = await p.page
+        .locator(`${card(id)} .answer`)
+        .evaluateAll((els) => els.map((e) => (e.nextElementSibling as HTMLElement | null)?.className ?? null));
+      expect(next).toEqual(["footer", "footer"]);
       const durations = read().turns.flatMap((t) => (t.role === "assistant" ? [t.durationMs] : []));
       expect(durations).toEqual([1234, 3234]);
     } finally {
       await p.close();
     }
   }, 90_000);
+
+  it("edge: an old thread.json whose answer has no model → its footer uses the thread's alias; an errored turn shows its error and no footer (086)", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    const id = "2b2b2b2b-0000-4000-8000-000000000001";
+    const dir = path.join(dataDir, "threads", id);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      path.join(dir, "thread.json"),
+      JSON.stringify({
+        id,
+        sessionId: id,
+        transcriptPath: null,
+        model: "opus",
+        effort: "high",
+        createdAt: new Date(Date.now() - 60_000).toISOString(),
+        title: "Old chat",
+        status: "error",
+        turns: [
+          { role: "user", kind: "text", text: "What is 2 + 2?" },
+          { role: "assistant", text: "4", durationMs: 2500, ttftMs: 300, costUsd: null, isError: false },
+          { role: "user", kind: "text", text: "Why?" },
+          { role: "assistant", text: "", durationMs: 5, ttftMs: null, costUsd: null, isError: true, errorKind: "timeout", errorMessage: "Timed out and stopped. Press Retry to try again." },
+        ],
+      }),
+    );
+    const p = await launchPanel(dataDir);
+    try {
+      const footers = p.page.locator(`${card(id)} .footer`);
+      await p.page.locator(`${card(id)} .error`).waitFor({ state: "visible", timeout: 10_000 });
+      expect(await footers.allTextContents()).toEqual(["opus · 2.5 s"]);
+      expect(await p.page.locator(`${card(id)} .answer`).evaluate((e) => e.nextElementSibling?.className)).toBe("footer");
+      expect(await p.page.locator(`${card(id)} .error`).evaluate((e) => e.nextElementSibling?.className ?? null)).not.toBe("footer");
+      expect(await p.page.locator(`${card(id)} .error`).textContent()).toBe("Timed out and stopped. Press Retry to try again.");
+    } finally {
+      await p.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 60_000);
 
   // 084 (Amendment 18): no max width on the chat column, the empty state or the composer at any window size.
   it("1100 px: the empty state, chat column, answer and composer fill the area right of the docked sidebar, and the whole window once it is closed (084)", async () => {

@@ -127,6 +127,8 @@ describe("runner with the fake claude", () => {
       costUsd: 0.0123,
       isError: false,
       usage: "5h 12% · 7d 34%",
+      // 086: the fake's init event reports the --model it was given.
+      model: "opus",
     });
 
     const owned = path.join(dataDir, "threads", t.id, `${t.sessionId}.jsonl`);

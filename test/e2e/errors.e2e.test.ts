@@ -25,7 +25,7 @@ interface TestHooks {
  * The built app in test mode with its own data dir and `config.json`. With `fake: false` the app resolves claude
  * from the config (no SNAPSOLVE_TEST_CLAUDE); otherwise claude is the fake, its scenario read from a file.
  */
-async function launch(options: { config?: Record<string, unknown>; fake?: boolean; scenario?: string } = {}): Promise<Launched> {
+async function launch(options: { config?: Record<string, unknown>; fake?: boolean; scenario?: string; env?: Record<string, string> } = {}): Promise<Launched> {
   const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-errors-"));
   const projects = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-projects-"));
   const scenarioFile = path.join(projects, "scenario");
@@ -33,6 +33,7 @@ async function launch(options: { config?: Record<string, unknown>; fake?: boolea
   if (options.config) writeFileSync(path.join(dataDir, "config.json"), JSON.stringify(options.config));
   const env: Record<string, string> = { FAKE_PROJECTS: projects, FAKE_CLAUDE_SCENARIO_FILE: scenarioFile };
   if (options.fake !== false) Object.assign(env, { SNAPSOLVE_TEST_CLAUDE: FAKE, SNAPSOLVE_TEST_PROJECTS: projects });
+  Object.assign(env, options.env);
   const launched = await launchApp({ dataDir, env });
   const page = await launched.app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -98,8 +99,9 @@ describe("error states (e2e)", () => {
   });
 
   // 085 (Amendment 19): the footer is the model and the response time only; usage stays in the tray tooltip.
-  it("an answer's card footer is the model and the response time only, no TTFT or usage; a logged-in claude raises no startup notice (085)", async () => {
-    const p = await launch();
+  // 086 (Amendment 20): the model is the one claude reported for the answer, by name.
+  it("an answer's footer is the reported model's name and the response time only, no TTFT or usage; a logged-in claude raises no startup notice (085, 086)", async () => {
+    const p = await launch({ env: { FAKE_INIT_MODEL: "claude-opus-5-5" } });
     try {
       const id = await capture(p.app);
       await p.page.locator(`${card(id)} .answer`).first().waitFor({ state: "visible", timeout: 15_000 });
@@ -110,9 +112,10 @@ describe("error states (e2e)", () => {
       // The fake reported usage and a TTFT for this turn; the footer leaves both out.
       expect(turn.usage).toBe("5h 12% · 7d 34%");
       expect(turn.ttftMs).toBe(321);
-      const expected = `${thread.model} · ${(turn.durationMs / 1000).toFixed(1)} s`;
-      await expect.poll(() => p.page.locator(`${card(id)} .status`).textContent(), { timeout: 5_000 }).toBe(expected);
-      const footer = (await p.page.locator(`${card(id)} .status`).textContent())!;
+      expect(turn.model).toBe("claude-opus-5-5");
+      const expected = `Opus 5.5 · ${(turn.durationMs / 1000).toFixed(1)} s`;
+      await expect.poll(() => p.page.locator(`${card(id)} .footer`).textContent(), { timeout: 5_000 }).toBe(expected);
+      const footer = (await p.page.locator(`${card(id)} .footer`).textContent())!;
       expect(footer).not.toContain("TTFT");
       expect(footer).not.toContain("%");
       expect(footer).not.toContain("5h");

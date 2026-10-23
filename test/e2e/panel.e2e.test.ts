@@ -631,6 +631,72 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
+  // 084 (Amendment 18): no max width on the chat column, the empty state or the composer at any window size.
+  it("1100 px: the empty state, chat column, answer and composer fill the area right of the docked sidebar, and the whole window once it is closed (084)", async () => {
+    const p = await launchPanel();
+    const nav = p.page.locator('nav[aria-label="Chats"]');
+    const box = async (selector: string) => {
+      const b = await p.page.locator(selector).first().boundingBox();
+      if (!b) throw new Error(`${selector} has no box`);
+      return { left: b.x, right: b.x + b.width, width: b.width };
+    };
+    // Spans [from, to] less `pad` on each side (2 px slack for hairlines and rounding).
+    const spans = async (selector: string, from: number, to: number, pad: number) => {
+      const b = await box(selector);
+      return b.left <= from + pad + 2 && b.right >= to - pad - 2;
+    };
+    try {
+      await resizeTo(p, 1100);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(true);
+      const docked = (await box('nav[aria-label="Chats"]')).right;
+      expect(await spans("#empty", docked, 1100, 16), "empty state, docked").toBe(true);
+
+      const id = await capture(p.app);
+      const answer = `${card(id)} .answer:not(.streaming)`;
+      await p.page.locator(answer).first().waitFor({ state: "visible", timeout: 20_000 });
+      // A capture shows the window at its saved size (059), so widen it again.
+      await resizeTo(p, 1100);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(true);
+      expect(await spans("#threads", docked, 1100, 0), "chat column, docked").toBe(true);
+      expect(await spans(answer, docked, 1100, 10), "answer, docked").toBe(true);
+      expect(await spans("#composer-box", docked, 1100, 10), "composer, docked").toBe(true);
+
+      await nav.getByRole("button", { name: "Hide chats" }).click();
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+      await expect.poll(() => spans(answer, 0, 1100, 10), { timeout: 5_000 }).toBe(true);
+      expect(await spans("#threads", 0, 1100, 0), "chat column, closed").toBe(true);
+      expect(await spans("#composer-box", 0, 1100, 10), "composer, closed").toBe(true);
+      for (const selector of ["#threads", answer, "#composer-box"]) expect((await box(selector)).width, selector).toBeGreaterThan(1000);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("the answer tracks the window: 360 px fills it, and widening 760 → 1100 px with the sidebar closed widens it by about 340 px (084)", async () => {
+    const p = await launchPanel();
+    const nav = p.page.locator('nav[aria-label="Chats"]');
+    try {
+      const id = await capture(p.app);
+      const answer = p.page.locator(`${card(id)} .answer:not(.streaming)`).first();
+      await answer.waitFor({ state: "visible", timeout: 20_000 });
+      const width = async () => (await answer.boundingBox())!.width;
+      expect(await width()).toBeGreaterThanOrEqual(360 - 2 * 10 - 2);
+
+      await resizeTo(p, 760);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(true);
+      await nav.getByRole("button", { name: "Hide chats" }).click();
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+      const at760 = await width();
+      expect(at760).toBeGreaterThanOrEqual(760 - 2 * 10 - 2);
+      await resizeTo(p, 1100);
+      const grown = (await width()) - at760;
+      expect(grown).toBeGreaterThan(330);
+      expect(grown).toBeLessThan(350);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
   it("a turn finishing in a chat that is not on screen leaves the main area alone (078)", async () => {
     const p = await launchPanel(undefined, { FAKE_DELAY_MS: "4000" });
     try {

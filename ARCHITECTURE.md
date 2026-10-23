@@ -61,7 +61,12 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
 - logging: `log.ts` JSON lines (`ts`, `level`, `event`, fields); never image bytes, base64, answer text or prompts
 - async: `fs/promises`; atomic JSON writes via `store.writeJsonAtomic` (temp + rename)
 - platform branches: `process.platform` checked only in `paths.ts`, `capture.ts`, `panel.ts`, `main.ts`, and passed in as a parameter elsewhere (tests cover both branches)
-- decisions: rows of closed tasks 001–029 live in `archive/DECISIONS.archive.md` (moved by /keel tidy, 2026-10-17); grep it as well as DECISIONS.md before a choice
+- decisions: rows of closed tasks 001–029 (tidy 2026-10-17) and 030–065 (tidy 2026-10-23) live in `archive/DECISIONS.archive.md`; grep it as well as DECISIONS.md before a choice. Rules kept from them:
+  - preload API: exactly the functions SPEC §4.4 and its Amendments list (16 after 078); a new one needs a SPEC Amendment and a DECISIONS row; renderer calls take no URLs (030, 061, 063, 065)
+  - panel-only cards: the Screen Recording and voice cards are Threads that live only in app.ts `known` (never saved); a later denial updates the same card, the next success removes it (030, 063)
+  - capture routing lives in main: app.ts `current` / `fresh`; a capture continues the current thread, "+" (`newThread`) starts a new one, the screenshot limit rolls over seeded with the last answer (051, 065)
+  - Retry is a runner request `{ kind: "retry" }` that re-runs the failed last user turn in place; busy threads left by a crash are recovered at startup (`recoverBusyThreads`) before the first listing (050, 052)
+  - hotkeys: capture Control+Alt+C, toggle Control+Alt+X, voice Control+Alt+V (pressed again to send); existing config values are never migrated (060, 063, 064)
 - test layout: one test file per module; e2e tests launch `dist/main.js` with `SNAPSOLVE_TEST=1`, a temp data dir (`SNAPSOLVE_DATA_DIR`) and the fake claude
 
 ## Exemplars

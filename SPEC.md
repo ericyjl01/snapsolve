@@ -208,3 +208,9 @@ Amendment 15's chat column (Eric, chat 2026-10-23: "The text is a fixed box, but
 
 ## Amendment 19 — 2026-10-23
 §4 card status line (Eric, chat 2026-10-23: "no need for all that info. just model and repsonse time. thats it."; DECISIONS 2026-10-23 085; task 085): the footer under an answer shows only the model and the last answer's response time (`opus · 12.3 s`); TTFT and usage are no longer shown there. Usage stays in the tray tooltip (§3.6); thread.json still records both. Out: changing what a turn records.
+
+## Amendment 20 — 2026-10-23
+Amendment 19's footer (Eric, chat 2026-10-23: "Opus should display what model, and It should be per prompt. … when a new result is spinning up, I still see the previous message's model as well as time."; DECISIONS 2026-10-23 086; task 086): every finished answer has its own footer directly under it, `<model> · <that answer's time> s`, where the model is the one claude reported for that turn, shown by name (`claude-opus-5-5` → "Opus 5.5"); an answer still thinking or streaming has none; the chat-wide status line is removed. Out: TTFT and usage in the footer.
+
+## Amendment 21 — 2026-10-23
+Amendment 17's symbol (Eric, chat 2026-10-23: "Let's make the icon like 15% smaller."; DECISIONS 2026-10-23 087; task 087): the crop-corners "=" in the menu bar and the title bar is drawn about 15% smaller, centred, with the same proportions.

@@ -4,13 +4,13 @@
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Installed on Eric's Mac: 0.2.7 (2026-10-23): 085 answer footer = model · response time only (Amendment 19);
   doctor all ok. (0.2.6: 084 chat widens with the window.) DESIGN.md footer lines noted on backlog 068.
-- Queue: all blocked — 032.
-- Blocked: 032 (Eric's macOS checklist). Backlog 033, 042, 053, 054, 056, 066–069, 074, 081 (070, 080 dropped
-  by Eric). Open with Eric: which other backlog tasks to drop; what "icon looks right for 033" means.
+- Queue (M3, wait for /goal): 088 (p0) window shows at once on capture (measure first: capture.timing log);
+  086 (p1) per-answer footer with the reported model name (Amendment 20); 087 (p2) icon ~15% smaller (Amendment 21).
+- Blocked: 032 — Eric runs master's docs/checklists/macos.md (27 items, refreshed for 0.2.7).
+- Backlog 033, 042, 053, 056, 066–069, 074, 081 (054, 070, 080 dropped by Eric). Open with Eric: drop 042, 053,
+  056, 066, 068, 081 as recommended?
 
 ## Log
-2026-10-17 · 059 · closed · resize from any edge or corner (SPEC Amendment 7): resizable + 280 × 300 minimum only while open and at rest, moved/resized share the save path (per display, never from a transition), under-minimum sizes put back and not saved, saved sizes raised to the minimum then clamped, drawn grip; hand drag deferred to 032; found 067 (backlog e2e flake) (1bf32d2)
-2026-10-17 · 060 · closed · show/hide hotkey Control+Alt+X (SPEC Amendment 8): hidden = win.hide(), starts hidden, tab and transitions removed, always resizable with the minimum; hotkeys.toggle validated (clash across all three → defaults), registered/paused/re-registered; tray Show/Hide snapsolve (⌃⌥X) via hotkeySymbols; installer default + SKILL.md; red re-run via revert (docs/issues.md); hand keypress → 032; found 068 (1ba1151)
 2026-10-17 · 064 · closed · capture default Control+Alt+C (⌃⌥C) in config DEFAULTS, the installer's default config.json and DEFAULT_HOTKEY, SKILL.md (install, doctor, AltGr) and DESIGN D9; existing hotkeys.capture values kept, never migrated; reopened after Eric's OK for the one missing test (skill.test.ts asserts the doctor's 'On a Mac, say Ctrl+Option+C' line and that the section no longer names ⌃⌥Q); master merged into the parked branch keeping ⌃⌥C and 060's toggle ⌃⌥X together; found 069 (0f21ca5)
 2026-10-18 · 061 · closed · native macOS restyle (mockup A2): vibrancy behind a transparent window on macOS, 36 px title bar with mark and × (preload hide on panel:hide replaces copy, SPEC Amendment 9), newest thread open with older threads as one-line rows, one composer pinned at the bottom for the newest thread, Retry only on error; Mac hand check → 032; follow-up 070 (f9e2c87)
 2026-10-18 · 065 · paused · parked on keel/065 for the cloud session: code c0f97ed, unit/integration green, panel e2e 18/19 (the new + button test fails); next: fix it, SPEC Amendment 10 + DECISIONS rows, npm test, review, close (c0f97ed)
@@ -49,3 +49,5 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · 085 · closed · the answer footer is the model and the newest answer's response time only (no TTFT, no usage); usage stays in the tray tooltip (6c1f64f)
 2026-10-23 · adhoc · released snapsolve 0.2.7 into ~/dev/snapsolve-local (085 footer: model and response time); updated on Eric's Mac (6f91a80)
 2026-10-23 · keel · dropped · 070 (fixed by 076) and 080 (theme-save ordering), Eric's call (-)
+2026-10-23 · adhoc · macOS checklist updated for 0.2.7: rows 3, 10, 14, 19, 21 refreshed; 23–27 added (Appearance, Chats sidebar, sidebar stays closed, text bar, wide window) (1e64924)
+2026-10-23 · keel · queued · 088 window shows at once on capture (p0), 086 per-answer footer with model name (p1), 087 icon 15% smaller (p2); 054 dropped (Eric) (-)

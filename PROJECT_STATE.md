@@ -4,11 +4,12 @@
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Installed on Eric's Mac: 0.2.5 (2026-10-23): 082 sidebar stays closed across resizes, 083 crop-corners "=" icon
   (tray + title bar); doctor all ok. (0.2.4: 077 Appearance, 078 Chats sidebar, 079 pill composer.)
-- Queue: `next: none — all blocked`. 032 waits on Eric's macOS checklist (docs/checklists/macos.md on keel/032).
-- Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081.
+- Next: 084 (p0) chat column + composer widen with the window (Amendment 18); waits for /goal. Cause: 078's
+  styles.css `@media (min-width: 600px)` rule capping #threads, .empty, .composer > * at 560 px, centred.
+- Blocked: 032 (Eric's macOS checklist, docs/checklists/macos.md on keel/032).
+- Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081 (070 likely covered by 076: drop candidate).
 
 ## Log
-2026-10-17 · adhoc · backlog 058 (drag to move the open panel) and 059 (resize it), Eric's asks after first use of 0.1.0 (-)
 2026-10-17 · adhoc · backlog redesign from mockup A2: 058/059 rewritten as floating window + resize; 060 toggle hotkey, no tab; 061 native restyle, no Copy; 062 voice engine clarify (blocked); 063 voice follow-up (-)
 2026-10-17 · adhoc · hotkeys decided (capture ⌃⌥C, toggle ⌃⌥Z, voice ⌃⌥V start+stop): 060/062/063 updated, 064 added; Eric's config.json capture set to Control+Alt+C (-)
 2026-10-17 · adhoc · 065 added: capture continues the current chat, + button starts a new one, append hotkey removed (Eric's decision) (-)
@@ -48,3 +49,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · 082 · closed · a sidebar the user closed (Hide chats, scrim, or a chat / New chat in the narrow overlay) stays closed across resizes until Show chats; narrowing still closes the overlay without counting as a user close (12a19c8)
 2026-10-23 · 083 · closed · tray icon (drawTrayIcon, 16/32 px template bitmap) and the title-bar mark are four crop corners framing a bold equals sign, replacing the ring and dot (470fb57)
 2026-10-23 · adhoc · released snapsolve 0.2.5 into ~/dev/snapsolve-local (082 sidebar stays closed, 083 crop-corners icon); updated on Eric's Mac (000bfb2)
+2026-10-23 · keel · queued · 084 chat column and composer widen with the window (Eric's report on 0.2.5; cause: 078's 560 px cap) (-)

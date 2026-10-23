@@ -2154,6 +2154,27 @@
         "reasons": "tray unit tests prove 16/32 px bitmaps are binary-alpha BGRA in the given colour with four opaque crop corners (arms along each edge, open edge middles), exactly two wider-than-tall bars in the centre column with an empty centre, and no pixel at the old ring radius (fails on the ring+dot); e2e proves #titlebar .mark is exactly four corner paths + two bar paths, stroke currentColor, fill none, accent coloured; tests unchanged after red; task tests and npm test green",
         "at": "2026-10-23"
       }
+    },
+    {
+      "id": "084",
+      "title": "chat column and composer widen with the window (no 560 px cap)",
+      "status": "open",
+      "priority": 0,
+      "milestone": 3,
+      "deps": [],
+      "file": "docs/tasks/084-chat-fills-width.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

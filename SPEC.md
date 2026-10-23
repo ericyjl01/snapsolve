@@ -202,3 +202,6 @@ Amendment 15's sidebar (Eric, chat 2026-10-23: "if I collapse these sidebar and 
 
 ## Amendment 17 — 2026-10-23
 §1.2 tray icon and the title-bar mark (Eric, chat 2026-10-23: "crop corners around the equals sign, log it as a task"; DECISIONS 2026-10-23 083; task 083): the tray icon, still drawn in code as a template image, is four screenshot crop corners framing a bold equals sign ("capture" + "answer") instead of the ring and centre dot; the window's title-bar mark is the same symbol. Out: the app icon (task 033).
+
+## Amendment 18 — 2026-10-23
+Amendment 15's chat column (Eric, chat 2026-10-23: "The text is a fixed box, but I can drag the window larger.. So when I drag the window larger, the text does not fill the entire window, but rather stays fixed to a limit. The text should appear wider if I drag the window wider."; DECISIONS 2026-10-23 084; task 084): the chat column, the empty state and the composer have no maximum width at any window size; they fill the space beside the docked sidebar (or the whole window), less their side padding, and widen as the window does. This replaces Amendment 15's chat column and composer "centred with a max width of ~560 px". Out: a user-set reading width.

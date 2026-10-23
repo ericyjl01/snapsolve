@@ -205,3 +205,6 @@ Amendment 15's sidebar (Eric, chat 2026-10-23: "if I collapse these sidebar and 
 
 ## Amendment 18 — 2026-10-23
 Amendment 15's chat column (Eric, chat 2026-10-23: "The text is a fixed box, but I can drag the window larger.. So when I drag the window larger, the text does not fill the entire window, but rather stays fixed to a limit. The text should appear wider if I drag the window wider."; DECISIONS 2026-10-23 084; task 084): the chat column, the empty state and the composer have no maximum width at any window size; they fill the space beside the docked sidebar (or the whole window), less their side padding, and widen as the window does. This replaces Amendment 15's chat column and composer "centred with a max width of ~560 px". Out: a user-set reading width.
+
+## Amendment 19 — 2026-10-23
+§4 card status line (Eric, chat 2026-10-23: "no need for all that info. just model and repsonse time. thats it."; DECISIONS 2026-10-23 085; task 085): the footer under an answer shows only the model and the last answer's response time (`opus · 12.3 s`); TTFT and usage are no longer shown there. Usage stays in the tray tooltip (§3.6); thread.json still records both. Out: changing what a turn records.

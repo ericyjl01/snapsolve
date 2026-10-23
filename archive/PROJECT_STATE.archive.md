@@ -73,3 +73,4 @@
 2026-10-17 · adhoc · backlog 058 (drag to move the open panel) and 059 (resize it), Eric's asks after first use of 0.1.0 (-)
 2026-10-17 · adhoc · backlog redesign from mockup A2: 058/059 rewritten as floating window + resize; 060 toggle hotkey, no tab; 061 native restyle, no Copy; 062 voice engine clarify (blocked); 063 voice follow-up (-)
 2026-10-17 · adhoc · hotkeys decided (capture ⌃⌥C, toggle ⌃⌥Z, voice ⌃⌥V start+stop): 060/062/063 updated, 064 added; Eric's config.json capture set to Control+Alt+C (-)
+2026-10-17 · adhoc · 065 added: capture continues the current chat, + button starts a new one, append hotkey removed (Eric's decision) (-)

@@ -2180,6 +2180,27 @@
         "reasons": "panel e2e (43/43) and npm test (1028 pass) green; new 084 tests prove #empty/#threads/.answer/#composer-box span the area right of the docked sidebar and the full 1100 px window when closed (>1000 px, fail under the old 560 px cap), the answer grows ~340 px from 760 to 1100 (no plateau), 360 px still fills; only post-red test change re-widens after capture (059), justified; 078 case untouched",
         "at": "2026-10-23"
       }
+    },
+    {
+      "id": "085",
+      "title": "answer footer shows only the model and the response time",
+      "status": "open",
+      "priority": 0,
+      "milestone": 3,
+      "deps": [],
+      "file": "docs/tasks/085-footer-model-time.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/e2e/errors.e2e.test.ts test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

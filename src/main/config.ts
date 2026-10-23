@@ -1,6 +1,7 @@
-// config.json: defaults (SPEC §6.1), per-field validation, created if missing, never rewritten once it exists.
+// config.json: defaults (SPEC §6.1), per-field validation, created if missing, never rewritten once it exists —
+// except by `saveTheme`, the tray's Appearance choice (077, Amendment 14), which changes only `theme`.
 import { randomUUID } from "node:crypto";
-import { link, mkdir, open, readFile, rm } from "node:fs/promises";
+import { link, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Config, Effort, Hotkeys, Theme } from "../shared/types";
 import type { Logger } from "./log";
@@ -76,6 +77,46 @@ async function create(file: string): Promise<LoadedConfig> {
   } catch (e) {
     if (errorCode(e) === "EEXIST") return await read(file, false);
     return { config: defaults(), warnings: [`cannot create ${file} (${describe(e)}); using defaults`], created: false };
+  } finally {
+    await rm(temp, { force: true }).catch(() => undefined);
+  }
+}
+
+/**
+ * Saves `theme` into config.json (tray Appearance, SPEC Amendment 14): every other key and value stays as it is.
+ * A missing file is written with the defaults plus the theme. An unreadable, malformed or non-object file is left
+ * untouched and the error returned. Atomic: a synced temp file beside `file` is renamed over it.
+ */
+export async function saveTheme(
+  file: string,
+  theme: Theme,
+  fs: { rename: (from: string, to: string) => Promise<void> } = { rename },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let raw: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse((await readFile(file, "utf8")).replace(/^﻿/, ""));
+    if (!isObject(parsed)) return { ok: false, error: "config.json must contain a JSON object; not changed" };
+    raw = parsed;
+  } catch (e) {
+    if (errorCode(e) === "ENOENT") raw = defaults() as unknown as Record<string, unknown>;
+    else if (e instanceof SyntaxError) return { ok: false, error: `config.json is not valid JSON (${describe(e)}); not changed` };
+    else return { ok: false, error: `cannot read config.json (${describe(e)})` };
+  }
+  raw.theme = theme;
+  const temp = `${file}.${randomUUID()}.tmp`;
+  try {
+    await mkdir(path.dirname(file), { recursive: true });
+    const handle = await open(temp, "wx");
+    try {
+      await handle.writeFile(`${JSON.stringify(raw, null, 2)}\n`);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(temp, file);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: `cannot write config.json (${describe(e)})` };
   } finally {
     await rm(temp, { force: true }).catch(() => undefined);
   }

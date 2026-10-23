@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { screenRecordingCard, SnapsolveError, voicePermissionCard } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
-import type { AssistantTurn, Config, Thread, VoiceCardKind, VoiceDenial } from "../shared/types";
+import type { AssistantTurn, Config, Theme, Thread, VoiceCardKind, VoiceDenial } from "../shared/types";
 import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
@@ -418,3 +418,27 @@ function schemeOf(url: unknown): string {
   }
 }
 
+
+/**
+ * Tray Appearance (077, SPEC Amendment 14): the theme applies at once through Electron's `nativeTheme.themeSource`
+ * (the open window restyles via prefers-color-scheme), `config.theme` follows for any later window, then the choice
+ * is saved. A failed save is logged; the theme still holds for this run.
+ */
+export async function applyTheme(
+  theme: Theme,
+  deps: {
+    nativeTheme: { themeSource: Theme };
+    config: Pick<Config, "theme">;
+    save: (theme: Theme) => Promise<{ ok: true } | { ok: false; error: string }>;
+    log: Pick<Logger, "warn">;
+  },
+): Promise<void> {
+  deps.nativeTheme.themeSource = theme;
+  deps.config.theme = theme;
+  try {
+    const result = await deps.save(theme);
+    if (!result.ok) deps.log.warn("theme.saveFailed", { theme, error: result.error });
+  } catch (e) {
+    deps.log.warn("theme.saveFailed", { theme, error: e });
+  }
+}

@@ -2,17 +2,13 @@
 
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.7 (2026-10-23). Goal run in progress. Not yet released: 088, 086, 090, 087, 091.
-- Closed this run: 090 (a16902c, see-through + Transparency menu), 087 (26a493b, icon ~15% smaller),
-  091 (17f8751, default window ~9 × 6 in real size, centred; osascript CGDisplayScreenSize, 110 pt/in fallback).
-- Next: `tasks.py next` should show only 032 blocked → release 0.2.8 into ~/dev/snapsolve-local and update
-  Eric's Mac as 0.2.7 (bump version, build, release.mjs, plugin update, snapsolve.mjs update) — Eric (chat)
-  "release 0.2.8 when the queue is done" (DECISIONS row).
+- Installed on Eric's Mac: 0.2.8 (2026-10-23, f9efb11; running, app.ready 0.2.8, no display-size warnings).
+  It has 088, 086, 090, 087, 091. Saved window bounds stay: tray › Reset window position shows 091's default.
+- Goal run ended (2026-10-23): `tasks.py next` → none — all blocked; only 032 left.
 - Blocked: 032 — Eric runs master's docs/checklists/macos.md (29 rows; rows 3, 16, 29 cover 087, 091, 090).
 - Backlog 033, 067, 069, 074, 089, 092, 093, 094, 095. Dropped by Eric 2026-10-23: 042, 053, 054, 056, 066, 068, 070, 080, 081.
 
 ## Log
-2026-10-20 · 073 · closed · ARCHITECTURE module map: app.ts's pipeline line names onCapture and newThread (onAppend was removed in 065); the edit rides the close commit (memory file) (3188a1a)
 2026-10-20 · 063 · closed · voice follow-up: hotkeys.voice Control+Alt+V shows the window and runs the on-device speech helper (native/speech Swift, SpeechAnalyzer/SFSpeechRecognizer, built by npm run build, released as app/native); listening bar with live transcript; the key again sends via the follow-up path to the current thread (or a text thread) as a voice-marked turn; Esc/hide cancel, ignored while the thread answers, empty → note, denied → settings card, failure → error card; preload 15 (Amendment 11); hand check → 032 row 22 (315f4c6)
 2026-10-21 · adhoc · released snapsolve 0.2.0 into ~/dev/snapsolve-local (redesign 058–061, ⌃⌥C 064, one chat + 065, voice 063 with app/native/snapsolve-speech); Eric: restart Claude Code, then /snapsolve update (b5a6c08)
 2026-10-22 · adhoc · backlog 074: update must re-package snapsolve.app when Info.plist keys change (0.2.0 voice helper SIGABRTs without NSSpeechRecognitionUsageDescription) (-)
@@ -52,3 +48,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · 090 · closed · the window is see-through for real (transparent: true, the ground painted once on html) and tray › Transparency › 0% (solid) … 90% applies live and saves transparency (default 20); hand check → 032 row 29; found 094 (a16902c)
 2026-10-23 · 087 · closed · the crop-corners symbol drawn about 15% smaller: tray bitmap in a centred square of size − 2·round(0.075·size) (14/16, 28/32 px, same proportions), title-bar mark 12 × 12; checklist row 3 (26a493b)
 2026-10-23 · 091 · closed · the default window is about 9 in × 6 in real size (CGDisplayScreenSize via osascript, 110 pt/in when unknown), centred in the work area, on first open and Reset; e2e sidebar tests narrow the window themselves; checklist row 16; found 095 (17f8751)
+2026-10-23 · adhoc · released snapsolve 0.2.8 into ~/dev/snapsolve-local (090 see-through + Transparency menu, 087 icon ~15% smaller, 091 9 × 6 in centred default, 088 faster show, 086 per-answer footer); updated on Eric's Mac (f9efb11)

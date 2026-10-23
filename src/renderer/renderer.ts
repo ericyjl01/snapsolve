@@ -1,6 +1,6 @@
 // The panel UI (SPEC §4.2, Amendments 9–10 and 15: mockup A2, then the chat layout of task 078): one chat on screen —
 // its screenshots, questions and rendered answers, "Thinking…" until the first text arrives, the streamed answer,
-// Retry on error and a status line — and every chat in the "Chats" sidebar, newest first under Today / Yesterday /
+// Retry on error and, under each finished answer, its model and time (086) — and every chat in the "Chats" sidebar, newest first under Today / Yesterday /
 // Previous 7 days / Older. Below 600 px the sidebar is an overlay over a scrim and starts closed; wider it is docked
 // beside the chat and starts open. Choosing a chat shows it and tells main (openThread), so the composer and the next
 // capture continue it; a new chat (a capture after "+", a typed question, a seeded continuation) is shown as it
@@ -15,6 +15,7 @@
 import { continuedNote, screenRecordingCard, userMessage, voicePermissionCard } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
 import type { AssistantTurn, Thread, UserTurn, VoiceState } from "../shared/types";
+import { modelName } from "../shared/models";
 import { renderAnswer } from "./render";
 
 declare global {
@@ -29,7 +30,6 @@ interface Card {
   turns: HTMLElement;
   live: HTMLElement;
   retry: HTMLButtonElement;
-  status: HTMLElement;
 }
 
 const api = window.snapsolve;
@@ -113,9 +113,8 @@ function createCard(thread: Thread): Card {
   const retry = el("button", "retry", "Retry");
   retry.type = "button";
   actions.append(retry);
-  const status = el("p", "status");
-  root.append(turns, live, actions, status);
-  const card: Card = { kind: "thread", root, turns, live, retry, status };
+  root.append(turns, live, actions);
+  const card: Card = { kind: "thread", root, turns, live, retry };
   retry.addEventListener("click", () => {
     pending.add(thread.id);
     update(thread.id);
@@ -234,7 +233,7 @@ function renderTurns(card: Card, thread: Thread): void {
     } else {
       if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));
       if (turn.note === "resumeFallback") nodes.push(el("p", "note", userMessage("resumeFailed")));
-      nodes.push(answerNode("answer", turn.text));
+      nodes.push(answerNode("answer", turn.text), el("p", "footer", footer(turn, thread)));
     }
   }
   card.turns.replaceChildren(...nodes);
@@ -247,10 +246,12 @@ function renderLive(card: Card, thread: Thread): void {
   else card.live.replaceChildren(el("p", "thinking", thread.status === "queued" ? "Queued…" : "Thinking…"));
 }
 
-/** The card footer: the model, then the newest answer's response time (085; usage is in the tray tooltip). */
-function statusLine(thread: Thread): string {
-  const turn = thread.turns.filter((t): t is AssistantTurn => t.role === "assistant").at(-1);
-  return turn ? `${thread.model} · ${(turn.durationMs / 1000).toFixed(1)} s` : thread.model;
+/**
+ * Under a finished answer (086, Amendment 20): the model claude reported for it, by name (a turn saved before 086 has
+ * none: the thread's alias), and its response time. Usage is in the tray tooltip (085).
+ */
+function footer(turn: AssistantTurn, thread: Thread): string {
+  return `${modelName(turn.model ?? thread.model)} · ${(turn.durationMs / 1000).toFixed(1)} s`;
 }
 
 function update(threadId: string): void {
@@ -270,7 +271,6 @@ function update(threadId: string): void {
   if (!busy && thread.status === "error" && !(last?.role === "assistant" && last.isError)) {
     card.live.replaceChildren(el("p", "error", userMessage("internal")));
   }
-  card.status.textContent = statusLine(thread);
 }
 
 function updateComposer(): void {

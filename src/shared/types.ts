@@ -69,6 +69,11 @@ export interface AssistantTurn {
   warning?: "apiKeyInUse";
   /** The usage after this turn ("5h N% · 7d M%"), as the tray tooltip shows it; the card footer leaves it out (085). */
   usage?: string;
+  /**
+   * The model claude reported in this turn's `system/init` event (e.g. `claude-opus-5-5`); the answer's footer shows
+   * it by name (086). Turns saved before 086, or without an init model, have none: the footer uses the thread's alias.
+   */
+  model?: string;
 }
 
 export type Turn = UserTurn | AssistantTurn;

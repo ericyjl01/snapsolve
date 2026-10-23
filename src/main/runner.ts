@@ -245,6 +245,8 @@ interface Attempt {
   apiKeyWarning: boolean;
   /** This attempt's latest `rate_limit_event`. */
   usage: UsageInfo | null;
+  /** The model `system/init` reported (086). */
+  model: string | null;
   /** claude started (got a pid), so it may have written a transcript. */
   ran: boolean;
   spawnError: NodeJS.ErrnoException | null;
@@ -454,6 +456,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       rateLimited: false,
       apiKeyWarning: false,
       usage: null,
+      model: null,
       ran: false,
       spawnError: null,
       timedOut: false,
@@ -505,6 +508,7 @@ export function createRunner(deps: RunnerDeps): Runner {
           return;
         case "init":
           attempt.apiKeyWarning = !config.allowApiKey && event.apiKeySource !== null && event.apiKeySource !== "none";
+          attempt.model = event.model;
           emit({
             type: "init",
             threadId: thread.id,
@@ -636,9 +640,13 @@ function screenshotFiles(turns: Turn[]): string[] {
 }
 
 /** What the card shows next to an answer: the API-key warning and the usage line (SPEC §3.6). */
-function annotations(attempt: Attempt): Pick<AssistantTurn, "warning" | "usage"> {
+function annotations(attempt: Attempt): Pick<AssistantTurn, "warning" | "usage" | "model"> {
   const line = attempt.usage ? formatUsage(attempt.usage) : "";
-  return { ...(attempt.apiKeyWarning ? { warning: "apiKeyInUse" as const } : {}), ...(line ? { usage: line } : {}) };
+  return {
+    ...(attempt.apiKeyWarning ? { warning: "apiKeyInUse" as const } : {}),
+    ...(line ? { usage: line } : {}),
+    ...(attempt.model ? { model: attempt.model } : {}),
+  };
 }
 
 /**

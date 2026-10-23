@@ -3,17 +3,16 @@
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Installed on Eric's Mac: 0.2.7 (2026-10-23): 085 answer footer = model · response time only (Amendment 19);
-  doctor all ok. (0.2.6: 084 chat widens with the window.) DESIGN.md footer lines noted on backlog 068.
+  doctor all ok. (0.2.6: 084 chat widens with the window.)
 - Queue (M3, wait for /goal): 088 (p0) window shows at once on capture (measure first: capture.timing log);
-  086 (p1) per-answer footer with the reported model name (Amendment 20); 087 (p2) icon ~15% smaller (Amendment 21).
+  086 (p1) per-answer footer with model name (Am. 20); 090 (p1) real see-through window (`transparent: true`
+  suspected missing) + tray Transparency steps (Am. 23); 087 (p2) icon ~15% smaller (Am. 21); 091 (p2) default
+  window ~9 × 6 in, centred (Am. 22). Ask Eric: menu steps OK instead of a slider (090)?
 - Blocked: 032 — Eric runs master's docs/checklists/macos.md (27 items, refreshed for 0.2.7).
-- Backlog 033, 042, 053, 056, 066–069, 074, 081, 089 (054, 070, 080 dropped by Eric). Open with Eric: drop 042,
-  053, 056, 066, 068, 081 as recommended? 089 (own format + knowledge base) parked: Eric will come back with
-  what material and what format (docs/tasks/089).
+- Backlog 033, 067, 069, 074, 089 (089 own format + knowledge base, parked for Eric's answers). Dropped by Eric
+  2026-10-23: 042, 053, 054, 056, 066, 068, 070, 080, 081.
 
 ## Log
-2026-10-18 · 061 · closed · native macOS restyle (mockup A2): vibrancy behind a transparent window on macOS, 36 px title bar with mark and × (preload hide on panel:hide replaces copy, SPEC Amendment 9), newest thread open with older threads as one-line rows, one composer pinned at the bottom for the newest thread, Retry only on error; Mac hand check → 032; follow-up 070 (f9e2c87)
-2026-10-18 · 065 · paused · parked on keel/065 for the cloud session: code c0f97ed, unit/integration green, panel e2e 18/19 (the new + button test fails); next: fix it, SPEC Amendment 10 + DECISIONS rows, npm test, review, close (c0f97ed)
 2026-10-18 · 065 · blocked · two macOS-only e2e assertions (content protection; userdata without the override) cannot pass in a Linux cloud session, so Done-when and close's full-suite gate cannot be met: platform-gate them (071) or close on the Mac? → keel/065 (caa71ef)
 2026-10-18 · 071 · blocked · platform-gating the two macOS-only e2e assertions is 065's own block question (option a), so it waits for Eric rather than me answering it myself → not started (-)
 2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)
@@ -52,3 +51,5 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · adhoc · macOS checklist updated for 0.2.7: rows 3, 10, 14, 19, 21 refreshed; 23–27 added (Appearance, Chats sidebar, sidebar stays closed, text bar, wide window) (1e64924)
 2026-10-23 · keel · queued · 088 window shows at once on capture (p0), 086 per-answer footer with model name (p1), 087 icon 15% smaller (p2); 054 dropped (Eric) (-)
 2026-10-23 · keel · queued · 089 (backlog) your own answer format and knowledge base: parked until Eric answers what material and what format (-)
+2026-10-23 · keel · dropped · 042, 053, 056, 066, 068, 081 (Eric) (-)
+2026-10-23 · keel · queued · 090 see-through window + tray Transparency (p1), 091 default window ~9 × 6 in centred (p2) (-)

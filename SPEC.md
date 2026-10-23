@@ -214,3 +214,9 @@ Amendment 19's footer (Eric, chat 2026-10-23: "Opus should display what model, a
 
 ## Amendment 21 — 2026-10-23
 Amendment 17's symbol (Eric, chat 2026-10-23: "Let's make the icon like 15% smaller."; DECISIONS 2026-10-23 087; task 087): the crop-corners "=" in the menu bar and the title bar is drawn about 15% smaller, centred, with the same proportions.
+
+## Amendment 22 — 2026-10-23
+§4.1 default window bounds, Amendments 6 and 7 (Eric, chat 2026-10-23: "SnapSolve's default window position should be centered on the screen around real life size of an 9in wide and 6in tall."; DECISIONS 2026-10-23 091; task 091): with no saved bounds for a display, and after tray › Reset window position, the window is about 9 in × 6 in in physical size on that display (from its physical dimensions; 110 points per inch when unknown), centred in the work area and clamped into it, never below 280 × 300. Saved bounds still win otherwise. Replaces the 360 × 460 top-right default.
+
+## Amendment 23 — 2026-10-23
+§4.1 window ground and §1.2 tray, Amendment 13 (Eric, chat 2026-10-23: "SnapSolve is not a translucent background. So I want you to make that change. there should be a bar on the menu app that lets me change how transparent the window is."; DECISIONS 2026-10-23 090; task 090): the macOS window really is see-through behind its ground. Tray › Transparency › Solid, 10%, 20%, 30%, 40%, 50% (radio, after Appearance) sets how see-through the ground is, applied live and saved as config.json `transparency` (integer 0–50, default 20); text, code blocks, bubbles, the sidebar and the text bar stay readable. Out: OS blur; a slider window.

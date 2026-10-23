@@ -77,6 +77,8 @@ let lastTop: string | null | undefined;
 let freshAfter: string | null | undefined;
 /** The sidebar is shown: docked (wide) or over the chat (narrow). */
 let sidebarOpen = wide.matches;
+/** The user closed the sidebar (082): it stays closed through resizes until Show chats. */
+let sidebarClosedByUser = false;
 
 const BUSY = new Set<Thread["status"]>(["new", "queued", "running"]);
 const isBusy = (t: Thread) => BUSY.has(t.status) || pending.has(t.id);
@@ -315,11 +317,17 @@ function setSidebar(open: boolean): void {
   applySidebar();
 }
 
+/** The user opens or closes the sidebar (082): a close outlasts resizes until Show chats. */
+function chooseSidebar(open: boolean): void {
+  sidebarClosedByUser = !open;
+  setSidebar(open);
+}
+
 /** A chat chosen in the sidebar: on screen at once, and main continues it on the next capture. */
 function chooseChat(threadId: string): void {
   current = threadId;
   freshAfter = undefined;
-  if (!wide.matches) setSidebar(false);
+  if (!wide.matches && sidebarOpen) chooseSidebar(false);
   layout();
   api.openThread(threadId).catch(() => undefined);
 }
@@ -328,7 +336,7 @@ function chooseChat(threadId: string): void {
 function startNewChat(): void {
   const was = freshAfter;
   freshAfter = top;
-  if (!wide.matches) setSidebar(false);
+  if (!wide.matches && sidebarOpen) chooseSidebar(false);
   layout();
   api.newThread().catch(() => {
     freshAfter = was;
@@ -478,11 +486,11 @@ api.onVoice(showVoice);
 (document.getElementById("hide") as HTMLButtonElement).addEventListener("click", () => void api.hide().catch(() => undefined));
 (document.getElementById("new-chat") as HTMLButtonElement).addEventListener("click", startNewChat);
 (document.getElementById("sidebar-new") as HTMLButtonElement).addEventListener("click", startNewChat);
-showChats.addEventListener("click", () => setSidebar(true));
-(document.getElementById("sidebar-hide") as HTMLButtonElement).addEventListener("click", () => setSidebar(false));
-scrim.addEventListener("click", () => setSidebar(false));
-// Crossing 600 px: docked and open when wide, a closed overlay when narrow.
-wide.addEventListener("change", () => setSidebar(wide.matches));
+showChats.addEventListener("click", () => chooseSidebar(true));
+(document.getElementById("sidebar-hide") as HTMLButtonElement).addEventListener("click", () => chooseSidebar(false));
+scrim.addEventListener("click", () => chooseSidebar(false));
+// Crossing 600 px: docked and open when wide unless the user closed it (082), a closed overlay when narrow.
+wide.addEventListener("change", () => setSidebar(wide.matches && !sidebarClosedByUser));
 applySidebar();
 // The day groups (Today, Yesterday…) move on while the window is up.
 setInterval(() => renderChats(newestFirst().filter((t) => !t.permission)), 60_000);

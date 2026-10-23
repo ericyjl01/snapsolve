@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createApp, recoverBusyThreads, resolveClaudeCommand, type AppDeps } from "../../src/main/app";
+import { applyTheme, createApp, recoverBusyThreads, resolveClaudeCommand, type AppDeps } from "../../src/main/app";
 import type { Logger } from "../../src/main/log";
 import type { RunnerEvent, TurnRequest } from "../../src/main/runner";
 import { createStore, type Store } from "../../src/main/store";
@@ -727,5 +727,74 @@ describe("resolveClaudeCommand", () => {
       path: "claude",
       prefixArgs: [],
     });
+  });
+});
+
+// 077 (Amendment 14): the tray's Appearance handler applies the theme at once, then saves it.
+describe("applyTheme (077)", () => {
+  function themeSetup(save: (theme: string) => Promise<{ ok: true } | { ok: false; error: string }>) {
+    const events: string[] = [];
+    const nativeTheme = {
+      _source: "dark",
+      get themeSource() {
+        return this._source;
+      },
+      set themeSource(v: string) {
+        events.push(`themeSource=${v}`);
+        this._source = v;
+      },
+    };
+    const config = { theme: "dark" as "dark" | "light" | "system" };
+    const warn = vi.fn();
+    const log: Logger = { ...quietLog, warn };
+    const savePending = vi.fn(async (theme: "dark" | "light" | "system") => {
+      events.push(`save ${theme} start`);
+      const r = await save(theme);
+      events.push(`save ${theme} done`);
+      return r;
+    });
+    return { events, nativeTheme, config, warn, log, save: savePending };
+  }
+
+  it("sets nativeTheme.themeSource before the save resolves and updates the config the next window reads", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const t = themeSetup(async () => {
+      await gate;
+      return { ok: true };
+    });
+    const done = applyTheme("light", { nativeTheme: t.nativeTheme, config: t.config, save: t.save, log: t.log });
+    expect(t.nativeTheme.themeSource).toBe("light");
+    expect(t.config.theme).toBe("light");
+    expect(t.events).toEqual(["themeSource=light", "save light start"]);
+    release();
+    await done;
+    expect(t.events).toEqual(["themeSource=light", "save light start", "save light done"]);
+    expect(t.warn).not.toHaveBeenCalled();
+  });
+
+  it.each(["dark", "light", "system"] as const)("applies %s", async (theme) => {
+    const t = themeSetup(async () => ({ ok: true }));
+    t.config.theme = theme === "dark" ? "light" : "dark";
+    await applyTheme(theme, { nativeTheme: t.nativeTheme, config: t.config, save: t.save, log: t.log });
+    expect(t.nativeTheme.themeSource).toBe(theme);
+    expect(t.config.theme).toBe(theme);
+    expect(t.save).toHaveBeenCalledWith(theme);
+  });
+
+  it("a failed save is logged (theme.saveFailed), not thrown; the theme still applies for this run", async () => {
+    const t = themeSetup(async () => ({ ok: false, error: "config.json is not valid JSON" }));
+    await expect(applyTheme("light", { nativeTheme: t.nativeTheme, config: t.config, save: t.save, log: t.log })).resolves.toBeUndefined();
+    expect(t.nativeTheme.themeSource).toBe("light");
+    expect(t.config.theme).toBe("light");
+    expect(t.warn).toHaveBeenCalledWith("theme.saveFailed", expect.objectContaining({ theme: "light" }));
+  });
+
+  it("a save that throws is logged, not thrown", async () => {
+    const t = themeSetup(async () => {
+      throw new Error("boom");
+    });
+    await expect(applyTheme("system", { nativeTheme: t.nativeTheme, config: t.config, save: t.save, log: t.log })).resolves.toBeUndefined();
+    expect(t.warn).toHaveBeenCalledWith("theme.saveFailed", expect.objectContaining({ theme: "system" }));
   });
 });

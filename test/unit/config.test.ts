@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULTS, loadConfig } from "../../src/main/config";
+import { DEFAULTS, loadConfig, saveTheme } from "../../src/main/config";
 
 const SPEC_DEFAULTS = {
   // No append key (065): a capture continues the current thread. Voice (063): dictate a follow-up.
@@ -379,5 +379,62 @@ describe("theme (075)", () => {
     expect(r.warnings).toEqual([]);
     expect(r.config.theme).toBe("dark");
     expect(await snapshot()).toEqual(before);
+  });
+});
+
+// 077 (Amendment 14): the tray's Appearance choice is saved into config.json, every other key left as it was.
+describe("saveTheme (077)", () => {
+  it("rewrites only theme: other keys and values (unknown keys too) stay as they are", async () => {
+    const original = { model: "sonnet", hotkeys: { capture: "Control+Alt+Q" }, timeoutSec: 99, myNote: "keep me", theme: "dark" };
+    await writeConfig(original);
+    const result = await saveTheme(file, "light");
+    expect(result).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ ...original, theme: "light" });
+    expect(Object.keys(JSON.parse(await readFile(file, "utf8")))).toEqual(Object.keys(original));
+  });
+
+  it("adds theme to a config.json that has none", async () => {
+    await writeConfig({ model: "opus" });
+    expect(await saveTheme(file, "system")).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ model: "opus", theme: "system" });
+  });
+
+  it("writes atomically: no temp file is left behind, and a failed swap leaves the old file intact", async () => {
+    await writeConfig({ model: "opus", theme: "dark" });
+    const before = await readFile(file, "utf8");
+    const result = await saveTheme(file, "light", {
+      rename: async () => {
+        throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(await readFile(file, "utf8")).toBe(before);
+    expect(await readdir(dir)).toEqual(["config.json"]);
+    expect(await saveTheme(file, "light")).toEqual({ ok: true });
+    expect(await readdir(dir)).toEqual(["config.json"]);
+  });
+
+  it("a missing config.json is written with the defaults and the new theme", async () => {
+    expect(await saveTheme(file, "light")).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ ...SPEC_DEFAULTS, theme: "light" });
+  });
+
+  it.each([
+    ["malformed JSON", "{ not json"],
+    ["a JSON array", "[1, 2]"],
+  ])("%s: the file is left untouched and an error is returned (no throw)", async (_name, content) => {
+    await writeConfig(content);
+    const before = await snapshot();
+    const result = await saveTheme(file, "light");
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toMatch(/config\.json/);
+    expect(await snapshot()).toEqual(before);
+    expect(await readdir(dir)).toEqual(["config.json"]);
+  });
+
+  it("the saved theme is what loadConfig then reads", async () => {
+    await writeConfig({ theme: "dark" });
+    await saveTheme(file, "light");
+    expect((await loadConfig(file)).config.theme).toBe("light");
   });
 });

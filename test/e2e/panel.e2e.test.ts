@@ -268,6 +268,28 @@ describe("panel (e2e)", () => {
     }
   }, 60_000);
 
+  // 077 (Amendment 14): the tray's Appearance › Light applies at once (no reload) and is saved to config.json.
+  it("tray Appearance › Light restyles the open window live and saves theme light, other keys kept (077)", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    writeFileSync(path.join(dataDir, "config.json"), JSON.stringify({ timeoutSec: 99 }));
+    const p = await launchPanel(dataDir);
+    try {
+      expect(await p.page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches)).toBe(true);
+      await p.page.evaluate(() => ((window as unknown as { __marker: number }).__marker = 77));
+      await p.app.evaluate((_electron) => (globalThis as unknown as { snapsolveTest: { setTheme(t: string): Promise<void> } }).snapsolveTest.setTheme("light"));
+      await expect.poll(() => p.page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches), { timeout: 5_000 }).toBe(false);
+      await expect.poll(() => p.page.evaluate(() => getComputedStyle(document.body).backgroundColor), { timeout: 5_000 }).toBe("rgba(246, 246, 248, 0.88)");
+      // Same document: restyled without a reload.
+      expect(await p.page.evaluate(() => (window as unknown as { __marker?: number }).__marker)).toBe(77);
+      await expect
+        .poll(() => JSON.parse(readFileSync(path.join(dataDir, "config.json"), "utf8")), { timeout: 5_000 })
+        .toEqual({ timeoutSec: 99, theme: "light" });
+    } finally {
+      await p.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 60_000);
+
   // 076: code blocks on near-black with github-dark colors in the dark theme (light keeps github); answers in the New
   // York serif at 14 px, code in Menlo, the chrome in the system sans.
   it.each([

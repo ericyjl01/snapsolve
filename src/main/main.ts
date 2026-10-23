@@ -27,7 +27,7 @@ import type { Theme, VoiceDenial } from "../shared/types";
 import { IPC } from "../shared/ipc";
 import { applyTheme, createApp, recoverBusyThreads, resolveClaudeCommand, type Shot } from "./app";
 import { checkAuth } from "./auth";
-import { createCapturer, ScreenRecordingDeniedError } from "./capture";
+import { createCapturer, ScreenRecordingDeniedError, screenshotOf } from "./capture";
 import { loadConfig, saveTheme } from "./config";
 import { encodeForModel } from "./encode";
 import { createHotkeys } from "./hotkeys";
@@ -300,8 +300,12 @@ async function start(): Promise<void> {
 
   if (test) {
     (globalThis as { snapsolveTest?: unknown }).snapsolveTest = {
-      /** Feeds a PNG file through the same path as a capture; resolves with its thread's id. */
-      captureFromFile: async (png: string) => core.onCapture({ png: readImage(png).toPNG() }),
+      /** Feeds a PNG file through the same path as a capture (reading it is the grab); resolves with its thread's id. */
+      captureFromFile: async (png: string) => {
+        const startedAt = performance.now();
+        const image = readImage(png);
+        return core.onCapture(screenshotOf(image, { startedAt, grabMs: performance.now() - startedAt }));
+      },
       hotkeyStatus: () => keys.status(),
       /** What the show/hide hotkey does. */
       toggle: () => panel.toggle(),

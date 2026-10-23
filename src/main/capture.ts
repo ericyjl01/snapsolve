@@ -1,6 +1,7 @@
 // Screen capture (SPEC §2.1–2.2): the display under the cursor at native resolution, one capture at a time, with
 // the panel kept out of the image (content protection on Windows 10 2004+, else hide → wait → capture → re-show).
-// On macOS nothing is captured without the Screen Recording grant (DESIGN §3.2 step 5).
+// On macOS nothing is captured without the Screen Recording grant (DESIGN §3.2 step 5). The PNG and the model's image
+// are made only when asked for (`encode`), so the window can be shown first (task 088).
 import { SnapsolveError } from "../shared/errors";
 import type { Thread } from "../shared/types";
 import { encodeForModel, type EncodedImage, type ImageLike } from "./encode";
@@ -43,15 +44,29 @@ export interface CapturerDeps {
   /** `os.release()`; on Windows `10.0.<build>`. */
   osRelease: string;
   wait: (ms: number) => Promise<void>;
+  /** A monotonic clock in ms for the `capture.timing` log line (088); `performance.now` by default. */
+  now?: () => number;
 }
 
 export interface Screenshot {
-  /** Full resolution, for the thread's history. */
-  png: Buffer;
   width: number;
   height: number;
-  /** What the model receives (SPEC §2.3). */
+  /** `now()` when the capture was asked for (the hotkey press), before any capture queued ahead of it ran. */
+  startedAt: number;
+  /** The grab itself: hiding a shown window, the wait, getSources and showing it again. */
+  grabMs: number;
+  /**
+   * The full-resolution PNG (the thread's history) and what the model receives (SPEC §2.3), made on the first call
+   * and kept. Not done by `capture()`: the window is shown before this work (088).
+   */
+  encode(): EncodedScreenshot;
+}
+
+export interface EncodedScreenshot {
+  png: Buffer;
   send: EncodedImage;
+  pngMs: number;
+  encodeMs: number;
 }
 
 export interface Capturer {
@@ -82,11 +97,13 @@ export class ScreenRecordingDeniedError extends SnapsolveError {
 
 export function createCapturer(deps: CapturerDeps): Capturer {
   const hidesPanel = !hasContentProtection(deps.platform, deps.osRelease);
+  const now = deps.now ?? monotonicNow;
   let tail: Promise<unknown> = Promise.resolve();
 
-  async function captureNow(): Promise<Screenshot> {
+  async function captureNow(startedAt: number): Promise<Screenshot> {
     if (deps.platform === "darwin") await requireScreenRecording();
     const hide = hidesPanel && deps.panel.isOpen();
+    const grabStart = now();
     let thumbnail: ImageLike;
     try {
       if (hide) {
@@ -97,9 +114,10 @@ export function createCapturer(deps: CapturerDeps): Capturer {
     } finally {
       if (hide) deps.panel.show();
     }
+    const grabMs = now() - grabStart;
     const { width, height } = thumbnail.getSize();
     if (width <= 0 || height <= 0) throw new SnapsolveError("captureFailed", "the captured image is empty");
-    return { png: thumbnail.toPNG(), width, height, send: encodeForModel(thumbnail) };
+    return screenshotOf(thumbnail, { startedAt, grabMs }, now);
   }
 
   /** Throws `ScreenRecordingDeniedError` unless granted; an undetermined state first raises the system prompt. */
@@ -142,11 +160,36 @@ export function createCapturer(deps: CapturerDeps): Capturer {
 
   return {
     capture() {
-      const run = tail.then(captureNow);
+      const startedAt = now();
+      const run = tail.then(() => captureNow(startedAt));
       tail = run.catch(() => undefined);
       return run;
     },
   };
+}
+
+/** A grabbed image (or, in test mode, one read from a file) as a `Screenshot`: nothing is encoded until `encode()`. */
+export function screenshotOf(image: ImageLike, timing: { startedAt: number; grabMs: number }, now: () => number = monotonicNow): Screenshot {
+  const { width, height } = image.getSize();
+  let encoded: EncodedScreenshot | undefined;
+  return {
+    width,
+    height,
+    ...timing,
+    encode() {
+      if (encoded) return encoded;
+      const pngStart = now();
+      const png = image.toPNG();
+      const encodeStart = now();
+      const send = encodeForModel(image);
+      encoded = { png, send, pngMs: encodeStart - pngStart, encodeMs: now() - encodeStart };
+      return encoded;
+    },
+  };
+}
+
+function monotonicNow(): number {
+  return performance.now();
 }
 
 /** Whether a new screenshot may join `thread` (SPEC §2.3); at the cap the next one starts a new thread. */

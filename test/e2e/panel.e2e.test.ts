@@ -654,6 +654,9 @@ describe("panel (e2e)", () => {
       const id = await capture(p.app);
       const answer = `${card(id)} .answer:not(.streaming)`;
       await p.page.locator(answer).first().waitFor({ state: "visible", timeout: 20_000 });
+      // A capture shows the window at its saved size (059), so widen it again.
+      await resizeTo(p, 1100);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(true);
       expect(await spans("#threads", docked, 1100, 0), "chat column, docked").toBe(true);
       expect(await spans(answer, docked, 1100, 10), "answer, docked").toBe(true);
       expect(await spans("#composer-box", docked, 1100, 10), "composer, docked").toBe(true);

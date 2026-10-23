@@ -275,7 +275,7 @@ function update(threadId: string): void {
 }
 
 function updateComposer(): void {
-  box.placeholder = shown === null ? "Ask a new question" : "Ask a follow-up";
+  box.placeholder = shown === null ? "Ask anything" : "Ask a follow-up";
   send.disabled = box.value.trim() === "";
 }
 

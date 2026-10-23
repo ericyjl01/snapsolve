@@ -487,21 +487,23 @@ button[hidden] {
   color: var(--muted);
 }
 
-/* The follow-up composer, pinned at the bottom: it asks the newest thread. */
+/* The follow-up composer, pinned at the bottom: it asks the chat on screen. A pill (079): the mic at the left, the
+   text, a round send at the right; it grows with the text, its buttons staying at the bottom. */
 .composer {
   flex: 0 0 auto;
-  padding: 8px 10px 10px;
-  border-top: 0.5px solid var(--hairline);
+  padding: 6px 10px 12px;
 }
 
 .composer-box {
   display: flex;
   align-items: flex-end;
-  gap: 4px;
-  padding: 3px 3px 3px 10px;
+  gap: 6px;
+  min-height: 40px;
+  padding: 4px 5px 4px 6px;
   border: 0.5px solid var(--edge);
-  border-radius: 9px;
+  border-radius: 20px;
   background: var(--field);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
 }
 
 .composer textarea {
@@ -510,10 +512,16 @@ button[hidden] {
   resize: none;
   border: 0;
   outline: none;
-  padding: 4px 0;
+  padding: 5px 0;
   background: transparent;
   color: var(--fg);
-  font: inherit;
+  font: 14px/20px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+}
+
+.composer .icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
 }
 
 .composer textarea:disabled {
@@ -521,12 +529,12 @@ button[hidden] {
 }
 
 .composer .send {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--fg);
+  color: var(--ground);
 }
 
 .composer .send:hover {
-  background: var(--accent);
+  background: var(--fg);
   filter: brightness(1.08);
 }
 
@@ -552,11 +560,12 @@ button[hidden] {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 4px 10px;
+  min-height: 40px;
+  padding: 4px 14px;
   border: 0.5px solid var(--edge);
-  border-radius: 9px;
+  border-radius: 20px;
   background: var(--field);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
 }
 
 .listening .dot {

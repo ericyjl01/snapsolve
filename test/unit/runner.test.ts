@@ -315,10 +315,46 @@ describe("runner spawn", () => {
     expect(types.at(-1)).toBe("done");
     expect(events.find((e) => e.type === "init")).toMatchObject({ threadId: t.id, apiKeySource: "none", apiKeyWarning: false });
     const done = events.at(-1) as Extract<RunnerEvent, { type: "done" }>;
-    expect(done.turn).toEqual({ role: "assistant", text: "x = 4", durationMs: 900, ttftMs: 200, costUsd: 0.01, isError: false });
+    // 086: the model claude reported in its init event is the answer's own.
+    expect(done.turn).toEqual({ role: "assistant", text: "x = 4", durationMs: 900, ttftMs: 200, costUsd: 0.01, isError: false, model: "claude-opus-5-5" });
     const saved = await store.getThread(t.id);
     expect(saved.turns).toEqual([{ role: "user", kind: "screenshot", file: "001.png" }, done.turn]);
     expect(saved.status).toBe("done");
+  });
+
+  it("no model in the init event (or no init at all) → the answer has no model key (086)", async () => {
+    script = (child, call) => {
+      const lines = okLines(call);
+      delete (lines[0] as { model?: string }).model;
+      child.script(lines);
+    };
+    const { runner, events } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    const done = events.at(-1) as Extract<RunnerEvent, { type: "done" }>;
+    expect(done.type).toBe("done");
+    expect(done.turn).not.toHaveProperty("model");
+    expect((await store.getThread(t.id)).turns.at(-1)).not.toHaveProperty("model");
+
+    script = (child, call) => child.script(okLines(call).slice(1));
+    const second = await newThread();
+    await runner.enqueue(second.t.id, { kind: "new", screenshot: second.shot.file });
+    expect((await store.getThread(second.t.id)).turns.at(-1)).not.toHaveProperty("model");
+  });
+
+  it("each answer keeps the model of its own turn: a later turn reporting another model does not change the first (086)", async () => {
+    let n = 0;
+    script = (child, call) => {
+      const lines = okLines(call);
+      if (++n === 2) (lines[0] as { model: string }).model = "claude-sonnet-5-5";
+      child.script(lines);
+    };
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    const answers = (await store.getThread(t.id)).turns.filter((x) => x.role === "assistant");
+    expect(answers.map((a) => (a as { model?: string }).model)).toEqual(["claude-opus-5-5", "claude-sonnet-5-5"]);
   });
 
   it("an API key source other than the login while allowApiKey is false → init carries the warning", async () => {

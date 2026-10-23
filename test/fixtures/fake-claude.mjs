@@ -8,6 +8,8 @@
 // → appends to <path> (missing or unparsable → "No conversation found"). Logs start/end, argv, env names, cwd and
 // stdin as JSON lines to $FAKE_LOG. FAKE_ANSWER_SUFFIX is appended to every answer (e.g. math for the panel e2e).
 // FAKE_DURATION_STEP_MS adds that much to the reported duration_ms (1234) per earlier answer in the transcript (085).
+// FAKE_INIT_MODEL is the model the init event reports (claude reports the full id, e.g. claude-opus-5-5; 086); by
+// default the --model it was given.
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -97,7 +99,7 @@ async function main() {
     return finish(1);
   }
 
-  emit({ type: "system", subtype: "init", session_id: sid, apiKeySource: scenario === "api-key" ? "ANTHROPIC_API_KEY" : "none", model: flag("--model"), tools: [] });
+  emit({ type: "system", subtype: "init", session_id: sid, apiKeySource: scenario === "api-key" ? "ANTHROPIC_API_KEY" : "none", model: process.env.FAKE_INIT_MODEL || flag("--model"), tools: [] });
 
   if (scenario === "error") {
     emit({ type: "result", subtype: "success", is_error: true, result: "API Error: 401 authentication_error", session_id: sid, duration_ms: 15, duration_api_ms: 0, total_cost_usd: 0 });

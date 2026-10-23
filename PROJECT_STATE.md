@@ -7,11 +7,11 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 - Queue (M3, wait for /goal): 088 (p0) window shows at once on capture (measure first: capture.timing log);
   086 (p1) per-answer footer with the reported model name (Amendment 20); 087 (p2) icon ~15% smaller (Amendment 21).
 - Blocked: 032 — Eric runs master's docs/checklists/macos.md (27 items, refreshed for 0.2.7).
-- Backlog 033, 042, 053, 056, 066–069, 074, 081 (054, 070, 080 dropped by Eric). Open with Eric: drop 042, 053,
-  056, 066, 068, 081 as recommended?
+- Backlog 033, 042, 053, 056, 066–069, 074, 081, 089 (054, 070, 080 dropped by Eric). Open with Eric: drop 042,
+  053, 056, 066, 068, 081 as recommended? 089 (own format + knowledge base) parked: Eric will come back with
+  what material and what format (docs/tasks/089).
 
 ## Log
-2026-10-17 · 064 · closed · capture default Control+Alt+C (⌃⌥C) in config DEFAULTS, the installer's default config.json and DEFAULT_HOTKEY, SKILL.md (install, doctor, AltGr) and DESIGN D9; existing hotkeys.capture values kept, never migrated; reopened after Eric's OK for the one missing test (skill.test.ts asserts the doctor's 'On a Mac, say Ctrl+Option+C' line and that the section no longer names ⌃⌥Q); master merged into the parked branch keeping ⌃⌥C and 060's toggle ⌃⌥X together; found 069 (0f21ca5)
 2026-10-18 · 061 · closed · native macOS restyle (mockup A2): vibrancy behind a transparent window on macOS, 36 px title bar with mark and × (preload hide on panel:hide replaces copy, SPEC Amendment 9), newest thread open with older threads as one-line rows, one composer pinned at the bottom for the newest thread, Retry only on error; Mac hand check → 032; follow-up 070 (f9e2c87)
 2026-10-18 · 065 · paused · parked on keel/065 for the cloud session: code c0f97ed, unit/integration green, panel e2e 18/19 (the new + button test fails); next: fix it, SPEC Amendment 10 + DECISIONS rows, npm test, review, close (c0f97ed)
 2026-10-18 · 065 · blocked · two macOS-only e2e assertions (content protection; userdata without the override) cannot pass in a Linux cloud session, so Done-when and close's full-suite gate cannot be met: platform-gate them (071) or close on the Mac? → keel/065 (caa71ef)
@@ -51,3 +51,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · keel · dropped · 070 (fixed by 076) and 080 (theme-save ordering), Eric's call (-)
 2026-10-23 · adhoc · macOS checklist updated for 0.2.7: rows 3, 10, 14, 19, 21 refreshed; 23–27 added (Appearance, Chats sidebar, sidebar stays closed, text bar, wide window) (1e64924)
 2026-10-23 · keel · queued · 088 window shows at once on capture (p0), 086 per-answer footer with model name (p1), 087 icon 15% smaller (p2); 054 dropped (Eric) (-)
+2026-10-23 · keel · queued · 089 (backlog) your own answer format and knowledge base: parked until Eric answers what material and what format (-)

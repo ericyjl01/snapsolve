@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IPC, PRELOAD_CHANNELS } from "../../src/shared/ipc";
 
 describe("IPC contract", () => {
-  it("maps exactly the fifteen preload functions (SPEC §4.4 + Amendments 2, 9, 10 and 11)", () => {
+  it("maps exactly the sixteen preload functions (SPEC §4.4 + Amendments 2, 9, 10, 11 and 15)", () => {
     expect(Object.keys(PRELOAD_CHANNELS).sort()).toEqual(
       [
         "onDelta",
@@ -20,6 +20,7 @@ describe("IPC contract", () => {
         "onVoice",
         "toggleVoice",
         "openVoiceSettings",
+        "openThread",
       ].sort(),
     );
   });
@@ -40,6 +41,11 @@ describe("IPC contract", () => {
     expect(PRELOAD_CHANNELS.onVoice).toBe("voice:state");
     expect(PRELOAD_CHANNELS.toggleVoice).toBe("voice:toggle");
     expect(PRELOAD_CHANNELS.openVoiceSettings).toBe("settings:openVoice");
+  });
+
+  it("choosing a chat is one call on thread:open (078)", () => {
+    expect(PRELOAD_CHANNELS.openThread).toBe("thread:open");
+    expect(IPC.threadOpen).toBe("thread:open");
   });
 
   it("channel names are area:verb and unique", () => {

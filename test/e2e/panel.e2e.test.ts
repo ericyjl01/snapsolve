@@ -4,6 +4,7 @@ import path from "node:path";
 import type { ElectronApplication, Page } from "playwright-core";
 import { describe, expect, it } from "vitest";
 import { CONTINUED_NOTE } from "../../src/shared/errors";
+import type { Thread } from "../../src/shared/types";
 import { fixturesDir } from "../paths";
 import { launchApp, type LaunchedApp } from "./helpers";
 
@@ -31,6 +32,7 @@ const PRELOAD_NAMES = [
   "onVoice",
   "toggleVoice",
   "openVoiceSettings",
+  "openThread",
 ];
 
 interface Panel extends LaunchedApp {
@@ -118,6 +120,62 @@ async function newChat(page: Page): Promise<void> {
   await page.locator("#titlebar").getByRole("button", { name: "New chat" }).click();
 }
 
+/** The sidebar's chats (078), top to bottom. */
+function chats(page: Page): Promise<(string | undefined)[]> {
+  return page.locator("[data-chat-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.chatId));
+}
+
+/** The title bar's sidebar toggle while the sidebar is closed (078). */
+async function showChats(page: Page): Promise<void> {
+  await page.locator("#titlebar").getByRole("button", { name: "Show chats" }).click();
+  await page.locator('nav[aria-label="Chats"]').waitFor({ state: "visible", timeout: 5_000 });
+}
+
+/** Opens the sidebar (narrow window) and chooses a chat (078). */
+async function chooseChat(page: Page, id: string): Promise<void> {
+  if (!(await page.locator('nav[aria-label="Chats"]').isVisible())) await showChats(page);
+  await page.locator(`[data-chat-id="${id}"]`).click();
+}
+
+function setWindowWidth(app: ElectronApplication, width: number): Promise<void> {
+  return app.evaluate(({ BrowserWindow }, w) => {
+    const [win] = BrowserWindow.getAllWindows();
+    const b = win.getBounds();
+    win.setBounds({ ...b, width: w });
+  }, width);
+}
+
+/** A finished thread on disk (thread.json only), created at `createdAt` (078 grouping fixtures). */
+function writeThread(dataDir: string, id: string, title: string, createdAt: Date): void {
+  const dir = path.join(dataDir, "threads", id);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    path.join(dir, "thread.json"),
+    JSON.stringify({
+      id,
+      sessionId: id,
+      transcriptPath: null,
+      model: "opus",
+      effort: "high",
+      createdAt: createdAt.toISOString(),
+      title,
+      status: "done",
+      turns: [
+        { role: "user", kind: "text", text: `About ${title}` },
+        { role: "assistant", text: `${title} answer`, durationMs: 1, ttftMs: null, costUsd: null, isError: false },
+      ],
+    }),
+  );
+}
+
+/** Noon, local time, `days` days ago. */
+function daysAgo(days: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  d.setHours(12, 0, 0, 0);
+  return d;
+}
+
 describe("panel (e2e)", () => {
   it("captureFromFile opens the panel unfocused with Thinking…, streams a rendered answer, and a follow-up adds a second answer", async () => {
     const p = await launchPanel();
@@ -180,7 +238,7 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the fifteen preload functions", async () => {
+  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the sixteen preload functions", async () => {
     const p = await launchPanel();
     try {
       expect((await windowInfo(p.app)).contentProtected).toBe(true);
@@ -336,44 +394,198 @@ describe("panel (e2e)", () => {
     }
   }, 60_000);
 
-  it("older threads are one-line rows (title and time) that open on click, and the composer follows up the newest thread (061)", async () => {
+  // 078 (Amendment 15, replaces 061's "Earlier" rows): one chat on screen; the others are in the Chats sidebar,
+  // an overlay at the default 360 px. Choosing one shows it, and the composer and the next capture continue it.
+  it("narrow: one chat on screen, Show chats opens the overlay newest first under Today, choosing the older one shows it and follow-ups and captures land in it (078)", async () => {
     const p = await launchPanel();
+    const nav = p.page.locator('nav[aria-label="Chats"]');
     try {
       const older = await capture(p.app);
       await p.page.locator(`${card(older)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
-      // A capture continues the current thread (065): "New chat" first.
       await newChat(p.page);
       const newest = await capture(p.app);
       await p.page.locator(`${card(newest)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
 
-      // Newest first: the newest card is open, the older one shows only its header row.
-      expect(await p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId))).toEqual([newest, older]);
-      const row = p.page.locator(`${card(older)} .card-header`);
-      expect(await row.isVisible()).toBe(true);
-      expect((await row.locator(".card-title").innerText()).length).toBeGreaterThan(0);
-      expect((await row.locator(".card-time").innerText()).length).toBeGreaterThan(0);
-      expect(await p.page.locator(`${card(older)} .answer`).first().isVisible()).toBe(false);
-      expect(await p.page.locator(`${card(newest)} .answer`).first().isVisible()).toBe(true);
-      expect((await row.boundingBox())?.height).toBeLessThan(60);
+      // Only the newest chat's turns are on screen; the sidebar starts closed.
+      expect(await p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId))).toEqual([newest]);
+      expect(await nav.isVisible()).toBe(false);
+      expect(await p.page.locator("#scrim").isVisible()).toBe(false);
+
+      await showChats(p.page);
+      expect(await p.page.locator("#scrim").isVisible()).toBe(true);
+      expect(await chats(p.page)).toEqual([newest, older]);
+      expect(await nav.locator(".chat-group").allInnerTexts()).toEqual(["Today"]);
+      expect(await p.page.locator(`[data-chat-id="${newest}"]`).getAttribute("aria-current")).toBe("true");
+      expect(await p.page.locator(`[data-chat-id="${older}"]`).getAttribute("aria-current")).toBeNull();
+      expect((await p.page.locator(`[data-chat-id="${older}"]`).innerText()).trim().length).toBeGreaterThan(0);
+      // An overlay: the sidebar sits over the chat, which keeps its full width.
+      const navBox = await nav.boundingBox();
+      const contentBox = await p.page.locator("#content").boundingBox();
+      expect(navBox && contentBox && navBox.x < contentBox.x + 10 && contentBox.width > 300).toBe(true);
+
+      // A click on the scrim (right of the sidebar) closes it.
+      await p.page.mouse.click(340, 300);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+
+      await chooseChat(p.page, older);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+      await expect
+        .poll(() => p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId)), { timeout: 5_000 })
+        .toEqual([older]);
 
       const box = p.page.locator("#composer textarea");
       await box.fill("And the other root?");
       await box.press("Enter");
-      await expect.poll(() => p.page.locator(`${card(newest)} .answer:not(.streaming)`).count(), { timeout: 20_000 }).toBe(2);
-      expect(await p.page.locator(`${card(newest)} .question`).allInnerTexts()).toContain("And the other root?");
-      expect(await p.page.locator(`${card(older)} .answer`).count()).toBe(1);
-      expect(await p.page.locator(`${card(older)} .question`).count()).toBe(0);
+      await expect.poll(() => p.page.locator(`${card(older)} .answer:not(.streaming)`).count(), { timeout: 20_000 }).toBe(2);
+      expect(await p.page.locator(`${card(older)} .question`).allInnerTexts()).toContain("And the other root?");
 
-      await row.click();
-      await expect.poll(() => p.page.locator(`${card(older)} .answer`).first().isVisible(), { timeout: 5_000 }).toBe(true);
+      expect(await capture(p.app)).toBe(older);
+      await expect.poll(() => p.page.locator(`${card(older)} .answer:not(.streaming)`).count(), { timeout: 20_000 }).toBe(3);
+      const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", older, "thread.json"), "utf8")) as Thread;
+      expect(saved.turns.filter((t) => t.role === "user" && t.kind === "screenshot")).toHaveLength(2);
+      const other = JSON.parse(readFileSync(path.join(p.dataDir, "threads", newest, "thread.json"), "utf8")) as Thread;
+      expect(other.turns.filter((t) => t.role === "user")).toHaveLength(1);
+    } finally {
+      await p.close();
+    }
+  }, 150_000);
+
+  it("sidebar New chat empties the main area; the next typed question starts a thread that is current and listed first (078)", async () => {
+    const p = await launchPanel();
+    try {
+      const first = await capture(p.app);
+      await p.page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      await showChats(p.page);
+      await p.page.locator('nav[aria-label="Chats"]').getByRole("button", { name: "New chat" }).click();
+      await expect.poll(() => p.page.locator('nav[aria-label="Chats"]').isVisible(), { timeout: 5_000 }).toBe(false);
+      expect(await p.page.locator("[data-thread-id]").count()).toBe(0);
+      expect(await p.page.locator("#empty").isVisible()).toBe(true);
+
+      const box = p.page.locator("#composer textarea");
+      await box.fill("What is 2 + 2?");
+      await box.press("Enter");
+      await expect.poll(() => chats(p.page).then((c) => c.length), { timeout: 10_000 }).toBe(2);
+      const [text] = await chats(p.page);
+      expect(text).not.toBe(first);
+      await expect.poll(() => p.page.locator(`${card(text!)} .answer:not(.streaming)`).count(), { timeout: 20_000 }).toBe(1);
+      expect(await p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId))).toEqual([text]);
+      expect(await p.page.locator(`[data-chat-id="${text}"]`).getAttribute("aria-current")).toBe("true");
     } finally {
       await p.close();
     }
   }, 120_000);
 
+  it("wide: at 760 px the sidebar is docked open beside the chat (no scrim), the toggle collapses it, and back at 360 px it is a closed overlay (078)", async () => {
+    const p = await launchPanel();
+    const nav = p.page.locator('nav[aria-label="Chats"]');
+    try {
+      const id = await capture(p.app);
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      await setWindowWidth(p.app, 760);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(true);
+      expect(await p.page.locator("#scrim").isVisible()).toBe(false);
+      const navBox = await nav.boundingBox();
+      const contentBox = await p.page.locator("#content").boundingBox();
+      // Docked: the chat starts where the sidebar ends.
+      expect(navBox && contentBox && contentBox.x >= navBox.x + navBox.width - 1).toBe(true);
+      expect(await p.page.locator(`${card(id)} .answer`).first().isVisible()).toBe(true);
+      // The chat column's title is the current chat's.
+      expect((await p.page.locator("#titlebar .chat-title").innerText()).trim().length).toBeGreaterThan(0);
+
+      await nav.getByRole("button", { name: "Hide chats" }).click();
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+      await showChats(p.page);
+      expect(await p.page.locator("#scrim").isVisible()).toBe(false);
+
+      await setWindowWidth(p.app, 360);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+      await showChats(p.page);
+      expect(await p.page.locator("#scrim").isVisible()).toBe(true);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("a turn finishing in a chat that is not on screen leaves the main area alone (078)", async () => {
+    const p = await launchPanel(undefined, { FAKE_DELAY_MS: "4000" });
+    try {
+      const first = await capture(p.app);
+      await p.page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 30_000 });
+      await newChat(p.page);
+      const busy = await capture(p.app);
+      await p.page.locator(`${card(busy)} .thinking`).waitFor({ state: "visible", timeout: 5_000 });
+      await chooseChat(p.page, first);
+      await expect
+        .poll(() => p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId)), { timeout: 5_000 })
+        .toEqual([first]);
+      // Wait for the other chat's answer to be saved, then check nothing moved.
+      await expect
+        .poll(() => (JSON.parse(readFileSync(path.join(p.dataDir, "threads", busy, "thread.json"), "utf8")) as Thread).status, { timeout: 30_000 })
+        .toBe("done");
+      await new Promise((r) => setTimeout(r, 500));
+      expect(await p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId))).toEqual([first]);
+      expect(await chats(p.page)).toEqual([busy, first]);
+    } finally {
+      await p.close();
+    }
+  }, 120_000);
+
+  it("chats are grouped Today, Yesterday, Previous 7 days, Older, newest first (078)", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    const ids = {
+      today: "1a1a1a1a-0000-4000-8000-000000000001",
+      yesterday: "1a1a1a1a-0000-4000-8000-000000000002",
+      week: "1a1a1a1a-0000-4000-8000-000000000003",
+      older: "1a1a1a1a-0000-4000-8000-000000000004",
+    };
+    writeThread(dataDir, ids.older, "Older chat", daysAgo(20));
+    writeThread(dataDir, ids.week, "Week chat", daysAgo(3));
+    writeThread(dataDir, ids.yesterday, "Yesterday chat", daysAgo(1));
+    writeThread(dataDir, ids.today, "Today chat", new Date(Date.now() - 60_000));
+    const p = await launchPanel(dataDir);
+    try {
+      await p.page.locator(`[data-chat-id="${ids.today}"]`).waitFor({ state: "attached", timeout: 10_000 });
+      await showChats(p.page);
+      const order = await p.page
+        .locator('nav[aria-label="Chats"] .chat-group, nav[aria-label="Chats"] [data-chat-id]')
+        .evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.chatId ?? `# ${e.textContent?.trim()}`));
+      expect(order).toEqual(["# Today", ids.today, "# Yesterday", ids.yesterday, "# Previous 7 days", ids.week, "# Older", ids.older]);
+      expect(await p.page.locator(`[data-chat-id="${ids.week}"]`).innerText()).toContain("Week chat");
+      // The newest is on screen at startup.
+      expect(await p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId))).toEqual([ids.today]);
+    } finally {
+      await p.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 60_000);
+
+  it.each([
+    { theme: "dark" },
+    { theme: "light" },
+  ])("theme $theme: the sidebar's background differs from the chat's (078)", async ({ theme }) => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    writeFileSync(path.join(dataDir, "config.json"), JSON.stringify({ theme }));
+    writeThread(dataDir, "1a1a1a1a-0000-4000-8000-000000000009", "A chat", new Date());
+    const p = await launchPanel(dataDir);
+    try {
+      await p.page.locator("[data-chat-id]").first().waitFor({ state: "attached", timeout: 10_000 });
+      await showChats(p.page);
+      const [sidebar, ground] = await p.page.evaluate(() => [
+        getComputedStyle(document.querySelector('nav[aria-label="Chats"]') as Element).backgroundColor,
+        getComputedStyle(document.body).backgroundColor,
+      ]);
+      expect(sidebar).not.toBe(ground);
+      expect(sidebar).not.toBe("rgba(0, 0, 0, 0)");
+    } finally {
+      await p.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 60_000);
+
   it("+ button starts a fresh card: captures continue the chat, + then a capture or a typed question starts a new one (065)", async () => {
     const p = await launchPanel();
-    const ids = () => p.page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId));
+    // 078: the chats are listed in the sidebar; only the current one is on screen.
+    const ids = () => chats(p.page);
     const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
     try {
       const first = await capture(p.app);
@@ -381,22 +593,28 @@ describe("panel (e2e)", () => {
       expect(await capture(p.app)).toBe(first);
       await expect.poll(() => answers(first), { timeout: 20_000 }).toBe(2);
       expect(await ids()).toEqual([first]);
-      // The appended screenshot shows in the card where it joined.
-      expect(await p.page.locator(`${card(first)} .turns img.thumb`).getAttribute("src")).toBe(`snapsolve://thread/${first}/2.png`);
+      // The appended screenshot shows in the chat where it joined (078: after the first one, also in the turns).
+      expect(await p.page.locator(`${card(first)} .turns img.thumb`).evaluateAll((els) => els.map((e) => e.getAttribute("src")))).toEqual([
+        `snapsolve://thread/${first}/1.png`,
+        `snapsolve://thread/${first}/2.png`,
+      ]);
 
       const plus = p.page.locator("#titlebar").getByRole("button", { name: "New chat" });
       expect(await plus.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("no-drag");
       // Before the ×, at the top right.
-      // 063 put the mic (Dictate) first.
+      // 063 put the mic (Dictate) first; 078 put the sidebar toggle before everything.
       expect(await p.page.locator("#titlebar button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).toEqual([
+        "Show chats",
         "Dictate",
         "New chat",
         "Hide window",
       ]);
       await plus.click();
-      // The current card moves into the history list.
+      // 078: the chat leaves the screen (it stays in the sidebar) and the empty state shows.
       await expect.poll(() => p.page.locator(`${card(first)} .answer`).first().isVisible(), { timeout: 5_000 }).toBe(false);
-      expect(await p.page.locator(`${card(first)}.collapsed`).count()).toBe(1);
+      expect(await p.page.locator("[data-thread-id]").count()).toBe(0);
+      expect(await p.page.locator("#empty").isVisible()).toBe(true);
+      expect(await ids()).toEqual([first]);
 
       // + then a typed question: a new text thread, no thumbnail.
       const box = p.page.locator("#composer textarea");
@@ -408,9 +626,10 @@ describe("panel (e2e)", () => {
       await expect.poll(() => answers(text), { timeout: 20_000 }).toBe(1);
       expect(await p.page.locator(`${card(text)} .question`).allInnerTexts()).toEqual(["What is 2 + 2?"]);
       expect(await p.page.locator(`${card(text)} .answer`).first().innerText()).toContain("saw 0 image(s)");
-      expect(await p.page.locator(`${card(text)} .card-header img.thumb`).isVisible()).toBe(false);
-      // The old thread got nothing.
-      expect(await answers(first)).toBe(2);
+      expect(await p.page.locator(`${card(text)} img.thumb`).count()).toBe(0);
+      // The old thread got nothing (078: choose it in the sidebar to see it).
+      await chooseChat(p.page, first);
+      await expect.poll(() => answers(first), { timeout: 5_000 }).toBe(2);
       expect(await p.page.locator(`${card(first)} .question`).count()).toBe(0);
 
       // + then a capture: a new screenshot card; the one after continues it.
@@ -477,7 +696,9 @@ describe("panel (e2e)", () => {
       await note.waitFor({ state: "visible", timeout: 10_000 });
       expect(await note.textContent()).toBe(CONTINUED_NOTE);
       await page.locator(`${card(next)} .answer`).first().waitFor({ state: "visible", timeout: 20_000 });
-      expect(await page.locator("[data-thread-id]").count()).toBe(2);
+      // 078: the new thread is on screen; both are in the sidebar.
+      expect(await page.locator("[data-thread-id]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.threadId))).toEqual([next]);
+      expect(await chats(page)).toEqual([next, first]);
 
       const starts = readFileSync(fakeLog, "utf8")
         .trim()

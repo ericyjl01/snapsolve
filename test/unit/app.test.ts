@@ -798,3 +798,88 @@ describe("applyTheme (077)", () => {
     expect(t.warn).toHaveBeenCalledWith("theme.saveFailed", expect.objectContaining({ theme: "system" }));
   });
 });
+
+// 078 (Amendment 15): choosing a chat in the sidebar makes it current; the next capture continues it.
+describe("openThread (078)", () => {
+  it("makes the chosen thread the one the next capture appends to", async () => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await app.handlers.newThread();
+    const second = await app.onCapture({ png: PNG2 });
+    expect(second).not.toBe(first);
+    await app.handlers.openThread(first);
+    expect(await app.onCapture({ png: PNG2 })).toBe(first);
+    expect((await store.getThread(first)).turns.filter((t) => t.role === "user")).toHaveLength(2);
+    expect((await store.getThread(second)).turns.filter((t) => t.role === "user")).toHaveLength(1);
+  });
+
+  it("clears a pending \"+\": after newThread() then openThread, a capture continues the chosen thread", async () => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await app.handlers.newThread();
+    await app.handlers.openThread(first);
+    expect(await app.onCapture({ png: PNG2 })).toBe(first);
+  });
+
+  it("a dictated question after openThread goes to the chosen thread", async () => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await app.handlers.newThread();
+    await app.onCapture({ png: PNG2 });
+    await app.handlers.openThread(first);
+    expect(await app.onVoice("why?")).toBe(first);
+  });
+
+  it.each([
+    ["an unknown thread id", "7d0c5a1e-2b3f-4c6d-8e9f-0a1b2c3d4e5f"],
+    ["a non-uuid", "../etc"],
+    ["a number", 42],
+    ["undefined", undefined],
+  ])("%s is rejected with no change: the next capture still continues the current thread", async (_name, bad) => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await expect(app.handlers.openThread(bad as string)).rejects.toThrow();
+    expect(await app.onCapture({ png: PNG2 })).toBe(first);
+  });
+
+  it("an unknown id after \"+\" leaves the \"+\" in place", async () => {
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await app.handlers.newThread();
+    await expect(app.handlers.openThread("7d0c5a1e-2b3f-4c6d-8e9f-0a1b2c3d4e5f")).rejects.toThrow();
+    expect(await app.onCapture({ png: PNG2 })).not.toBe(first);
+  });
+
+  it("a full chosen thread follows 051: the capture starts a new thread seeded with its last answer", async () => {
+    deps.config.maxScreenshotsPerThread = 1;
+    const app = createApp(deps);
+    const first = await app.onCapture({ png: PNG });
+    await store.appendTurn(first, answer("The root is 4."));
+    await app.handlers.newThread();
+    const other = await app.onCapture({ png: PNG2 });
+    await app.handlers.openThread(first);
+    const next = await app.onCapture({ png: PNG2 });
+    expect([first, other]).not.toContain(next);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(next, { kind: "new", screenshot: "001.png", seed: "The root is 4." });
+  });
+
+  it("an errored chosen thread takes the capture as today (appended)", async () => {
+    const app = createApp(deps);
+    const errored = await erroredThread([{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn]);
+    await app.onCapture({ png: PNG });
+    await app.handlers.openThread(errored.id);
+    expect(await app.onCapture({ png: PNG2 })).toBe(errored.id);
+  });
+
+  it("isAnswering follows the chosen thread", async () => {
+    deps.runner.enqueue.mockImplementation(() => new Promise(() => undefined));
+    const app = createApp(deps);
+    const errored = await erroredThread([{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn]);
+    await app.onCapture({ png: PNG });
+    listener?.({ type: "status", threadId: (await store.listThreads()).find((t) => t.id !== errored.id)!.id, status: "running" });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(app.isAnswering()).toBe(true);
+    await app.handlers.openThread(errored.id);
+    expect(app.isAnswering()).toBe(false);
+  });
+});

@@ -631,6 +631,35 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
+  // 085 (Amendment 19): the footer is the model, then the newest answer's response time.
+  it("footer: the model alone before any answer, then model · the newest answer's time after a follow-up (085)", async () => {
+    const p = await launchPanel(undefined, { FAKE_DELAY_MS: "1500", FAKE_DURATION_STEP_MS: "2000" });
+    try {
+      const id = await capture(p.app);
+      const status = p.page.locator(`${card(id)} .status`);
+      const threadFile = path.join(p.dataDir, "threads", id, "thread.json");
+      const read = () => JSON.parse(readFileSync(threadFile, "utf8")) as Thread;
+      await p.page.locator(`${card(id)} .thinking`).waitFor({ state: "visible", timeout: 5_000 });
+      const model = read().model;
+      expect(model.length).toBeGreaterThan(0);
+      expect(await status.textContent()).toBe(model);
+
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      await expect.poll(() => status.textContent(), { timeout: 5_000 }).toBe(`${model} · 1.2 s`);
+
+      const box = p.page.locator("#composer textarea");
+      await box.fill("And the other root?");
+      await box.press("Enter");
+      await expect.poll(() => p.page.locator(`${card(id)} .answer:not(.streaming)`).count(), { timeout: 20_000 }).toBe(2);
+      // The second answer took 1234 + 2000 ms (the fake's step), so the footer is its time, not the first's.
+      await expect.poll(() => status.textContent(), { timeout: 5_000 }).toBe(`${model} · 3.2 s`);
+      const durations = read().turns.flatMap((t) => (t.role === "assistant" ? [t.durationMs] : []));
+      expect(durations).toEqual([1234, 3234]);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
   // 084 (Amendment 18): no max width on the chat column, the empty state or the composer at any window size.
   it("1100 px: the empty state, chat column, answer and composer fill the area right of the docked sidebar, and the whole window once it is closed (084)", async () => {
     const p = await launchPanel();

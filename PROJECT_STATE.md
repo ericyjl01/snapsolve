@@ -2,14 +2,12 @@
 
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.4 (2026-10-23): 077 tray Appearance, 078 Chats sidebar, 079 pill composer.
-- Closed 2026-10-23, not yet released (0.2.4 lacks them): 082 a user-closed sidebar stays closed across resizes
-  (Amendment 16); 083 tray icon + title-bar mark = crop corners framing "=" (Amendment 17).
-- Next: per `tasks.py next`; M3 queue otherwise only 032 (blocked on Eric's macOS checklist).
+- Installed on Eric's Mac: 0.2.5 (2026-10-23): 082 sidebar stays closed across resizes, 083 crop-corners "=" icon
+  (tray + title bar); doctor all ok. (0.2.4: 077 Appearance, 078 Chats sidebar, 079 pill composer.)
+- Queue: `next: none — all blocked`. 032 waits on Eric's macOS checklist (docs/checklists/macos.md on keel/032).
 - Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081.
 
 ## Log
-2026-10-17 · 057 · closed · the continued note shows from the seeded turn's start: runner emits turn (the saved user turn) and app broadcasts it; the 051/057 e2e wait for the saved first answer, not the streaming .answer; 10/10 panel e2e runs (d1e5294)
 2026-10-17 · adhoc · backlog 058 (drag to move the open panel) and 059 (resize it), Eric's asks after first use of 0.1.0 (-)
 2026-10-17 · adhoc · backlog redesign from mockup A2: 058/059 rewritten as floating window + resize; 060 toggle hotkey, no tab; 061 native restyle, no Copy; 062 voice engine clarify (blocked); 063 voice follow-up (-)
 2026-10-17 · adhoc · hotkeys decided (capture ⌃⌥C, toggle ⌃⌥Z, voice ⌃⌥V start+stop): 060/062/063 updated, 064 added; Eric's config.json capture set to Control+Alt+C (-)
@@ -49,3 +47,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · keel · queued · 083 crop-corners equals icon for the menu bar and title bar (Eric's choice) (-)
 2026-10-23 · 082 · closed · a sidebar the user closed (Hide chats, scrim, or a chat / New chat in the narrow overlay) stays closed across resizes until Show chats; narrowing still closes the overlay without counting as a user close (12a19c8)
 2026-10-23 · 083 · closed · tray icon (drawTrayIcon, 16/32 px template bitmap) and the title-bar mark are four crop corners framing a bold equals sign, replacing the ring and dot (470fb57)
+2026-10-23 · adhoc · released snapsolve 0.2.5 into ~/dev/snapsolve-local (082 sidebar stays closed, 083 crop-corners icon); updated on Eric's Mac (000bfb2)

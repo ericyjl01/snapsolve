@@ -2036,7 +2036,7 @@
     {
       "id": "079",
       "title": "pill composer: ChatGPT-style rounded text bar",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "milestone": 3,
       "deps": [
@@ -2044,17 +2044,22 @@
       ],
       "file": "docs/tasks/079-pill-composer.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/079",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-23",
+      "commit": "d650089",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "9dabb786728599625d83a0ff19d71e38ebc36363",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "f8f0e3bdd28de3a654553efccaf0965a7337daf0",
+        "reasons": "e2e proves in both themes the pill (all corners >=18px), mic left / send right of the textarea inside the box, round send faded when empty and opaque on input, Ask anything / Ask a follow-up placeholders incl. after New chat, five-line growth with buttons bottom-aligned and radius kept, listening bar radius equal to the pill, and wide-layout centring; tests unchanged after red; task file 37/37 and npm test (1016 passed) green",
+        "at": "2026-10-23"
+      }
     },
     {
       "id": "080",
@@ -2073,6 +2078,27 @@
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/app.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
+    },
+    {
+      "id": "081",
+      "title": "composer screen-reader label follows its placeholder",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [],
+      "file": "docs/tasks/081-composer-label-follows-placeholder.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
       "tests_commit": null,
       "no_tests": null,
       "review": null

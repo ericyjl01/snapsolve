@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyTheme, createApp, recoverBusyThreads, resolveClaudeCommand, type AppDeps, type Shot } from "../../src/main/app";
+import { applyTheme, applyTransparency, createApp, recoverBusyThreads, resolveClaudeCommand, type AppDeps, type Shot } from "../../src/main/app";
 import { createCapturer, ScreenRecordingDeniedError, type CapturerDeps } from "../../src/main/capture";
 import type { ImageLike } from "../../src/main/encode";
 import type { Logger } from "../../src/main/log";
@@ -1021,6 +1021,44 @@ describe("applyTheme (077)", () => {
     });
     await expect(applyTheme("system", { nativeTheme: t.nativeTheme, config: t.config, save: t.save, log: t.log })).resolves.toBeUndefined();
     expect(t.warn).toHaveBeenCalledWith("theme.saveFailed", expect.objectContaining({ theme: "system" }));
+  });
+});
+
+// 090 (Amendments 23, 24): tray Transparency applies to the open window at once, then is saved.
+describe("applyTransparency (090)", () => {
+  it("sets the panel's ground before the save resolves and updates the config", async () => {
+    const order: string[] = [];
+    const config = { transparency: 20 };
+    let release: (v: { ok: true }) => void = () => undefined;
+    const done = applyTransparency(50, {
+      panel: { setTransparency: (n) => order.push(`panel ${n}`) },
+      config,
+      save: (n) => {
+        order.push(`save ${n}`);
+        return new Promise((r) => (release = r));
+      },
+      log: quietLog,
+    });
+    expect(order).toEqual(["panel 50", "save 50"]);
+    expect(config.transparency).toBe(50);
+    release({ ok: true });
+    await done;
+  });
+
+  it("a failed or throwing save is logged (transparency.saveFailed), not thrown; the window keeps the new value", async () => {
+    const warn = vi.fn();
+    const set = vi.fn();
+    await applyTransparency(90, { panel: { setTransparency: set }, config: { transparency: 20 }, save: async () => ({ ok: false, error: "disk full" }), log: { warn } });
+    await applyTransparency(0, {
+      panel: { setTransparency: set },
+      config: { transparency: 90 },
+      save: async () => {
+        throw new Error("boom");
+      },
+      log: { warn },
+    });
+    expect(set.mock.calls).toEqual([[90], [0]]);
+    expect(warn.mock.calls.map((c) => c[0])).toEqual(["transparency.saveFailed", "transparency.saveFailed"]);
   });
 });
 

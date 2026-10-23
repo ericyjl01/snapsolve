@@ -1,6 +1,6 @@
 // The tray (SPEC §1.2): Show/Hide snapsolve (its hotkey, task 060) · Reset window position (058) · Appearance ›
-// Dark / Light / Match macOS (077) · Pause/Resume hotkeys · Open history folder · Clear history · Quit, and a tooltip
-// with usage (§3.6). The icon is drawn in code (no image files): crop corners framing an equals sign (083).
+// Dark / Light / Match macOS (077) · Transparency › 0% (solid) … 90% (090) · Pause/Resume hotkeys · Open history
+// folder · Clear history · Quit, and a tooltip with usage (§3.6). The icon is drawn in code (no image files): crop corners framing an equals sign (083).
 import type { Theme } from "../shared/types";
 
 export const TRAY_LABELS = {
@@ -8,6 +8,8 @@ export const TRAY_LABELS = {
   resetPosition: "Reset window position",
   appearance: "Appearance",
   themes: { dark: "Dark", light: "Light", system: "Match macOS" } satisfies Record<Theme, string>,
+  transparency: "Transparency",
+  step: (percent: number) => (percent === 0 ? "0% (solid)" : `${percent}%`),
   pause: "Pause hotkeys",
   resume: "Resume hotkeys",
   history: "Open history folder",
@@ -26,6 +28,8 @@ interface MenuItem {
 }
 
 const THEME_ORDER: readonly Theme[] = ["dark", "light", "system"];
+/** Amendment 24: 10% steps; 100% is left out (the ground would vanish). */
+const TRANSPARENCY_STEPS: readonly number[] = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
 
 interface TrayLike {
   setContextMenu(menu: never): void;
@@ -48,6 +52,10 @@ export interface TrayDeps<Image, Menu> {
   theme: Theme;
   /** Appearance › an item other than the checked one: apply and save it (`applyTheme`). */
   onTheme: (theme: Theme) => void;
+  /** config.transparency at startup: the checked Transparency step. */
+  transparency: number;
+  /** Transparency › a step other than the checked one: apply and save it (`applyTransparency`). */
+  onTransparency: (transparency: number) => void;
   onPause: () => void;
   onResume: () => void;
   onOpenHistory: () => void;
@@ -69,6 +77,7 @@ export function createTray<Image, Menu>(deps: TrayDeps<Image, Menu>): TrayContro
   const tray = new deps.Tray(deps.image);
   let paused = false;
   let theme = deps.theme;
+  let transparency = deps.transparency;
 
   function build(): void {
     const template: MenuItem[] = [
@@ -85,6 +94,20 @@ export function createTray<Image, Menu>(deps: TrayDeps<Image, Menu>): TrayContro
             theme = t;
             build();
             deps.onTheme(t);
+          },
+        })),
+      },
+      {
+        label: TRAY_LABELS.transparency,
+        submenu: TRANSPARENCY_STEPS.map((step) => ({
+          label: TRAY_LABELS.step(step),
+          type: "radio" as const,
+          checked: step === transparency,
+          click: () => {
+            if (step === transparency) return;
+            transparency = step;
+            build();
+            deps.onTransparency(step);
           },
         })),
       },

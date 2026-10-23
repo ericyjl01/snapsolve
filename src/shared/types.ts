@@ -28,6 +28,8 @@ export interface Config {
   maxScreenshotsPerThread: number;
   timeoutSec: number;
   theme: Theme;
+  /** How see-through the window's ground is, in percent: 0, 10, … 90 (task 090, Amendments 23, 24). */
+  transparency: number;
 }
 
 /** `new`: created, no turn started yet. */

@@ -220,7 +220,7 @@ export interface PanelDeps {
   preloadPath: string;
   /** Electron's `nativeTheme`: `themeSource` drives prefers-color-scheme in the renderer (task 075). */
   nativeTheme: { themeSource: Theme };
-  config: { autoHideSec: number; theme: Theme };
+  config: { autoHideSec: number; theme: Theme; transparency: number };
   log: Logger;
   /** Saved floating-window bounds per display, as `loadWindowBounds` read them at startup. */
   bounds: WindowBounds;
@@ -254,6 +254,8 @@ export interface Panel {
   handle(handlers: PanelHandlers): void;
   /** A turn ended: starts the auto-hide countdown when `autoHideSec` > 0. */
   turnEnded(): void;
+  /** Tray Transparency (090): how see-through the window's ground is, in percent, applied to the page at once. */
+  setTransparency(transparency: number): void;
   window: BrowserWindow;
 }
 
@@ -284,12 +286,14 @@ export function createPanel(deps: PanelDeps): Panel {
     skipTaskbar: true,
     title: "snapsolve",
     // macOS (076, Amendment 13): a transparent window with no OS blur, see-through like a terminal under the
-    // renderer's ~88% solid ground; elsewhere an opaque window.
+    // renderer's ground (its alpha set from `transparency`, 090); elsewhere an opaque window. Electron uses the
+    // background's alpha only with `transparent: true`.
     ...(deps.platform === "darwin"
       ? {
           type: "panel",
           hiddenInMissionControl: true,
           acceptFirstMouse: true,
+          transparent: true,
           backgroundColor: "#00000000",
         }
       : { backgroundColor: "#ffffff" }),
@@ -335,6 +339,25 @@ export function createPanel(deps: PanelDeps): Panel {
     }
   });
   wc.on("render-process-gone", (_e, details) => log.error("panel.rendererGone", { reason: details.reason }));
+
+  // The ground's alpha (090): one injected rule, put in again after every page load and replaced on each change.
+  let transparency = config.transparency;
+  let groundCss: Promise<string | undefined> = Promise.resolve(undefined);
+  function applyGround(loaded: boolean): void {
+    groundCss = groundCss
+      .then(async (previous) => {
+        if (wc.isDestroyed()) return undefined;
+        const key = await wc.insertCSS(groundRule(transparency));
+        // A page load has already dropped the old rule.
+        if (previous !== undefined && !loaded) await wc.removeInsertedCSS(previous);
+        return key;
+      })
+      .catch((e: unknown) => {
+        log.warn("panel.groundFailed", { transparency, error: e });
+        return undefined;
+      });
+  }
+  wc.on("dom-ready", () => applyGround(true));
   void win.loadURL(RENDERER_URL).catch((e: unknown) => log.error("panel.loadFailed", { error: e }));
 
   /** The window's rect on `d`: its saved rect (at least MIN_SIZE), else the default, clamped into its work area. */
@@ -429,7 +452,16 @@ export function createPanel(deps: PanelDeps): Panel {
       }
     },
     turnEnded: () => autoHide.start(),
+    setTransparency(next) {
+      transparency = next;
+      applyGround(false);
+    },
   };
+}
+
+/** The injected rule (090): the ground's alpha is 1 − transparency; `html:root` outranks the stylesheet's `:root`. */
+export function groundRule(transparency: number): string {
+  return `html:root { --ground-alpha: ${(100 - transparency) / 100}; }`;
 }
 
 function atLeastMinimum(rect: Rect): Rect {

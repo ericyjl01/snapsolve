@@ -25,10 +25,10 @@ import {
 import { SnapsolveError, userMessage } from "../shared/errors";
 import type { Theme, VoiceDenial } from "../shared/types";
 import { IPC } from "../shared/ipc";
-import { applyTheme, createApp, recoverBusyThreads, resolveClaudeCommand, type Shot } from "./app";
+import { applyTheme, applyTransparency, createApp, recoverBusyThreads, resolveClaudeCommand, type Shot } from "./app";
 import { checkAuth } from "./auth";
 import { createCapturer, ScreenRecordingDeniedError, screenshotOf } from "./capture";
-import { loadConfig, saveTheme } from "./config";
+import { loadConfig, saveTheme, saveTransparency } from "./config";
 import { encodeForModel } from "./encode";
 import { createHotkeys } from "./hotkeys";
 import { createLogger, type Logger } from "./log";
@@ -92,6 +92,9 @@ async function start(): Promise<void> {
   const { config } = await loadConfig(paths.config, { log });
   // Tray Appearance (077): live through nativeTheme, saved into config.json.
   const setTheme = (theme: Theme) => applyTheme(theme, { nativeTheme, config, save: (t) => saveTheme(paths.config, t), log });
+  // Tray Transparency (090): live on the panel (created below; reached only when clicked), saved into config.json.
+  const setTransparency = (transparency: number) =>
+    applyTransparency(transparency, { panel, config, save: (t) => saveTransparency(paths.config, t), log });
 
   // Test mode (SNAPSOLVE_TEST=1, e2e only): claude is a node script run by Electron as node, transcripts are looked
   // for in a temp projects dir, and `snapsolveTest` feeds fixture PNGs through the capture path.
@@ -121,6 +124,8 @@ async function start(): Promise<void> {
         onResetPosition: () => panel.resetPosition(),
         theme: config.theme,
         onTheme: (theme) => void setTheme(theme),
+        transparency: config.transparency,
+        onTransparency: (transparency) => void setTransparency(transparency),
         onPause: () => keys.pause(),
         onResume: () => keys.resume(),
         onOpenHistory: () => void openHistoryFolder(paths.threads, { mkdir, openPath: (dir) => shell.openPath(dir), log }),
@@ -314,6 +319,8 @@ async function start(): Promise<void> {
       denyCapture: (prompted: boolean) => core.onCaptureDenied(prompted),
       /** What the tray's Appearance items do (077). */
       setTheme: (theme: Theme) => setTheme(theme),
+      /** What the tray's Transparency steps do (090). */
+      setTransparency: (transparency: number) => setTransparency(transparency),
       /** What the voice hotkey does (063). */
       voice: () => voice?.toggle(),
       /** What the temporary Esc shortcut does while listening. */

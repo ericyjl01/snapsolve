@@ -44,6 +44,7 @@ function defaultConfig() {
     maxScreenshotsPerThread: 6,
     timeoutSec: 180,
     theme: "dark",
+    transparency: 20,
   };
 }
 

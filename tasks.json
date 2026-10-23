@@ -2236,23 +2236,28 @@
     {
       "id": "087",
       "title": "crop-corners icon about 15% smaller (menu bar and title bar)",
-      "status": "open",
+      "status": "closed",
       "priority": 2,
       "milestone": 3,
       "deps": [],
       "file": "docs/tasks/087-icon-15-smaller.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/087",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-23",
+      "commit": "26a493b",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/unit/tray.test.ts test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "29575a7fd4258054c39300744f848050e6f88460",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "b3d93ad6c518af30da43e8d09ebddbd6ea516209",
+        "reasons": "unit: at 16/32 px the opaque bbox is 87.5% of the side (80-90% asserted), square, centred within 1 px, bitmap edge ring transparent (old 100% icon fails); 083's corner/arm/edge-middle, two-bar/empty-centre and no-ring checks re-measured on that bbox; alpha 0/255 and BGR unchanged; e2e: the .mark paths' drawn box is 9 px = 85.7% of 083's 10.5 px and square (14 px fails); the only post-red edit (along round->floor) fixes a pixel-index off-by-one (3.5 px lies in pixel 3), with 32 px unchanged; task tests 77/77 and npm test 1092 passed, exit 0",
+        "at": "2026-10-23"
+      }
     },
     {
       "id": "088",

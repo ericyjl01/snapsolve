@@ -320,3 +320,10 @@ Symptom: review 1 measured a transparent Electron window: transparency 40 render
 Cause:   styles.css set `background: var(--ground)` on `html, body`; two coats stack to 1 − (t/100)². The e2e read only body's computed colour, which is right per element and blind to the stack.
 Fix:     the ground is on html alone, body transparent; the 090 e2e reads html and body stacked, 075/076/078 read html and require body rgba(0, 0, 0, 0) (5a8fcdf).
 Note:    for any alpha on screen, assert what composites (every layer that covers the window), not one element's computed value.
+
+## 2026-10-23 · task 087 · a pixel probe at 25% landed one past a 30% arm at 14 px
+tags: tray, icon, bitmap, rounding, unit, 083, 087
+Symptom: after the icon was inset, "four crop corners" failed at 16 px only: the arm probe at (l + 4, t) was transparent.
+Cause:   the symbol is 14 px; its arm is round(14 · 0.3) = 4 px (offsets 0–3) and the probe round(14 · 0.25) = round(3.5) = 4. Two roundings of nearby fractions can cross.
+Fix:     the probe uses Math.floor (7535ed7); the drawing kept round (28.6%, nearer 083's 31% than ceil's 35.7%).
+Note:    probe a pixel strictly inside a shape: floor toward the start, never round to the boundary.

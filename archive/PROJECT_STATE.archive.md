@@ -86,3 +86,4 @@
 2026-10-18 · 071 · blocked · platform-gating the two macOS-only e2e assertions is 065's own block question (option a), so it waits for Eric rather than me answering it myself → not started (-)
 2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)
 2026-10-19 · 071 · dropped · Eric chose option (b) — the two macOS-only e2e assertions stay as they are and 065 closes on the Mac, so there is nothing to platform-gate (-)
+2026-10-20 · 065 · closed · on the Mac: a capture continues the current chat (newest thread on disk after a restart), + starts a new one (preload newThread on thread:new, SPEC Amendment 10, twelve functions), a typed question after + starts a text thread, hotkeys.append removed and warned, neutral append text; .thumb[hidden]; hand check → 032; found 072 (a3fb69b)

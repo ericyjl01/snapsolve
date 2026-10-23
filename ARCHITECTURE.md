@@ -22,7 +22,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `voice.ts`: dictation (task 063): the speech helper's JSON-line protocol, listen → stop and send / Esc / hide cancel, the temporary Esc shortcut, `resolveSpeechHelper`
 - `src/preload/preload.ts`: contextBridge exposing exactly the sixteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10, 11 and 15 (`copy` → `hide`; `newThread`; `onVoice`, `toggleVoice`, `openVoiceSettings`; `openThread`)
 - `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `styles.css`
-- `src/shared/`: `types.ts` (Thread, Turn, Config, events), `ipc.ts` (channel names), `errors.ts` (error kinds + user messages)
+- `src/shared/`: `types.ts` (Thread, Turn, Config, events), `ipc.ts` (channel names), `errors.ts` (error kinds + user messages), `models.ts` (`modelName`: a reported model id as the answer footer shows it, task 086)
 - `prompts/system.md`: the system prompt
 - `assets/`: icons (tray, app)
 - `native/speech/` (063, macOS): `main.swift` (the on-device speech helper) and `Info.plist` (linked into it); built to `dist/native/snapsolve-speech`, released as `app/native/`

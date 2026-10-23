@@ -2210,23 +2210,28 @@
     {
       "id": "086",
       "title": "per-answer footer: the model that wrote each answer (e.g. Opus 5.5) and its time",
-      "status": "open",
+      "status": "closed",
       "priority": 1,
       "milestone": 3,
       "deps": [],
       "file": "docs/tasks/086-per-answer-footer.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/086",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-23",
+      "commit": "b580194",
       "notes": "",
       "kind": "task",
-      "test_cmd": "npx vitest run test/unit/stream.test.ts test/unit/runner.test.ts test/e2e/panel.e2e.test.ts test/e2e/errors.e2e.test.ts",
-      "tests_commit": null,
+      "test_cmd": "npx vitest run test/unit/models.test.ts test/unit/stream.test.ts test/unit/runner.test.ts test/e2e/panel.e2e.test.ts test/e2e/errors.e2e.test.ts",
+      "tests_commit": "6399b592e2ac2520a59521f15c919ea41cf2d2a0",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "16ad0a28b82a39006dda3795af0eca578e41ead2",
+        "reasons": "models.test.ts proves modelName (claude-opus-5-5 -> Opus 5.5, [1m] dropped, others as given); runner.test proves the init model is saved per answer and omitted without one; panel e2e proves one footer per finished answer directly after it with its own time (1.2 s, 3.2 s), none while the second thinks or streams, no .status line; old turns fall back to the alias and errored turns get no footer; errors e2e proves 'Opus 5.5 · n.n s' with no TTFT/usage. Tests unchanged after red; task tests 161/161 and npm test 1059 passed (exit 0).",
+        "at": "2026-10-23"
+      }
     },
     {
       "id": "087",

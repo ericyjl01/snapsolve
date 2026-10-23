@@ -145,6 +145,13 @@ function setWindowWidth(app: ElectronApplication, width: number): Promise<void> 
   }, width);
 }
 
+/** Resizes the window and waits until the page has laid out at the new width (082): a "still closed" check is then meaningful. */
+async function resizeTo(p: { app: ElectronApplication; page: Page }, width: number): Promise<void> {
+  await setWindowWidth(p.app, width);
+  await expect.poll(() => p.page.evaluate(() => window.innerWidth), { timeout: 5_000 }).toBe(width);
+  await p.page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+}
+
 /** A finished thread on disk (thread.json only), created at `createdAt` (078 grouping fixtures). */
 function writeThread(dataDir: string, id: string, title: string, createdAt: Date): void {
   const dir = path.join(dataDir, "threads", id);
@@ -501,6 +508,85 @@ describe("panel (e2e)", () => {
       await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
       await showChats(p.page);
       expect(await p.page.locator("#scrim").isVisible()).toBe(true);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  // 082 (Amendment 16): a sidebar the user closed stays closed through resizes until Show chats.
+  it("wide, user closes: stays closed at 700, 360 and back at 760 px; Show chats then docks it open (082)", async () => {
+    const p = await launchPanel();
+    const nav = p.page.locator('nav[aria-label="Chats"]');
+    try {
+      await resizeTo(p, 760);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(true);
+      await nav.getByRole("button", { name: "Hide chats" }).click();
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+
+      for (const width of [700, 360, 760]) {
+        await resizeTo(p, width);
+        expect(await nav.isVisible(), `at ${width} px`).toBe(false);
+        expect(await p.page.locator("#scrim").isVisible(), `at ${width} px`).toBe(false);
+        expect(await p.page.locator("#titlebar").getByRole("button", { name: "Show chats" }).isVisible(), `at ${width} px`).toBe(true);
+      }
+
+      await showChats(p.page);
+      expect(await p.page.locator("#scrim").isVisible()).toBe(false);
+      const navBox = await nav.boundingBox();
+      const contentBox = await p.page.locator("#content").boundingBox();
+      expect(navBox && contentBox && contentBox.x >= navBox.x + navBox.width - 1).toBe(true);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("narrow, user opens then closes (the scrim, or choosing a chat): widening to 760 px keeps it closed (082)", async () => {
+    const p = await launchPanel();
+    const nav = p.page.locator('nav[aria-label="Chats"]');
+    try {
+      const id = await capture(p.app);
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+
+      await showChats(p.page);
+      await p.page.mouse.click(340, 300);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+      await resizeTo(p, 760);
+      expect(await nav.isVisible()).toBe(false);
+
+      // Docked open, then narrowed: the overlay closes, but the user did not close it.
+      await showChats(p.page);
+      await resizeTo(p, 360);
+      expect(await nav.isVisible()).toBe(false);
+      // Choosing a chat in the narrow overlay closes it: a user close.
+      await chooseChat(p.page, id);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(false);
+      await resizeTo(p, 760);
+      expect(await nav.isVisible()).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("never closed by the user: wide docks open, narrow closes the overlay, wide docks it open again; opened while narrow, widening docks it (082)", async () => {
+    const p = await launchPanel();
+    const nav = p.page.locator('nav[aria-label="Chats"]');
+    const scrim = p.page.locator("#scrim");
+    try {
+      await resizeTo(p, 760);
+      await expect.poll(() => nav.isVisible(), { timeout: 5_000 }).toBe(true);
+      await resizeTo(p, 360);
+      expect(await nav.isVisible()).toBe(false);
+      expect(await scrim.isVisible()).toBe(false);
+      await resizeTo(p, 760);
+      expect(await nav.isVisible()).toBe(true);
+      expect(await scrim.isVisible()).toBe(false);
+
+      await resizeTo(p, 360);
+      await showChats(p.page);
+      expect(await scrim.isVisible()).toBe(true);
+      await resizeTo(p, 760);
+      expect(await nav.isVisible()).toBe(true);
+      expect(await scrim.isVisible()).toBe(false);
     } finally {
       await p.close();
     }

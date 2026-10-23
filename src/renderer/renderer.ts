@@ -1,10 +1,12 @@
-// The panel UI (SPEC §4.2, Amendments 9–10: mockup A2): one card per thread, newest first. Each card has a header
-// row (thumbnail, title, time); the newest thread's card is open below it — the conversation with rendered answers,
-// "Thinking…" until the first text arrives, the streamed answer, Retry on error and a status line — and older
-// threads are one-line rows that open in place on click. One composer pinned at the bottom of the window sends
-// follow-ups to the newest thread. The title bar's "+" starts a new chat: every card becomes a row until the next
-// capture or typed question starts a thread (the composer then starts a text thread). Its × hides the window (as
-// Esc does in main). Talks to main only
+// The panel UI (SPEC §4.2, Amendments 9–10 and 15: mockup A2, then the chat layout of task 078): one chat on screen —
+// its screenshots, questions and rendered answers, "Thinking…" until the first text arrives, the streamed answer,
+// Retry on error and a status line — and every chat in the "Chats" sidebar, newest first under Today / Yesterday /
+// Previous 7 days / Older. Below 600 px the sidebar is an overlay over a scrim and starts closed; wider it is docked
+// beside the chat and starts open. Choosing a chat shows it and tells main (openThread), so the composer and the next
+// capture continue it; a new chat (a capture after "+", a typed question, a seeded continuation) is shown as it
+// arrives. One composer pinned at the bottom sends follow-ups to the chat on screen. The title bar's "+" (and the
+// sidebar's New chat) starts a new chat: the main area is empty until the next capture or typed question starts a
+// thread (the composer then starts a text thread). Its × hides the window (as Esc does in main). Talks to main only
 // through `window.snapsolve` (SPEC §4.4); model output goes through render.ts. On macOS a missing Screen Recording
 // grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings / Relaunch,
 // nothing else; voice's refused Microphone or Speech Recognition does the same with Open System Settings only. While
@@ -24,13 +26,6 @@ declare global {
 interface Card {
   kind: "thread";
   root: HTMLElement;
-  header: HTMLButtonElement;
-  thumb: HTMLImageElement;
-  /** The header thumbnail did not load: a thread that began with a typed question has no first screenshot. */
-  thumbMissing: boolean;
-  title: HTMLElement;
-  time: HTMLElement;
-  body: HTMLElement;
   turns: HTMLElement;
   live: HTMLElement;
   retry: HTMLButtonElement;
@@ -45,6 +40,13 @@ const send = document.getElementById("send") as HTMLButtonElement;
 const composerBox = document.getElementById("composer-box") as HTMLElement;
 const listening = document.getElementById("listening") as HTMLElement;
 const voiceNote = document.getElementById("voice-note") as HTMLElement;
+const sidebar = document.getElementById("sidebar") as HTMLElement;
+const chatList = document.getElementById("chats") as HTMLElement;
+const scrim = document.getElementById("scrim") as HTMLElement;
+const showChats = document.getElementById("sidebar-show") as HTMLButtonElement;
+const chatTitle = document.getElementById("chat-title") as HTMLElement;
+/** At this width and wider the sidebar is docked beside the chat; narrower it is an overlay (078). */
+const wide = window.matchMedia("(min-width: 600px)");
 /** At most this tall before the composer scrolls (about five lines). */
 const COMPOSER_MAX_PX = 120;
 /** How long a voice note ("Didn't catch that.") stays under the composer. */
@@ -63,14 +65,18 @@ const cards = new Map<string, Card | PermissionCard>();
 const streams = new Map<string, string>();
 /** Threads with a follow-up or retry sent whose turn has not ended yet. */
 const pending = new Set<string>();
-/** Older threads the user opened (the newest is always open). */
-const opened = new Set<string>();
-/** The newest thread that takes follow-ups: the composer's target; null with no threads or after "+". */
-let newest: string | null = null;
-/** The newest thread on screen (whether or not "+" was clicked). */
+/** The chat the user is on: the newest until another is chosen in the sidebar; a newer chat arriving replaces it. */
+let current: string | null = null;
+/** The chat on screen and the composer's target: `current`, or null with no threads or after "+". */
+let shown: string | null = null;
+/** The newest chat (permission cards aside), whether or not "+" was clicked. */
 let top: string | null = null;
+/** `top` at the previous layout; undefined before the first. A change means a new chat arrived. */
+let lastTop: string | null | undefined;
 /** Set by "+": `top` when it was clicked; cleared once another thread is on top. Undefined: not a new chat. */
 let freshAfter: string | null | undefined;
+/** The sidebar is shown: docked (wide) or over the chat (narrow). */
+let sidebarOpen = wide.matches;
 
 const BUSY = new Set<Thread["status"]>(["new", "queued", "running"]);
 const isBusy = (t: Thread) => BUSY.has(t.status) || pending.has(t.id);
@@ -86,6 +92,7 @@ function thumbnail(threadId: string, n: number): HTMLImageElement {
   const img = el("img", "thumb");
   img.alt = `Screenshot ${n}`;
   img.src = `snapsolve://thread/${threadId}/${n}.png`;
+  img.addEventListener("error", () => (img.hidden = true));
   return img;
 }
 
@@ -98,15 +105,6 @@ function answerNode(className: string, markdown: string): HTMLElement {
 function createCard(thread: Thread): Card {
   const root = el("article", "card");
   root.dataset.threadId = thread.id;
-  const header = el("button", "card-header");
-  header.type = "button";
-  const title = el("span", "card-title");
-  const time = el("span", "card-time");
-  const text = el("span", "card-text");
-  text.append(title, time);
-  const thumb = thumbnail(thread.id, 1);
-  header.append(thumb, text);
-  const body = el("div", "card-body");
   const turns = el("div", "turns");
   const live = el("div", "live");
   const actions = el("div", "actions");
@@ -114,20 +112,8 @@ function createCard(thread: Thread): Card {
   retry.type = "button";
   actions.append(retry);
   const status = el("p", "status");
-  body.append(turns, live, actions, status);
-  root.append(header, body);
-  const card: Card = { kind: "thread", root, header, thumb, thumbMissing: false, title, time, body, turns, live, retry, status };
-  thumb.addEventListener("error", () => {
-    card.thumbMissing = true;
-    thumb.hidden = true;
-  });
-
-  header.addEventListener("click", () => {
-    if (thread.id === newest) return;
-    if (opened.has(thread.id)) opened.delete(thread.id);
-    else opened.add(thread.id);
-    update(thread.id);
-  });
+  root.append(turns, live, actions, status);
+  const card: Card = { kind: "thread", root, turns, live, retry, status };
   retry.addEventListener("click", () => {
     pending.add(thread.id);
     update(thread.id);
@@ -212,27 +198,25 @@ function firstUserTurn(thread: Thread): UserTurn | undefined {
   return thread.turns.find((t): t is UserTurn => t.role === "user");
 }
 
-/** "Just now", "5 min ago", a time today, else the date and time. */
-function timeOf(thread: Thread, now = Date.now()): string {
-  const created = new Date(thread.createdAt);
-  const minutes = Math.floor((now - created.getTime()) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} min ago`;
-  const clock = created.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  if (created.toDateString() === new Date(now).toDateString()) return clock;
-  return `${created.toLocaleDateString([], { month: "short", day: "numeric" })}, ${clock}`;
+/** The sidebar's group for a chat started at `createdAt` (local calendar days). */
+function groupOf(createdAt: string, now = new Date()): string {
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(now) - day(new Date(createdAt))) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days <= 7) return "Previous 7 days";
+  return "Older";
 }
 
 function renderTurns(card: Card, thread: Thread): void {
   const nodes: Node[] = [];
-  const first = firstUserTurn(thread);
   for (const turn of thread.turns) {
     if (turn.role === "user") {
       const note = continuedNote(turn);
       if (note) nodes.push(el("p", "note", note));
-      // A thread's opening screenshot is the card's thumbnail; later ones show where they joined.
+      // Every screenshot shows where it joined the chat, the first one too.
       if (turn.kind === "screenshot") {
-        if (turn !== first) nodes.push(thumbnail(thread.id, Number.parseInt(turn.file, 10)));
+        nodes.push(thumbnail(thread.id, Number.parseInt(turn.file, 10)));
       } else if (turn.voice) {
         const asked = el("p", "question voice");
         asked.title = "Dictated";
@@ -278,14 +262,6 @@ function update(threadId: string): void {
     updatePermission(card, thread.permission ?? { prompted: false });
     return;
   }
-  const open = thread.id === newest || opened.has(thread.id);
-  card.root.classList.toggle("older", thread.id !== newest);
-  card.root.classList.toggle("collapsed", !open);
-  card.header.setAttribute("aria-expanded", String(open));
-  card.thumb.hidden = card.thumbMissing || firstUserTurn(thread)?.kind === "text";
-  card.body.hidden = !open;
-  card.title.textContent = titleOf(thread);
-  card.time.textContent = timeOf(thread);
   renderTurns(card, thread);
   renderLive(card, thread);
   const busy = isBusy(thread);
@@ -299,27 +275,93 @@ function update(threadId: string): void {
 }
 
 function updateComposer(): void {
-  box.placeholder = newest === null ? "Ask a new question" : "Ask a follow-up";
+  box.placeholder = shown === null ? "Ask a new question" : "Ask a follow-up";
   send.disabled = box.value.trim() === "";
 }
 
-/** Puts the cards in newest-first order, moving only those out of place (a moved node would lose focus). */
+/** The sidebar's rows: every chat newest first under its day group, the one on screen marked current. */
+function renderChats(order: Thread[]): void {
+  const nodes: Node[] = [];
+  let group = "";
+  for (const thread of order) {
+    const g = groupOf(thread.createdAt);
+    if (g !== group) {
+      nodes.push(el("p", "chat-group", g));
+      group = g;
+    }
+    const row = el("button", "chat");
+    row.type = "button";
+    row.dataset.chatId = thread.id;
+    if (thread.id === shown) row.setAttribute("aria-current", "true");
+    const dot = el("span", `chat-dot${isBusy(thread) ? " busy" : thread.status === "error" ? " error" : ""}`);
+    dot.setAttribute("aria-hidden", "true");
+    row.append(dot, el("span", "chat-name", titleOf(thread)));
+    row.addEventListener("click", () => chooseChat(thread.id));
+    nodes.push(row);
+  }
+  chatList.replaceChildren(...nodes);
+}
+
+/** Shows or hides the sidebar: docked when wide, an overlay over the scrim when narrow (078). */
+function applySidebar(): void {
+  sidebar.hidden = !sidebarOpen;
+  scrim.hidden = !(sidebarOpen && !wide.matches);
+  // Docked and open, the sidebar's own toggle hides it; the title bar's shows it again.
+  showChats.hidden = sidebarOpen && wide.matches;
+}
+
+function setSidebar(open: boolean): void {
+  sidebarOpen = open;
+  applySidebar();
+}
+
+/** A chat chosen in the sidebar: on screen at once, and main continues it on the next capture. */
+function chooseChat(threadId: string): void {
+  current = threadId;
+  freshAfter = undefined;
+  if (!wide.matches) setSidebar(false);
+  layout();
+  api.openThread(threadId).catch(() => undefined);
+}
+
+/** "+" and the sidebar's New chat: main starts the next capture or question in a new thread; until then nothing is on screen. */
+function startNewChat(): void {
+  const was = freshAfter;
+  freshAfter = top;
+  if (!wide.matches) setSidebar(false);
+  layout();
+  api.newThread().catch(() => {
+    freshAfter = was;
+    layout();
+  });
+}
+
+/** Every thread, newest first (createdAt, then id: main's order). */
+function newestFirst(): Thread[] {
+  return [...threads.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.id.localeCompare(b.id));
+}
+
+/** The chat on screen (with any permission card above it) and the sidebar, newest first. */
 function layout(): void {
-  const order = [...threads.values()].sort(
-    (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.id.localeCompare(b.id),
-  );
+  const order = newestFirst();
+  const chatsOnly = order.filter((t) => !t.permission);
+  top = chatsOnly[0]?.id ?? null;
+  if (freshAfter !== undefined && top !== freshAfter) freshAfter = undefined;
+  // A new chat arrived (or this is the first listing): show it. A chat that went away gives way to the newest.
+  if (top !== lastTop || (current !== null && !threads.has(current))) current = top;
+  lastTop = top;
+  shown = freshAfter === undefined ? current : null;
+  const visible = order.filter((t) => t.permission || t.id === shown);
+  const keep = new Set(visible.map((t) => t.id));
   for (const [id, card] of cards) {
-    if (!threads.has(id)) {
+    if (!keep.has(id)) {
       card.root.remove();
       cards.delete(id);
     }
   }
-  top = order.find((t) => !t.permission)?.id ?? null;
-  if (freshAfter !== undefined && top !== freshAfter) freshAfter = undefined;
-  newest = freshAfter === undefined ? top : null;
-  for (const id of [...opened]) if (!threads.has(id) || id === newest) opened.delete(id);
+  // Moves only the cards out of place (a moved node would lose focus).
   let previous: Element | null = null;
-  for (const thread of order) {
+  for (const thread of visible) {
     let card = cards.get(thread.id);
     if (!card) {
       card = thread.permission ? createPermissionCard(thread) : createCard(thread);
@@ -333,7 +375,10 @@ function layout(): void {
   empty.textContent =
     threads.size === 0 ? "Press the snapsolve hotkey to solve what's on your screen." : "New chat. Press the snapsolve hotkey or type a question.";
   // Shown with no threads at all, and after "+" until the new thread arrives.
-  empty.hidden = threads.size > 0 && freshAfter === undefined;
+  empty.hidden = shown !== null || (threads.size > 0 && freshAfter === undefined);
+  const onScreen = shown === null ? undefined : threads.get(shown);
+  chatTitle.textContent = onScreen ? titleOf(onScreen) : "New chat";
+  renderChats(chatsOnly);
   updateComposer();
 }
 
@@ -358,9 +403,9 @@ api.onDone(({ threadId, thread }) => {
   layout();
 });
 
-/** A follow-up to the newest thread; with none (no threads, or after "+") a new text thread. */
+/** A follow-up to the chat on screen; with none (no threads, or after "+") a new text thread. */
 function sendFollowUp(): void {
-  const threadId = newest;
+  const threadId = shown;
   const text = box.value.trim();
   if (!text) return;
   box.value = "";
@@ -431,23 +476,16 @@ for (const id of ["voice", "composer-voice"]) {
 }
 api.onVoice(showVoice);
 (document.getElementById("hide") as HTMLButtonElement).addEventListener("click", () => void api.hide().catch(() => undefined));
-// "+": main starts the next capture or question in a new thread; here every card becomes a row until it arrives.
-(document.getElementById("new-chat") as HTMLButtonElement).addEventListener("click", () => {
-  const was = freshAfter;
-  freshAfter = top;
-  layout();
-  api.newThread().catch(() => {
-    freshAfter = was;
-    layout();
-  });
-});
-// Relative times ("5 min ago") move on while the window is up.
-setInterval(() => {
-  for (const [id, card] of cards) {
-    const thread = threads.get(id);
-    if (thread && card.kind === "thread") card.time.textContent = timeOf(thread);
-  }
-}, 60_000);
+(document.getElementById("new-chat") as HTMLButtonElement).addEventListener("click", startNewChat);
+(document.getElementById("sidebar-new") as HTMLButtonElement).addEventListener("click", startNewChat);
+showChats.addEventListener("click", () => setSidebar(true));
+(document.getElementById("sidebar-hide") as HTMLButtonElement).addEventListener("click", () => setSidebar(false));
+scrim.addEventListener("click", () => setSidebar(false));
+// Crossing 600 px: docked and open when wide, a closed overlay when narrow.
+wide.addEventListener("change", () => setSidebar(wide.matches));
+applySidebar();
+// The day groups (Today, Yesterday…) move on while the window is up.
+setInterval(() => renderChats(newestFirst().filter((t) => !t.permission)), 60_000);
 
 // Links in answers open in the browser, via main's http(s) check; the panel itself never navigates.
 document.addEventListener("click", (event) => {

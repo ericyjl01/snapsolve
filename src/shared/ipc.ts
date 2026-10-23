@@ -1,4 +1,4 @@
-// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2, 9, 10 and 11) that maps 1:1
+// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2, 9, 10, 11 and 15) that maps 1:1
 // onto them.
 import type { AnswerDelta, AnswerDone, Thread, VoiceState } from "./types";
 
@@ -15,6 +15,8 @@ export const IPC = {
   threadRetry: "thread:retry",
   // SPEC Amendment 10 (task 065): the title bar's "+", and a question typed after it.
   threadNew: "thread:new",
+  // SPEC Amendment 15 (task 078): a chat chosen in the sidebar becomes the one captures continue.
+  threadOpen: "thread:open",
   externalOpen: "external:open",
   historyClear: "history:clear",
   // SPEC Amendment 9 (task 061): the title bar's ×; no argument.
@@ -39,6 +41,7 @@ export const PRELOAD_CHANNELS = {
   followUp: IPC.threadFollowUp,
   retry: IPC.threadRetry,
   newThread: IPC.threadNew,
+  openThread: IPC.threadOpen,
   hide: IPC.panelHide,
   openExternal: IPC.externalOpen,
   clearHistory: IPC.historyClear,
@@ -63,6 +66,7 @@ export interface IpcRequests {
   [IPC.threadFollowUp]: { args: [threadId: string, text: string]; result: void };
   [IPC.threadRetry]: { args: [threadId: string]; result: void };
   [IPC.threadNew]: { args: [text?: string]; result: void };
+  [IPC.threadOpen]: { args: [threadId: string]; result: void };
   [IPC.panelHide]: { args: []; result: void };
   [IPC.externalOpen]: { args: [url: string]; result: void };
   [IPC.historyClear]: { args: []; result: boolean };
@@ -82,6 +86,8 @@ export interface SnapsolveApi {
   retry(threadId: string): Promise<void>;
   /** No text: the next capture or question starts a new thread ("+"). With text: starts a text thread with it now. */
   newThread(text?: string): Promise<void>;
+  /** A chat chosen in the sidebar: main makes it current, so the next capture or dictation continues it. */
+  openThread(threadId: string): Promise<void>;
   /** Hides the window, as Esc does (the title bar's ×). */
   hide(): Promise<void>;
   openExternal(url: string): Promise<void>;

@@ -238,6 +238,7 @@ async function start(): Promise<void> {
     [IPC.threadFollowUp]: core.handlers.followUp,
     [IPC.threadRetry]: core.handlers.retry,
     [IPC.threadNew]: core.handlers.newThread,
+    [IPC.threadOpen]: core.handlers.openThread,
     // The title bar's × hides as Esc does (SPEC Amendment 9).
     [IPC.panelHide]: async () => panel.close(),
     [IPC.externalOpen]: core.handlers.openExternal,

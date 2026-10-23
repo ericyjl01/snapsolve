@@ -299,3 +299,17 @@ Symptom: after `resizeTo(p, 1100)` then `capture(p.app)`, every box measured 360
 Cause:   a capture shows the window at its saved size (059); `win.setBounds` in tests never emits `resized`, so the saved size stays the 360 px default and the capture shrinks the window back.
 Fix:     resize after the capture (or again after it) before measuring (b043233). A temporary PROBE log of the boxes found it in one run.
 Note:    any e2e that sets the width and then captures must re-apply the width after the capture.
+
+## 2026-10-23 · task 088 · where a hidden-window capture's wait went (before / after)
+tags: capture, latency, timing, macos, desktopCapturer, encode, 088
+Symptom: Eric (0.2.7): with the window hidden, a capture "takes some time for the app to pop up".
+Cause:   the window was shown only after getSources + toPNG + encodeForModel + saveScreenshot. Measured on Eric's Mac (dev Electron 44.7.2, 3440 × 1440, 5 runs each, 2026-10-23): getSources 178–205 ms cold, ~80 ms warm; toPNG of the grab ~115 ms; encodeForModel ~160 ms (its result is unused → 092); synced write of the 1.26 MB PNG ~7 ms. Before: ~360–480 ms from the grab's start to the show (+150 ms hide wait only when the window was already open).
+Fix:     the window opens right after the grab; PNG, encode and save follow (4b3d902). After (derived, not yet measured in the app): the grab only, ~80–200 ms. The installed app's own numbers come from its `capture.timing` lines once a build with 088 is installed (checklist row 28).
+Note:    nothing measured points at the renderer's paint of a hidden window, so `backgroundThrottling` / `paintWhenInitiallyHidden` stay as they are.
+
+## 2026-10-23 · task 088 · "a chat with no turns takes the capture as new" broke five 065/078 unit tests
+tags: app, unit, fake-runner, capture, 065, 078, 088
+Symptom: after the failed-save path made `turns.length === 0` mean "first turn", five app tests expected `append` and got `new`.
+Cause:   the unit tests' fake runner writes no turns, so a chat with screenshots (or a text thread) looks empty on disk; disk state cannot tell it from a chat whose first save failed.
+Fix:     app.ts remembers those chats in memory (`unstarted`) for the run (4b3d902).
+Note:    test/git-clean-setup.ts fails a run when a tracked file that was clean when the run started is edited during it (the red run flagged PROJECT_STATE.md): edit memory files before starting a suite, not while it runs.

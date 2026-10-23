@@ -2,18 +2,15 @@
 
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.7 (2026-10-23): 085 answer footer = model · response time only (Amendment 19);
-  doctor all ok. (0.2.6: 084 chat widens with the window.)
-- Queue (M3, wait for /goal): 088 (p0) window shows at once on capture (measure first: capture.timing log);
-  086 (p1) per-answer footer with model name (Am. 20); 090 (p1) real see-through window (`transparent: true`
-  suspected missing) + tray Transparency steps (Am. 23); 087 (p2) icon ~15% smaller (Am. 21); 091 (p2) default
-  window ~9 × 6 in, centred (Am. 22). Ask Eric: menu steps OK instead of a slider (090)?
-- Blocked: 032 — Eric runs master's docs/checklists/macos.md (27 items, refreshed for 0.2.7).
-- Backlog 033, 067, 069, 074, 089 (089 own format + knowledge base, parked for Eric's answers). Dropped by Eric
-  2026-10-23: 042, 053, 054, 056, 066, 068, 070, 080, 081.
+- Installed on Eric's Mac: 0.2.7 (2026-10-23). Goal run in progress. Not yet released: 088 (on master 31aa1af).
+- Closed 088: the window shows right after the grab (~280 ms sooner, measured on the Mac); `capture.timing`
+  log line; checklist row 28 asks Eric for the installed app's numbers. Found 092 (duplicate encode), 093.
+- Next: 086 (p1) per-answer footer with model name (Am. 20); then 090 (p1) see-through + Transparency
+  (Am. 23/24); 087 (p2) icon ~15% smaller; 091 (p2) default window ~9 × 6 in centred.
+- Blocked: 032 — Eric runs master's docs/checklists/macos.md (28 items after 088).
+- Backlog 033, 067, 069, 074, 089, 092, 093. Dropped by Eric 2026-10-23: 042, 053, 054, 056, 066, 068, 070, 080, 081.
 
 ## Log
-2026-10-18 · 065 · blocked · two macOS-only e2e assertions (content protection; userdata without the override) cannot pass in a Linux cloud session, so Done-when and close's full-suite gate cannot be met: platform-gate them (071) or close on the Mac? → keel/065 (caa71ef)
 2026-10-18 · 071 · blocked · platform-gating the two macOS-only e2e assertions is 065's own block question (option a), so it waits for Eric rather than me answering it myself → not started (-)
 2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)
 2026-10-19 · 071 · dropped · Eric chose option (b) — the two macOS-only e2e assertions stay as they are and 065 closes on the Mac, so there is nothing to platform-gate (-)
@@ -53,3 +50,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · keel · queued · 089 (backlog) your own answer format and knowledge base: parked until Eric answers what material and what format (-)
 2026-10-23 · keel · dropped · 042, 053, 056, 066, 068, 081 (Eric) (-)
 2026-10-23 · keel · queued · 090 see-through window + tray Transparency (p1), 091 default window ~9 × 6 in centred (p2) (-)
+2026-10-23 · 088 · closed · a capture shows the window as soon as the screen is grabbed (panel.open before currentThread/createThread), Thinking… in the chat it lands in, then PNG / model encode / save (Screenshot.encode(), screenshotOf); a failed save shows captureFailed in that chat; capture.timing log line (grabMs pngMs encodeMs saveMs shownMs); measured ~280 ms sooner on the Mac; checklist row 28; found 092, 093 (31aa1af)

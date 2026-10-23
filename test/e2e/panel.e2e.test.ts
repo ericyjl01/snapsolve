@@ -163,7 +163,6 @@ function setWindowWidth(app: ElectronApplication, width: number): Promise<void> 
   }, width);
 }
 
-/** Resizes the window and waits until the page has laid out at the new width (082): a "still closed" check is then meaningful. */
 /**
  * 078's narrow window (the sidebar an overlay), as a user's edge drag leaves it: 360 × 460, then `resized`, so a shown
  * window saves it and later captures reopen at it. 091's default (9 × 6 in) is wider than 600 px.
@@ -179,6 +178,7 @@ async function narrowWindow(p: { app: ElectronApplication; page: Page }): Promis
   await p.page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 }
 
+/** Resizes the window and waits until the page has laid out at the new width (082): a "still closed" check is then meaningful. */
 async function resizeTo(p: { app: ElectronApplication; page: Page }, width: number): Promise<void> {
   await setWindowWidth(p.app, width);
   await expect.poll(() => p.page.evaluate(() => window.innerWidth), { timeout: 5_000 }).toBe(width);
@@ -902,9 +902,12 @@ describe("panel (e2e)", () => {
     const nav = p.page.locator('nav[aria-label="Chats"]');
     try {
       const id = await capture(p.app);
+      // 091's default is wider than 600 px: narrow it first, so "360 px fills it" is measured at 360 px.
+      await narrowWindow(p);
       const answer = p.page.locator(`${card(id)} .answer:not(.streaming)`).first();
       await answer.waitFor({ state: "visible", timeout: 20_000 });
       const width = async () => (await answer.boundingBox())!.width;
+      expect(await p.page.evaluate(() => window.innerWidth)).toBe(360);
       expect(await width()).toBeGreaterThanOrEqual(360 - 2 * 10 - 2);
 
       await resizeTo(p, 760);

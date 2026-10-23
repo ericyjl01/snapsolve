@@ -252,7 +252,8 @@ describe("drawTrayIcon", () => {
   it.each([16, 32])("%i px: four crop corners at the symbol's corners, not a full frame", (size) => {
     const { opaque, box } = icon(size);
     const { left: l, top: t, right: r, bottom: b, width: side } = box;
-    const along = Math.round(side * 0.25); // inside an arm (about 30% of the symbol)
+    // Inside an arm (about 30% of the symbol): floor, as 25% of a 14 px symbol is 3.5 and its arm is 4 px (0–3).
+    const along = Math.floor(side * 0.25);
     const midX = l + Math.floor(side / 2);
     const midY = t + Math.floor(side / 2);
     for (const [x, y] of [[l, t], [r, t], [l, b], [r, b]]) expect(opaque(x, y), `corner ${x},${y}`).toBe(true);

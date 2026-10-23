@@ -312,6 +312,23 @@ describe("createAutoHide", () => {
 // createPanel over a fake BrowserWindow and screen: the floating window (058, 059), shown or hidden (060).
 
 class FakeWebContents extends EventEmitter {
+  /** CSS injected with insertCSS, by key, while it is in the page (090). */
+  css = new Map<string, string>();
+  private keys = 0;
+  insertCSS(css: string) {
+    const key = `css-${++this.keys}`;
+    this.css.set(key, css);
+    return Promise.resolve(key);
+  }
+  removeInsertedCSS(key: string) {
+    this.css.delete(key);
+    return Promise.resolve();
+  }
+  /** A page load: every injected sheet is gone, then dom-ready. */
+  reload() {
+    this.css.clear();
+    this.emit("dom-ready");
+  }
   setWindowOpenHandler() {}
   send() {}
   isDestroyed() {
@@ -389,6 +406,7 @@ function panelSetup(
     platform?: NodeJS.Platform;
     onClose?: () => void;
     theme?: Theme;
+    transparency?: number;
     /** Records "themeSource=<value>" and "window" in order. */
     events?: string[];
   } = {},
@@ -422,7 +440,7 @@ function panelSetup(
     ipcMain: { handle() {} },
     platform: options.platform ?? ("darwin" as NodeJS.Platform),
     preloadPath: "/preload.js",
-    config: { autoHideSec: 0, theme: options.theme ?? "dark" },
+    config: { autoHideSec: 0, theme: options.theme ?? "dark", transparency: options.transparency ?? 20 },
     log: quietLog,
     bounds: options.saved ?? {},
     saveBounds: vi.fn(async (b: WindowBounds) => void saves.push(structuredClone(b))),
@@ -492,6 +510,51 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
     expect(win.options.vibrancy).toBeUndefined();
     expect(win.options.visualEffectState).toBeUndefined();
     expect(win.options.backgroundColor).toBe("#ffffff");
+    expect(win.options.transparent).toBeUndefined();
+  });
+
+  // 090 (Amendment 23): without `transparent: true` Electron ignores the background's alpha and the window is opaque.
+  it("macOS: the window is created with transparent: true and a fully transparent background (090)", () => {
+    const { win } = panelSetup();
+    expect(win.options).toMatchObject({ transparent: true, backgroundColor: "#00000000", frame: false, resizable: true });
+  });
+
+  // 090: the ground's alpha is 1 − transparency, injected as CSS (no IPC), again after every page load.
+  const injected = (win: FakeWindow) => [...win.webContents.css.values()];
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it("on dom-ready the page gets the configured ground: 20 → --ground-alpha 0.8 (090)", async () => {
+    const { win } = panelSetup({ transparency: 20 });
+    win.webContents.emit("dom-ready");
+    await settle();
+    expect(injected(win)).toHaveLength(1);
+    expect(injected(win)[0]).toMatch(/^html:root\s*\{\s*--ground-alpha:\s*0\.8;\s*\}$/);
+  });
+
+  it.each([
+    [0, "1"],
+    [40, "0.6"],
+    [90, "0.1"],
+  ])("setTransparency(%i) replaces the rule live with --ground-alpha %s, leaving one rule in the page (090)", async (transparency, alpha) => {
+    const { panel, win } = panelSetup({ transparency: 20 });
+    win.webContents.emit("dom-ready");
+    await settle();
+    panel.setTransparency(transparency);
+    await settle();
+    expect(injected(win)).toEqual([`html:root { --ground-alpha: ${alpha}; }`]);
+  });
+
+  it("two quick changes end on the last one; a reload re-applies the current value (090)", async () => {
+    const { panel, win } = panelSetup({ transparency: 20 });
+    win.webContents.emit("dom-ready");
+    panel.setTransparency(50);
+    panel.setTransparency(70);
+    await settle();
+    await settle();
+    expect(injected(win)).toEqual(["html:root { --ground-alpha: 0.3; }"]);
+    win.webContents.reload();
+    await settle();
+    expect(injected(win)).toEqual(["html:root { --ground-alpha: 0.3; }"]);
   });
 
   it("hidden state hides the window: close calls win.hide() and no 8 × 72 bounds are ever set", () => {

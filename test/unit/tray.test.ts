@@ -9,7 +9,7 @@ interface Item {
   submenu?: Item[];
 }
 
-function setup(theme: "dark" | "light" | "system" = "dark") {
+function setup(theme: "dark" | "light" | "system" = "dark", transparency = 20) {
   const trays: FakeTray[] = [];
   class FakeTray {
     menu: Item[] = [];
@@ -42,21 +42,25 @@ function setup(theme: "dark" | "light" | "system" = "dark") {
     onQuit: vi.fn(),
     theme,
     onTheme: vi.fn(),
+    transparency,
+    onTransparency: vi.fn(),
   };
   const tray = createTray(deps);
   const labels = () => trays[0].menu.map((i) => i.label);
   const click = (label: string) => trays[0].menu.find((i) => i.label === label)!.click!();
   const appearance = () => trays[0].menu.find((i) => i.label === "Appearance")!.submenu!;
   const pick = (label: string) => appearance().find((i) => i.label === label)!.click!();
-  return { tray, deps, trays, labels, click, appearance, pick };
+  const transparencyMenu = () => trays[0].menu.find((i) => i.label === "Transparency")!.submenu!;
+  const pickTransparency = (label: string) => transparencyMenu().find((i) => i.label === label)!.click!();
+  return { tray, deps, trays, labels, click, appearance, pick, transparencyMenu, pickTransparency };
 }
 
 describe("tray", () => {
-  it("has exactly seven items, in order (058 adds Reset window position; 060 renames Open panel; 077 adds Appearance)", () => {
+  it("has exactly eight items, in order (058 adds Reset window position; 060 renames Open panel; 077 adds Appearance; 090 Transparency)", () => {
     const { labels, trays, deps } = setup();
     expect(trays).toHaveLength(1);
     expect(trays[0].image).toBe(deps.image);
-    expect(labels()).toEqual(["Show/Hide snapsolve (⌃⌥X)", "Reset window position", "Appearance", "Pause hotkeys", "Open history folder", "Clear history", "Quit"]);
+    expect(labels()).toEqual(["Show/Hide snapsolve (⌃⌥X)", "Reset window position", "Appearance", "Transparency", "Pause hotkeys", "Open history folder", "Clear history", "Quit"]);
     expect(TRAY_LABELS.resume).toBe("Resume hotkeys");
   });
 
@@ -149,6 +153,43 @@ describe("tray", () => {
     expect(appearance().filter((i) => i.checked).map((i) => i.label)).toEqual(["Light"]);
     pick("Light");
     expect(deps.onTheme).toHaveBeenCalledTimes(1);
+  });
+
+  // 090 (Amendments 23, 24): Transparency › 0% (solid), 10% … 90%, applied live by the handler.
+  const STEPS = ["0% (solid)", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%"];
+
+  it.each([
+    [20, "20%"],
+    [0, "0% (solid)"],
+    [90, "90%"],
+  ])("Transparency is a submenu after Appearance with ten radio items in order; %i checks %s (090)", (transparency, checkedLabel) => {
+    const { transparencyMenu, labels } = setup("dark", transparency);
+    expect(labels().indexOf("Transparency")).toBe(labels().indexOf("Appearance") + 1);
+    const items = transparencyMenu();
+    expect(items.map((i) => i.label)).toEqual(STEPS);
+    expect(items.every((i) => i.type === "radio")).toBe(true);
+    expect(items.filter((i) => i.checked).map((i) => i.label)).toEqual([checkedLabel]);
+    expect(TRAY_LABELS.transparency).toBe("Transparency");
+  });
+
+  it("choosing a Transparency step calls onTransparency once with its percent and rebuilds the menu with it checked; the checked one does nothing (090)", () => {
+    const { pickTransparency, transparencyMenu, deps } = setup("dark", 20);
+    pickTransparency("20%");
+    expect(deps.onTransparency).not.toHaveBeenCalled();
+    const builds = deps.Menu.buildFromTemplate.mock.calls.length;
+    pickTransparency("50%");
+    expect(deps.onTransparency).toHaveBeenCalledTimes(1);
+    expect(deps.onTransparency).toHaveBeenLastCalledWith(50);
+    expect(deps.Menu.buildFromTemplate.mock.calls.length).toBe(builds + 1);
+    expect(transparencyMenu().filter((i) => i.checked).map((i) => i.label)).toEqual(["50%"]);
+    pickTransparency("50%");
+    expect(deps.onTransparency).toHaveBeenCalledTimes(1);
+    pickTransparency("0% (solid)");
+    expect(deps.onTransparency).toHaveBeenLastCalledWith(0);
+    pickTransparency("90%");
+    expect(deps.onTransparency).toHaveBeenLastCalledWith(90);
+    // The theme is untouched by it.
+    expect(deps.onTheme).not.toHaveBeenCalled();
   });
 
   it("destroy removes the tray", () => {

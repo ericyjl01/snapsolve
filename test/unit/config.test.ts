@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULTS, loadConfig, saveTheme } from "../../src/main/config";
+import { DEFAULTS, loadConfig, saveTheme, saveTransparency } from "../../src/main/config";
 
 const SPEC_DEFAULTS = {
   // No append key (065): a capture continues the current thread. Voice (063): dictate a follow-up.
@@ -18,6 +18,8 @@ const SPEC_DEFAULTS = {
   timeoutSec: 180,
   // 075: snapsolve is dark unless config.json says otherwise.
   theme: "dark",
+  // 090 (Amendments 23, 24): how see-through the window's ground is, in percent.
+  transparency: 20,
 };
 
 let dir: string;
@@ -164,6 +166,12 @@ describe("loadConfig", () => {
     ["theme", 1],
     ["theme", null],
     ["theme", "Dark"],
+    ["transparency", -10],
+    ["transparency", 15],
+    ["transparency", 100],
+    ["transparency", 12.5],
+    ["transparency", "20"],
+    ["transparency", null],
   ])("%s = %j → default, one warning naming it, file untouched", async (key, value) => {
     await writeConfig({ [key]: value });
     const before = await snapshot();
@@ -379,6 +387,73 @@ describe("theme (075)", () => {
     expect(r.warnings).toEqual([]);
     expect(r.config.theme).toBe("dark");
     expect(await snapshot()).toEqual(before);
+  });
+});
+
+// 090 (Amendments 23, 24): 0, 10, … 90 percent see-through; 100 is not offered (the ground would vanish).
+describe("transparency (090)", () => {
+  it("defaults to 20", () => {
+    expect(DEFAULTS.transparency).toBe(20);
+  });
+
+  it.each([0, 10, 50, 90])("%i is accepted without a warning", async (transparency) => {
+    await writeConfig({ transparency });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config).toEqual({ ...SPEC_DEFAULTS, transparency });
+  });
+
+  it("an invalid value falls back to 20 with one warning saying what is allowed", async () => {
+    await writeConfig({ transparency: 15 });
+    const r = await loadConfig(file);
+    expect(r.config.transparency).toBe(20);
+    expect(r.warnings).toHaveLength(1);
+    for (const word of ["transparency", "0", "90", "10"]) expect(r.warnings[0]).toContain(word);
+  });
+
+  it("an existing file without transparency gets 20, no warning, and is not rewritten", async () => {
+    await writeConfig({ model: "opus", theme: "light" });
+    const before = await snapshot();
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.transparency).toBe(20);
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
+// 090: the tray's Transparency choice is saved like Appearance (077): only that key changes.
+describe("saveTransparency (090)", () => {
+  it("rewrites only transparency: other keys and values (unknown keys too) stay as they are", async () => {
+    const original = { model: "sonnet", theme: "light", transparency: 20, myNote: "keep me" };
+    await writeConfig(original);
+    expect(await saveTransparency(file, 50)).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ ...original, transparency: 50 });
+    expect(Object.keys(JSON.parse(await readFile(file, "utf8")))).toEqual(Object.keys(original));
+  });
+
+  it("adds transparency to a config.json that has none; a missing file gets the defaults plus it", async () => {
+    await writeConfig({ model: "opus" });
+    expect(await saveTransparency(file, 0)).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ model: "opus", transparency: 0 });
+    await rm(file);
+    expect(await saveTransparency(file, 90)).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ ...SPEC_DEFAULTS, transparency: 90 });
+  });
+
+  it("malformed JSON is left untouched and an error is returned (no throw); no temp file is left", async () => {
+    await writeConfig("{ not json");
+    const before = await snapshot();
+    const result = await saveTransparency(file, 40);
+    expect(result.ok).toBe(false);
+    expect(await snapshot()).toEqual(before);
+    expect(await readdir(dir)).toEqual(["config.json"]);
+  });
+
+  it("the saved value is what loadConfig then reads, and saving the theme afterwards keeps it", async () => {
+    await writeConfig({ theme: "dark" });
+    await saveTransparency(file, 70);
+    await saveTheme(file, "light");
+    expect((await loadConfig(file)).config).toMatchObject({ theme: "light", transparency: 70 });
   });
 });
 

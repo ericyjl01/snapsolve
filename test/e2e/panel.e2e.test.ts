@@ -743,6 +743,61 @@ describe("panel (e2e)", () => {
     }
   }, 60_000);
 
+  // 090 (Amendments 23, 24): the window's ground is `transparency` percent see-through (alpha 1 − t/100), applied live;
+  // the text stays opaque and the boxes on the ground (bubble, code block, text bar) keep their own readable grounds.
+  it("transparency 40 → ground alpha 0.60; live 0 → 1 and 90 → 0.10, saved, no reload; text opaque; at 90 the bubble, code block and text bar keep their grounds in both themes (090)", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    writeFileSync(path.join(dataDir, "config.json"), JSON.stringify({ transparency: 40 }));
+    const p = await launchPanel(dataDir, { FAKE_DELAY_MS: "200", FAKE_ANSWER_SUFFIX: "\n\n```js\nconst x = 4;\n```" });
+    const alphaOf = (color: string) => {
+      const parts = (/rgba?\(([^)]+)\)/.exec(color)?.[1] ?? "").split(/[\s,/]+/).filter(Boolean);
+      return parts.length === 4 ? Number(parts[3]) : 1;
+    };
+    const style = (selector: string, prop: "backgroundColor" | "color") =>
+      p.page.locator(selector).first().evaluate((el, name) => getComputedStyle(el)[name], prop);
+    const ground = async () => alphaOf(await style("body", "backgroundColor"));
+    const hook = (name: "setTransparency" | "setTheme", value: number | string) =>
+      p.app.evaluate(
+        (_electron, [fn, arg]) => (globalThis as unknown as { snapsolveTest: Record<string, (v: unknown) => Promise<void>> }).snapsolveTest[fn as string](arg),
+        [name, value] as const,
+      );
+    try {
+      const id = await capture(p.app);
+      await p.page.locator(`${card(id)} .answer:not(.streaming) pre code.hljs`).first().waitFor({ state: "visible", timeout: 20_000 });
+      const box = p.page.locator("#composer textarea");
+      await box.fill("Why?");
+      await box.press("Enter");
+      await p.page.locator(`${card(id)} .question`).first().waitFor({ state: "visible", timeout: 10_000 });
+
+      await expect.poll(ground, { timeout: 5_000 }).toBeCloseTo(0.6, 5);
+      expect(alphaOf(await style(`${card(id)} .answer`, "color"))).toBe(1);
+
+      await p.page.evaluate(() => ((window as unknown as { marker?: number }).marker = 1));
+      await hook("setTransparency", 0);
+      await expect.poll(ground, { timeout: 5_000 }).toBe(1);
+      await hook("setTransparency", 90);
+      await expect.poll(ground, { timeout: 5_000 }).toBeCloseTo(0.1, 5);
+      expect(await p.page.evaluate(() => (window as unknown as { marker?: number }).marker)).toBe(1);
+      await expect
+        .poll(() => (JSON.parse(readFileSync(path.join(dataDir, "config.json"), "utf8")) as { transparency?: number }).transparency, { timeout: 5_000 })
+        .toBe(90);
+
+      for (const theme of ["light", "dark"] as const) {
+        await hook("setTheme", theme);
+        await expect.poll(() => p.page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches), { timeout: 5_000 }).toBe(theme === "dark");
+        expect(await ground(), theme).toBeCloseTo(0.1, 5);
+        for (const selector of [`${card(id)} .question`, `${card(id)} .answer pre code.hljs`, "#composer-box"]) {
+          expect(alphaOf(await style(selector, "backgroundColor")), `${theme}: ${selector}`).toBeGreaterThanOrEqual(0.85);
+        }
+        expect(alphaOf(await style(`${card(id)} .answer`, "color")), `${theme}: answer text`).toBe(1);
+        expect(alphaOf(await style("#send", "color")), `${theme}: send arrow`).toBe(1);
+      }
+    } finally {
+      await p.close();
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 90_000);
+
   // 084 (Amendment 18): no max width on the chat column, the empty state or the composer at any window size.
   it("1100 px: the empty state, chat column, answer and composer fill the area right of the docked sidebar, and the whole window once it is closed (084)", async () => {
     const p = await launchPanel();

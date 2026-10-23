@@ -2,14 +2,12 @@
 
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.5 (2026-10-23): 082 sidebar stays closed across resizes, 083 crop-corners "=" icon.
-- Closed 2026-10-23: 084 the chat column, empty state and composer widen with the window (Amendment 18; 078's
-  560 px cap removed). In flight: Eric asked to release + update once 084 closed → 0.2.6 next (adhoc on master).
-- Then `tasks.py next` (expected: all blocked — 032, Eric's macOS checklist).
-- Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081.
+- Installed on Eric's Mac: 0.2.6 (2026-10-23): 084 chat column/composer widen with the window; doctor all ok.
+  (0.2.5: 082 sidebar stays closed across resizes, 083 crop-corners "=" icon.)
+- Queue: all blocked — 032 waits on Eric's macOS checklist (docs/checklists/macos.md on keel/032).
+- Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081 (070 likely covered by 076: drop candidate).
 
 ## Log
-2026-10-17 · adhoc · hotkeys decided (capture ⌃⌥C, toggle ⌃⌥Z, voice ⌃⌥V start+stop): 060/062/063 updated, 064 added; Eric's config.json capture set to Control+Alt+C (-)
 2026-10-17 · adhoc · 065 added: capture continues the current chat, + button starts a new one, append hotkey removed (Eric's decision) (-)
 2026-10-17 · 062 · closed · speech-to-text is macOS built-in (Apple Speech on-device via a Swift helper); Approved libraries updated; 063 scoped and queued in M3 (-)
 2026-10-17 · 064 · blocked · review failed 3 times (last: doctor Mac line unasserted in skill.test.ts); reopen for a test-only fix? → keel/064 (3b6bb68)
@@ -49,3 +47,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · adhoc · released snapsolve 0.2.5 into ~/dev/snapsolve-local (082 sidebar stays closed, 083 crop-corners icon); updated on Eric's Mac (000bfb2)
 2026-10-23 · keel · queued · 084 chat column and composer widen with the window (Eric's report on 0.2.5; cause: 078's 560 px cap) (-)
 2026-10-23 · 084 · closed · the chat column, empty state and composer have no max width and widen with the window beside the sidebar (078's 560 px cap removed) (4605d68)
+2026-10-23 · adhoc · released snapsolve 0.2.6 into ~/dev/snapsolve-local (084 chat widens with the window); updated on Eric's Mac (2eea53d)

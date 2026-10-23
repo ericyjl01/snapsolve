@@ -41,6 +41,8 @@ export type AppHandlers = {
   retry(threadId: string): Promise<void>;
   /** "+": no text → the next capture or question starts a new thread; text → a new text thread with it now. */
   newThread(text?: string): Promise<void>;
+  /** A chat chosen in the sidebar (078): the next capture or dictation continues it; an unknown id changes nothing. */
+  openThread(threadId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   clearHistory(): Promise<boolean>;
 };
@@ -269,6 +271,12 @@ export function createApp(deps: AppDeps): App {
       }
       if (typeof text !== "string" || text.trim() === "") throw new SnapsolveError("internal", "empty question");
       await textThread({ kind: "followUp", text });
+    },
+
+    async openThread(threadId) {
+      const thread = await threadOf(threadId);
+      current = thread.id;
+      fresh = false;
     },
 
     async openExternal(url) {

@@ -13,57 +13,86 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header id="titlebar" class="titlebar">
-      <svg class="mark" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7">
-        <rect x="2" y="2" width="12" height="12" rx="3"></rect>
-        <path d="M5 8.5l2 2 4-5"></path>
-      </svg>
-      <span class="name">snapsolve</span>
-      <button id="voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
-        <svg aria-hidden="true" width="12" height="13" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.6">
-          <rect x="3.5" y="1" width="5" height="8" rx="2.5"></rect>
-          <path d="M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2"></path>
+    <!-- Task 078 (Amendment 15): the chat list; docked at 600 px and wider, an overlay over #scrim below. -->
+    <nav id="sidebar" class="sidebar" aria-label="Chats" hidden>
+      <div class="sidebar-head">
+        <button id="sidebar-hide" class="icon sidebar-toggle" type="button" aria-label="Hide chats" title="Hide chats">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="2.5" width="13" height="11" rx="2.5"></rect>
+          <path d="M6 2.5v11"></path>
         </svg>
-      </button>
-      <button id="new-chat" class="icon new-chat" type="button" aria-label="New chat" title="New chat">
+        </button>
+        <span class="sidebar-name">Chats</span>
+      </div>
+      <button id="sidebar-new" class="sidebar-new" type="button">
         <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7">
           <path d="M7 2v10M2 7h10"></path>
         </svg>
+        New chat
       </button>
-      <button id="hide" class="icon hide" type="button" aria-label="Hide window" title="Hide (Esc)">
-        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7">
-          <path d="M3 3l8 8M11 3l-8 8"></path>
+      <div id="chats" class="chats"></div>
+    </nav>
+    <div id="scrim" class="scrim" hidden></div>
+    <div class="main">
+      <header id="titlebar" class="titlebar">
+        <button id="sidebar-show" class="icon sidebar-toggle" type="button" aria-label="Show chats" title="Show chats">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="1.5" y="2.5" width="13" height="11" rx="2.5"></rect>
+            <path d="M6 2.5v11"></path>
+          </svg>
+        </button>
+        <svg class="mark" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7">
+          <rect x="2" y="2" width="12" height="12" rx="3"></rect>
+          <path d="M5 8.5l2 2 4-5"></path>
         </svg>
-      </button>
-    </header>
-    <div id="content" class="content">
-      <p id="empty" class="empty">Press the snapsolve hotkey to solve what's on your screen.</p>
-      <main id="threads" aria-live="polite"></main>
-    </div>
-    <div id="composer" class="composer">
-      <label class="visually-hidden" for="follow-up">Ask a follow-up</label>
-      <div id="composer-box" class="composer-box">
-        <textarea id="follow-up" rows="1" placeholder="Ask a follow-up"></textarea>
-        <button id="composer-voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
+        <span class="name">snapsolve</span>
+        <span id="chat-title" class="chat-title"></span>
+        <button id="voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
           <svg aria-hidden="true" width="12" height="13" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.6">
             <rect x="3.5" y="1" width="5" height="8" rx="2.5"></rect>
             <path d="M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2"></path>
           </svg>
         </button>
-        <button id="send" class="icon send" type="button" aria-label="Send">
-          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M7 12V2M3 6l4-4 4 4"></path>
+        <button id="new-chat" class="icon new-chat" type="button" aria-label="New chat" title="New chat">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M7 2v10M2 7h10"></path>
           </svg>
         </button>
+        <button id="hide" class="icon hide" type="button" aria-label="Hide window" title="Hide (Esc)">
+          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M3 3l8 8M11 3l-8 8"></path>
+          </svg>
+        </button>
+      </header>
+      <div id="content" class="content">
+        <p id="empty" class="empty">Press the snapsolve hotkey to solve what's on your screen.</p>
+        <main id="threads" aria-live="polite"></main>
       </div>
-      <!-- Task 063: while dictating, the composer is this bar (the voice hotkey again sends, Esc cancels). -->
-      <div id="listening" class="listening" role="status" hidden>
-        <span class="dot" aria-hidden="true"></span>
-        <span class="levels" aria-hidden="true"><span class="level"></span><span class="level"></span><span class="level"></span><span class="level"></span><span class="level"></span></span>
-        <span class="transcript"></span>
-        <span class="hint"></span>
+      <div id="composer" class="composer">
+        <label class="visually-hidden" for="follow-up">Ask a follow-up</label>
+        <div id="composer-box" class="composer-box">
+          <textarea id="follow-up" rows="1" placeholder="Ask a follow-up"></textarea>
+          <button id="composer-voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
+            <svg aria-hidden="true" width="12" height="13" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="3.5" y="1" width="5" height="8" rx="2.5"></rect>
+              <path d="M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2"></path>
+            </svg>
+          </button>
+          <button id="send" class="icon send" type="button" aria-label="Send">
+            <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M7 12V2M3 6l4-4 4 4"></path>
+            </svg>
+          </button>
+        </div>
+        <!-- Task 063: while dictating, the composer is this bar (the voice hotkey again sends, Esc cancels). -->
+        <div id="listening" class="listening" role="status" hidden>
+          <span class="dot" aria-hidden="true"></span>
+          <span class="levels" aria-hidden="true"><span class="level"></span><span class="level"></span><span class="level"></span><span class="level"></span><span class="level"></span></span>
+          <span class="transcript"></span>
+          <span class="hint"></span>
+        </div>
+        <p id="voice-note" class="voice-note" role="status" hidden></p>
       </div>
-      <p id="voice-note" class="voice-note" role="status" hidden></p>
     </div>
     <div class="grip" aria-hidden="true"></div>
     <script src="renderer.js"></script>

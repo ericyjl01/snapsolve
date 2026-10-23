@@ -14,6 +14,9 @@
   --bubble: #e9e9ee;
   --code: rgba(0, 0, 0, 0.05);
   --hover: rgba(0, 0, 0, 0.07);
+  --sidebar: rgba(234, 234, 238, 0.97);
+  --selected: rgba(0, 0, 0, 0.08);
+  --scrim: rgba(0, 0, 0, 0.25);
   --accent: #0a63c9;
   --on-accent: #ffffff;
   --error: #c4251a;
@@ -36,6 +39,9 @@
     --bubble: rgba(255, 255, 255, 0.12);
     --code: rgba(255, 255, 255, 0.07);
     --hover: rgba(255, 255, 255, 0.1);
+    --sidebar: rgba(32, 32, 34, 0.98);
+    --selected: rgba(255, 255, 255, 0.1);
+    --scrim: rgba(0, 0, 0, 0.45);
     --accent: #3b8ef0;
     --error: #ff6961;
     --warning: #ffb340;
@@ -54,10 +60,17 @@ body {
   color: var(--fg);
 }
 
+/* 078: the docked sidebar (when wide) beside the chat column. */
 body {
   display: flex;
-  flex-direction: column;
   overflow: hidden;
+}
+
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .visually-hidden {
@@ -121,6 +134,160 @@ button[hidden] {
   flex: 1 1 auto;
 }
 
+/* The chat on screen names the chat column when the window is wide (078); narrow, the bar says snapsolve. */
+.titlebar .chat-title {
+  display: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-toggle[hidden] {
+  display: none;
+}
+
+/* The Chats sidebar (078): an overlay below 600 px, docked beside the chat from 600 px. */
+.sidebar {
+  position: fixed;
+  z-index: 20;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 248px;
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar);
+  border-right: 0.5px solid var(--hairline);
+  box-shadow: 4px 0 18px rgba(0, 0, 0, 0.25);
+}
+
+.sidebar[hidden],
+.scrim[hidden] {
+  display: none;
+}
+
+.scrim {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  background: var(--scrim);
+}
+
+.sidebar-head {
+  flex: 0 0 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  border-bottom: 0.5px solid var(--hairline);
+  font-size: 12px;
+  font-weight: 600;
+  user-select: none;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.sidebar-head button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.sidebar-new,
+.chat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+
+.sidebar-new {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 8px 8px 2px;
+}
+
+.sidebar-new:hover,
+.chat:hover {
+  background: var(--hover);
+}
+
+.chats {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chat-group {
+  margin: 10px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.chat[aria-current="true"] {
+  background: var(--selected);
+}
+
+.chat-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A chat answering shows an accent dot, a failed one a red dot; otherwise the dot keeps the names aligned. */
+.chat-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.chat-dot.busy {
+  background: var(--accent);
+}
+
+.chat-dot.error {
+  background: var(--error);
+}
+
+@media (min-width: 600px) {
+  .sidebar {
+    position: relative;
+    flex: 0 0 232px;
+    width: 232px;
+    box-shadow: none;
+  }
+
+  .titlebar .name {
+    display: none;
+  }
+
+  .titlebar .chat-title {
+    display: block;
+  }
+
+  /* The chat column and the composer, centred at the width of a comfortable line. */
+  #threads,
+  .empty,
+  .composer > * {
+    max-width: 560px;
+    margin-inline: auto;
+  }
+}
+
 .titlebar button,
 .titlebar a,
 .titlebar input {
@@ -157,90 +324,19 @@ button[hidden] {
   color: var(--muted);
 }
 
+/* The chat on screen (and any permission card above it): no box of its own, it sits on the window's ground. */
 .card {
-  background: var(--card);
-  border: 0.5px solid var(--hairline);
-  border-radius: 10px;
-  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-/* Older threads, closed: one-line rows. */
-.card.collapsed {
-  background: var(--row);
-  padding: 6px 10px;
-}
-
-/* "Earlier" above the first older thread. */
-.card:not(.older) + .card.older {
-  position: relative;
-  margin-top: 22px;
-}
-
-.card:not(.older) + .card.older::before {
-  content: "Earlier";
-  position: absolute;
-  left: 4px;
-  top: -22px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  min-width: 0;
-}
-
-.card:not(.older) .card-header {
-  cursor: default;
-}
-
-.card-header .thumb {
-  flex: 0 0 auto;
-  width: 48px;
-  height: 30px;
-  object-fit: cover;
-  object-position: left top;
-}
-
-.card-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.card-title {
-  font-size: 12px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.card-time {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.card-body[hidden] {
-  display: none;
+/* A permission card says what to do; it keeps a card's box so it stands apart from the chat. */
+.card.permission {
+  background: var(--card);
+  border: 0.5px solid var(--hairline);
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 .turns {
@@ -249,18 +345,20 @@ button[hidden] {
   gap: 8px;
 }
 
+/* A screenshot, on the right with the user's questions (078). */
 .thumb {
   display: block;
-  max-width: 100%;
-  max-height: 140px;
+  align-self: flex-end;
+  max-width: 70%;
+  max-height: 120px;
   object-fit: contain;
-  object-position: left;
+  object-position: right;
   background: #ffffff;
   border: 0.5px solid var(--edge);
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
-/* `display` above beats the UA's `[hidden]`, so a hidden thumbnail needs its own rule (as `.card-body` does). */
+/* `display` above beats the UA's `[hidden]`, so a hidden thumbnail needs its own rule. */
 .thumb[hidden] {
   display: none;
 }

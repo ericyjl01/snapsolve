@@ -67,3 +67,4 @@
 2026-10-17 · 052 · closed · recoverBusyThreads runs before the panel and hotkeys: threads an earlier run left new/queued/running become error with Retry (done when already answered), logged; unreadable threads untouched; follow-up 054 (backlog) (ad247a9)
 2026-10-17 · 013 · dropped · Windows archived (Amendment 4): Mac only from now on (-)
 2026-10-17 · 026 · dropped · Windows archived (Amendment 4); the first release moves to 055 on the Mac (-)
+2026-10-17 · adhoc · macOS live run: opus/high 4/4 correct; rates once 60.3 s (claude 34.4 s), rerun 5.6 s (-)

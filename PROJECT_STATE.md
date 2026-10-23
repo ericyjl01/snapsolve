@@ -3,16 +3,12 @@
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Installed on Eric's Mac: 0.2.4 (2026-10-23): 077 tray Appearance, 078 Chats sidebar, 079 pill composer.
-- Closed 2026-10-23: 079 ChatGPT-style pill composer (mic left, round send right, listening bar same shape,
-  "Ask anything" / "Ask a follow-up"). M3 queue now: only 032 (blocked on Eric's checklist).
-- Backlog: 080 serialize theme saves; 081 composer label follows placeholder; 070 covered by 076 (drop candidate).
-- Next: 082 (p0) sidebar stays closed after the user closes it, across resizes (Amendment 16); waits for /goal.
-  Cause: renderer.ts wide `change` → setSidebar(wide.matches). Then 083 (p1) crop-corners "=" icon for tray + title
-  bar (Amendment 17). 032 checklist results when Eric has them.
-- Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081.
+- Closed 2026-10-23: 082 a user-closed Chats sidebar stays closed across resizes until Show chats (Amendment 16);
+  renderer.ts `sidebarClosedByUser` / `chooseSidebar()`. Not yet released (0.2.4 lacks it).
+- Next: 083 (p1) crop-corners "=" icon for tray + title bar (Amendment 17).
+- Blocked: 032 (Eric's macOS checklist). Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081.
 
 ## Log
-2026-10-17 · adhoc · macOS live run: opus/high 4/4 correct; rates once 60.3 s (claude 34.4 s), rerun 5.6 s (-)
 2026-10-17 · 055 · closed · snapsolve 0.1.0 released into private marketplace ~/dev/snapsolve-local and installed in Claude Code as snapsolve@snapsolve-local (user scope); doctor ok for Node/claude/auth; skill is snapsolve:snapsolve; found 056 (backlog, widened to plugin.json) and 057 (flaky panel e2e) (3b5bed8)
 2026-10-17 · 057 · closed · the continued note shows from the seeded turn's start: runner emits turn (the saved user turn) and app broadcasts it; the 051/057 e2e wait for the saved first answer, not the streaming .answer; 10/10 panel e2e runs (d1e5294)
 2026-10-17 · adhoc · backlog 058 (drag to move the open panel) and 059 (resize it), Eric's asks after first use of 0.1.0 (-)
@@ -52,3 +48,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · adhoc · released snapsolve 0.2.4 into ~/dev/snapsolve-local (077 Appearance menu, 078 Chats sidebar, 079 pill composer); updated on Eric's Mac (e4e2b27)
 2026-10-23 · keel · queued · 082 sidebar stays closed after the user closes it (Eric's report on 0.2.4) (-)
 2026-10-23 · keel · queued · 083 crop-corners equals icon for the menu bar and title bar (Eric's choice) (-)
+2026-10-23 · 082 · closed · a sidebar the user closed (Hide chats, scrim, or a chat / New chat in the narrow overlay) stays closed across resizes until Show chats; narrowing still closes the overlay without counting as a user close (12a19c8)

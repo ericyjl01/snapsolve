@@ -2106,23 +2106,28 @@
     {
       "id": "082",
       "title": "sidebar stays closed after the user closes it, across window resizes",
-      "status": "open",
+      "status": "closed",
       "priority": 0,
       "milestone": 3,
       "deps": [],
       "file": "docs/tasks/082-sidebar-stays-closed.md",
       "blocked_on": null,
-      "attempts": 0,
-      "branch": null,
+      "attempts": 1,
+      "branch": "keel/082",
       "stash": null,
-      "closed_at": null,
-      "commit": null,
+      "closed_at": "2026-10-23",
+      "commit": "12a19c8",
       "notes": "",
       "kind": "task",
       "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
-      "tests_commit": null,
+      "tests_commit": "3c8490478c0a15a6b279554bad90b0fecadee961",
       "no_tests": null,
-      "review": null
+      "review": {
+        "verdict": "pass",
+        "sha": "87d7e50ef56872e73bff9fa1939caf4a35f9c7a6",
+        "reasons": "e2e proves a sidebar closed by Hide chats stays hidden at 700/360/760 px and Show chats re-docks it; a scrim or chat-choice close in the narrow overlay survives widening to 760; never-user-closed sidebar still closes on narrowing and re-docks on widening, and opening while narrow docks on widen; 078 case unchanged; tests untouched after red; task tests 40/40 and npm test green",
+        "at": "2026-10-23"
+      }
     },
     {
       "id": "083",

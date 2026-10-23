@@ -164,6 +164,21 @@ function setWindowWidth(app: ElectronApplication, width: number): Promise<void> 
 }
 
 /** Resizes the window and waits until the page has laid out at the new width (082): a "still closed" check is then meaningful. */
+/**
+ * 078's narrow window (the sidebar an overlay), as a user's edge drag leaves it: 360 × 460, then `resized`, so a shown
+ * window saves it and later captures reopen at it. 091's default (9 × 6 in) is wider than 600 px.
+ */
+async function narrowWindow(p: { app: ElectronApplication; page: Page }): Promise<void> {
+  await p.app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    const { x, y } = win.getBounds();
+    win.setBounds({ x, y, width: 360, height: 460 });
+    win.emit("resized");
+  });
+  await expect.poll(() => p.page.evaluate(() => window.innerWidth), { timeout: 5_000 }).toBe(360);
+  await p.page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+}
+
 async function resizeTo(p: { app: ElectronApplication; page: Page }, width: number): Promise<void> {
   await setWindowWidth(p.app, width);
   await expect.poll(() => p.page.evaluate(() => window.innerWidth), { timeout: 5_000 }).toBe(width);
@@ -239,7 +254,7 @@ describe("panel (e2e)", () => {
       const content = await p.page.locator("#content").boundingBox();
       const composer = await p.page.locator("#composer").boundingBox();
       expect(composer && content && composer.y >= content.y + content.height - 1).toBe(true);
-      expect(composer && Math.round(composer.y + composer.height)).toBe(460);
+      expect(composer && Math.round(composer.y + composer.height)).toBe(info.bounds.height);
       // Shift+Enter is a new line, not a send.
       await box.fill("Why");
       await box.press("Shift+Enter");
@@ -513,12 +528,13 @@ describe("panel (e2e)", () => {
   }, 60_000);
 
   // 078 (Amendment 15, replaces 061's "Earlier" rows): one chat on screen; the others are in the Chats sidebar,
-  // an overlay at the default 360 px. Choosing one shows it, and the composer and the next capture continue it.
+  // an overlay in a narrow (360 px) window. Choosing one shows it, and the composer and the next capture continue it.
   it("narrow: one chat on screen, Show chats opens the overlay newest first under Today, choosing the older one shows it and follow-ups and captures land in it (078)", async () => {
     const p = await launchPanel();
     const nav = p.page.locator('nav[aria-label="Chats"]');
     try {
       const older = await capture(p.app);
+      await narrowWindow(p);
       await p.page.locator(`${card(older)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       await newChat(p.page);
       const newest = await capture(p.app);
@@ -572,6 +588,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel();
     try {
       const first = await capture(p.app);
+      await narrowWindow(p);
       await p.page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       await showChats(p.page);
       await p.page.locator('nav[aria-label="Chats"]').getByRole("button", { name: "New chat" }).click();
@@ -656,6 +673,7 @@ describe("panel (e2e)", () => {
     const nav = p.page.locator('nav[aria-label="Chats"]');
     try {
       const id = await capture(p.app);
+      await narrowWindow(p);
       await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
 
       await showChats(p.page);
@@ -943,6 +961,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel(dataDir);
     try {
       await p.page.locator(`[data-chat-id="${ids.today}"]`).waitFor({ state: "attached", timeout: 10_000 });
+      await narrowWindow(p);
       await showChats(p.page);
       const order = await p.page
         .locator('nav[aria-label="Chats"] .chat-group, nav[aria-label="Chats"] [data-chat-id]')
@@ -967,6 +986,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel(dataDir);
     try {
       await p.page.locator("[data-chat-id]").first().waitFor({ state: "attached", timeout: 10_000 });
+      await narrowWindow(p);
       await showChats(p.page);
       const [sidebar, ground] = await p.page.evaluate(() => [
         getComputedStyle(document.querySelector('nav[aria-label="Chats"]') as Element).backgroundColor,

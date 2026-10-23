@@ -6,30 +6,30 @@ Eric (0.2.7): "SnapSolve is not a translucent background. So I want you to make 
 ## Scope
 In:
 - macOS window created with `transparent: true` (plus whatever Electron needs alongside it for a frameless, resizable, shadowed panel); confirm on Eric's Mac that the desktop shows through.
-- Tray › **Transparency ›** radio items: `Solid` (100% ground), `10%`, `20%` (today's intended 88% ≈ this), `30%`, `40%`, `50%`, checked = current; a pick applies live (no restart) and is saved to config.json as `transparency` (0–50, default 20), like Appearance (077: `saveTheme`-style single-key save, other keys untouched).
+- Tray › **Transparency ›** radio items in 10% steps (Eric: "If there is no slider, let's just add percentages in increments of 10%."): `0% (solid)`, `10%`, `20%` (today's intended 88% ≈ this), `30%`, `40%`, `50%`, `60%`, `70%`, `80%`, `90%`, checked = current; a pick applies live (no restart) and is saved to config.json as `transparency` (a multiple of 10, 0–90, default 20), like Appearance (077: `saveTheme`-style single-key save, other keys untouched). 100% is left out: the ground would vanish.
 - Only the window's ground (background) becomes see-through; text, code blocks, bubbles, sidebar and the text bar stay readable (their own backgrounds keep a minimum opacity).
-- Electron menus cannot hold a draggable slider, so the "bar" is the submenu of steps (Eric to confirm; a real slider would need a small separate window — out of scope here).
-- config.json validation for `transparency` (integer 0–50; invalid → default with the usual config warning); SPEC Amendment 23; DECISIONS row; checklist row.
+- Electron menus cannot hold a draggable slider, so the "bar" is the submenu of steps (Eric confirmed, 2026-10-23).
+- config.json validation for `transparency` (0, 10, …, 90; anything else → default with the usual config warning); SPEC Amendments 23, 24; DECISIONS rows; checklist row.
 Out: OS blur (vibrancy — Amendment 13 chose no blur); per-display transparency; a slider window.
 
 ## Done when
 - [ ] `npx vitest run test/unit/panel.test.ts test/unit/tray.test.ts test/unit/config.test.ts test/e2e/panel.e2e.test.ts` passes
 - [ ] `npm test` is green
 - [ ] unit: on darwin the BrowserWindow options include `transparent: true`
-- [ ] unit: the tray has Transparency › Solid, 10%, 20%, 30%, 40%, 50% with the configured one checked; a pick calls the handler once and rebuilds the menu
-- [ ] e2e: setting transparency 40 makes the computed ground alpha 0.60 (and Solid → 1); text colour alpha stays 1
+- [ ] unit: the tray has Transparency › 0% (solid), 10%, … 90% (ten items) with the configured one checked; a pick calls the handler once and rebuilds the menu
+- [ ] e2e: setting transparency 40 makes the computed ground alpha 0.60 (0 → 1, 90 → 0.10); text colour alpha stays 1
 - [ ] hand check on Eric's Mac (checklist row): a window behind snapsolve shows through at 20% and more at 50%
 
 ## Tests
 Command: `npx vitest run test/unit/panel.test.ts test/unit/tray.test.ts test/unit/config.test.ts test/e2e/panel.e2e.test.ts`
 - unit (panel): darwin window options have `transparent: true` and a fully transparent backgroundColor; other platforms unchanged
-- unit (tray): Transparency submenu after Appearance; six radio items in order; checked follows config; picking the checked one does nothing; picking another calls `onTransparency(n)` and the menu is rebuilt with it checked
-- unit (config): `transparency` default 20; 0 and 50 accepted; -1, 51, 12.5, "20" rejected → default + warning; saving it keeps every other key
+- unit (tray): Transparency submenu after Appearance; ten radio items in order (0% (solid), 10% … 90%); checked follows config; picking the checked one does nothing; picking another calls `onTransparency(n)` and the menu is rebuilt with it checked
+- unit (config): `transparency` default 20; 0, 50 and 90 accepted; -10, 15, 100, 12.5, "20" rejected → default + warning; saving it keeps every other key
 - e2e: config `transparency: 40` → body ground alpha 0.60; a live change through the test hook to 0 → alpha 1.0, no reload; the answer text colour is opaque
-- edge: light and dark themes both follow the setting
+- edge: light and dark themes both follow the setting; at 90% the answer text, code blocks and the text bar still have their own readable backgrounds
 
 ## Spec refs
-SPEC §4.1, Amendments 13, 14, 23; tasks 076, 077.
+SPEC §4.1, Amendments 13, 14, 23, 24; tasks 076, 077.
 
 ## Notes
-Eric 2026-10-23 (chat), quoted in Objective. Ask Eric whether the menu steps are fine instead of a slider.
+Eric 2026-10-23 (chat), quoted in Objective. Steps instead of a slider confirmed by Eric (10% increments).

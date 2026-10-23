@@ -220,3 +220,6 @@ Amendment 17's symbol (Eric, chat 2026-10-23: "Let's make the icon like 15% smal
 
 ## Amendment 23 — 2026-10-23
 §4.1 window ground and §1.2 tray, Amendment 13 (Eric, chat 2026-10-23: "SnapSolve is not a translucent background. So I want you to make that change. there should be a bar on the menu app that lets me change how transparent the window is."; DECISIONS 2026-10-23 090; task 090): the macOS window really is see-through behind its ground. Tray › Transparency › Solid, 10%, 20%, 30%, 40%, 50% (radio, after Appearance) sets how see-through the ground is, applied live and saved as config.json `transparency` (integer 0–50, default 20); text, code blocks, bubbles, the sidebar and the text bar stay readable. Out: OS blur; a slider window.
+
+## Amendment 24 — 2026-10-23
+Amendment 23's steps (Eric, chat 2026-10-23: "If there is no slider, let's just add percentages in increments of 10%."; DECISIONS 2026-10-23 090; task 090): tray › Transparency lists 0% (solid), 10%, 20% … 90% in 10% steps; config.json `transparency` is one of 0, 10, …, 90 (default 20). 100% is not offered (the ground would vanish).

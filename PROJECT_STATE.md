@@ -6,11 +6,11 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 - Closed 2026-10-23: 079 ChatGPT-style pill composer (mic left, round send right, listening bar same shape,
   "Ask anything" / "Ask a follow-up"). M3 queue now: only 032 (blocked on Eric's checklist).
 - Backlog: 080 serialize theme saves; 081 composer label follows placeholder; 070 covered by 076 (drop candidate).
-- Next: Eric tries 0.2.4; 032 checklist results when he has them.
+- Next: 082 (p0) sidebar stays closed after the user closes it, across resizes (Amendment 16); waits for /goal.
+  Cause: renderer.ts wide `change` → setSidebar(wide.matches). 032 checklist results when Eric has them.
 - Backlog 033, 042, 053, 054, 056, 066–070, 074, 080, 081.
 
 ## Log
-2026-10-17 · 013 · dropped · Windows archived (Amendment 4): Mac only from now on (-)
 2026-10-17 · 026 · dropped · Windows archived (Amendment 4); the first release moves to 055 on the Mac (-)
 2026-10-17 · adhoc · macOS live run: opus/high 4/4 correct; rates once 60.3 s (claude 34.4 s), rerun 5.6 s (-)
 2026-10-17 · 055 · closed · snapsolve 0.1.0 released into private marketplace ~/dev/snapsolve-local and installed in Claude Code as snapsolve@snapsolve-local (user scope); doctor ok for Node/claude/auth; skill is snapsolve:snapsolve; found 056 (backlog, widened to plugin.json) and 057 (flaky panel e2e) (3b5bed8)
@@ -50,3 +50,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · 078 · closed · Chats sidebar: one chat on screen, the others listed newest first under Today / Yesterday / Previous 7 days / Older; overlay over a scrim below 600 px (starts closed), docked from 600 px (starts open); choosing a chat shows it and openThread (preload 16, thread:open) makes main continue it on the next capture; sidebar New chat = + (0e082df)
 2026-10-23 · 079 · closed · pill composer: rounded 20 px bar with the mic at the left, the text, a round fg-colored send at the right (faded when empty), buttons bottom-aligned as it grows; listening bar the same pill; placeholder Ask anything / Ask a follow-up; follow-up 081 (backlog) (d650089)
 2026-10-23 · adhoc · released snapsolve 0.2.4 into ~/dev/snapsolve-local (077 Appearance menu, 078 Chats sidebar, 079 pill composer); updated on Eric's Mac (e4e2b27)
+2026-10-23 · keel · queued · 082 sidebar stays closed after the user closes it (Eric's report on 0.2.4) (-)

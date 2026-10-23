@@ -2102,6 +2102,27 @@
       "tests_commit": null,
       "no_tests": null,
       "review": null
+    },
+    {
+      "id": "082",
+      "title": "sidebar stays closed after the user closes it, across window resizes",
+      "status": "open",
+      "priority": 0,
+      "milestone": 3,
+      "deps": [],
+      "file": "docs/tasks/082-sidebar-stays-closed.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run test/e2e/panel.e2e.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

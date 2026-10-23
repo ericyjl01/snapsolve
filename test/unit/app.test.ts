@@ -1024,7 +1024,6 @@ describe("applyTheme (077)", () => {
   });
 });
 
-// 078 (Amendment 15): choosing a chat in the sidebar makes it current; the next capture continues it.
 // 090 (Amendments 23, 24): tray Transparency applies to the open window at once, then is saved.
 describe("applyTransparency (090)", () => {
   it("sets the panel's ground before the save resolves and updates the config", async () => {
@@ -1063,6 +1062,7 @@ describe("applyTransparency (090)", () => {
   });
 });
 
+// 078 (Amendment 15): choosing a chat in the sidebar makes it current; the next capture continues it.
 describe("openThread (078)", () => {
   it("makes the chosen thread the one the next capture appends to", async () => {
     const app = createApp(deps);

@@ -61,14 +61,19 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--ground);
   color: var(--fg);
+}
+
+/* 090: the ground is painted once, on html; a second coat on body would stack the alphas (40% would read as 16%). */
+html {
+  background: var(--ground);
 }
 
 /* 078: the docked sidebar (when wide) beside the chat column. */
 body {
   display: flex;
   overflow: hidden;
+  background: transparent;
 }
 
 .main {

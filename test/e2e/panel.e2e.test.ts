@@ -398,7 +398,9 @@ describe("panel (e2e)", () => {
     const p = await launchPanel(dataDir);
     try {
       expect(await p.page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches)).toBe(dark);
-      expect(await p.page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(ground);
+      // 090: the ground is on html alone; body adds no second coat.
+      expect(await p.page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(ground);
+      expect(await p.page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
       expect(await p.app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)).toBe(dark);
     } finally {
       await p.close();
@@ -416,7 +418,7 @@ describe("panel (e2e)", () => {
       await p.page.evaluate(() => ((window as unknown as { __marker: number }).__marker = 77));
       await p.app.evaluate((_electron) => (globalThis as unknown as { snapsolveTest: { setTheme(t: string): Promise<void> } }).snapsolveTest.setTheme("light"));
       await expect.poll(() => p.page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches), { timeout: 5_000 }).toBe(false);
-      await expect.poll(() => p.page.evaluate(() => getComputedStyle(document.body).backgroundColor), { timeout: 5_000 }).toBe("rgba(246, 246, 248, 0.8)");
+      await expect.poll(() => p.page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor), { timeout: 5_000 }).toBe("rgba(246, 246, 248, 0.8)");
       // Same document: restyled without a reload.
       expect(await p.page.evaluate(() => (window as unknown as { __marker?: number }).__marker)).toBe(77);
       await expect
@@ -756,7 +758,8 @@ describe("panel (e2e)", () => {
     };
     const style = (selector: string, prop: "backgroundColor" | "color") =>
       p.page.locator(selector).first().evaluate((el, name) => getComputedStyle(el)[name], prop);
-    const ground = async () => alphaOf(await style("body", "backgroundColor"));
+    // What the window shows: html's and body's grounds stacked, so a second coat on body cannot hide.
+    const ground = async () => 1 - (1 - alphaOf(await style("html", "backgroundColor"))) * (1 - alphaOf(await style("body", "backgroundColor")));
     const hook = (name: "setTransparency" | "setTheme", value: number | string) =>
       p.app.evaluate(
         (_electron, [fn, arg]) => (globalThis as unknown as { snapsolveTest: Record<string, (v: unknown) => Promise<void>> }).snapsolveTest[fn as string](arg),
@@ -931,7 +934,7 @@ describe("panel (e2e)", () => {
       await showChats(p.page);
       const [sidebar, ground] = await p.page.evaluate(() => [
         getComputedStyle(document.querySelector('nav[aria-label="Chats"]') as Element).backgroundColor,
-        getComputedStyle(document.body).backgroundColor,
+        getComputedStyle(document.documentElement).backgroundColor,
       ]);
       expect(sidebar).not.toBe(ground);
       expect(sidebar).not.toBe("rgba(0, 0, 0, 0)");

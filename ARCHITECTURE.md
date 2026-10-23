@@ -14,11 +14,11 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `auth.ts`: `claude auth status`, usage/rate-limit formatting
   - `encode.ts`: resize / PNG→JPEG fallback for the image sent to the model (pure, over an image interface)
   - `capture.ts`: display + source selection, capture mutex, platform panel handling; the PNG and the model's image made only on `encode()` (`screenshotOf`, task 088), so the window is shown first
-  - `panel.ts`: the panel BrowserWindow, tab and floating-window bounds (saved per display in `<data>/window.json`: `loadWindowBounds` / `saveWindowBounds`, task 058), content protection, the ground's alpha (`groundRule` injected with insertCSS, `setTransparency`, task 090), IPC handlers, `snapsolve://` protocol (`app/<file>` = the renderer from `dist/renderer`, `thread/<uuid>/<n>.png` = thumbnails), auto-hide timer
+  - `panel.ts`: the panel BrowserWindow, tab and floating-window bounds (saved per display in `<data>/window.json`: `loadWindowBounds` / `saveWindowBounds`, task 058; the default 9 × 6 in centred, `defaultBounds` / `pointsPerInch`, task 091), content protection, the ground's alpha (`groundRule` injected with insertCSS, `setTransparency`, task 090), IPC handlers, `snapsolve://` protocol (`app/<file>` = the renderer from `dist/renderer`, `thread/<uuid>/<n>.png` = thumbnails), auto-hide timer
   - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `newThread`), the renderer's request handlers, runner events → panel, `resolveClaudeCommand`
   - `hotkeys.ts`: globalShortcut registration, debounce, pause/resume
   - `tray.ts`: tray menu and tooltip
-  - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the permission cards' actions (fixed settings URLs: Screen Recording, Microphone, Speech Recognition; relaunch), hotkey labels per platform
+  - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the displays' physical sizes (`readDisplaySizes`: one osascript JavaScript run of CGDisplayScreenSize, task 091), the permission cards' actions (fixed settings URLs: Screen Recording, Microphone, Speech Recognition; relaunch), hotkey labels per platform
   - `voice.ts`: dictation (task 063): the speech helper's JSON-line protocol, listen → stop and send / Esc / hide cancel, the temporary Esc shortcut, `resolveSpeechHelper`
 - `src/preload/preload.ts`: contextBridge exposing exactly the sixteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10, 11 and 15 (`copy` → `hide`; `newThread`; `onVoice`, `toggleVoice`, `openVoiceSettings`; `openThread`)
 - `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `styles.css`

@@ -327,3 +327,10 @@ Symptom: after the icon was inset, "four crop corners" failed at 16 px only: the
 Cause:   the symbol is 14 px; its arm is round(14 · 0.3) = 4 px (offsets 0–3) and the probe round(14 · 0.25) = round(3.5) = 4. Two roundings of nearby fractions can cross.
 Fix:     the probe uses Math.floor (7535ed7); the drawing kept round (28.6%, nearer 083's 31% than ceil's 35.7%).
 Note:    probe a pixel strictly inside a shape: floor toward the start, never round to the boundary.
+
+## 2026-10-23 · task 091 · a wider default window silently voided a "fills 360 px" e2e check
+tags: e2e, window, default, layout, sidebar, 078, 084, 091
+Symptom: 091's default (9 × 6 in, ~981 px here) failed five sidebar e2e tests loudly (Show chats clicked a docked sidebar), and review 1 found a sixth that still passed: 084's "360 px fills it" measured the answer at ~981 px.
+Cause:   tests leaned on the old 360 × 460 default without saying so; `resizeTo` (setBounds, no `resized`) is not saved, so a capture reopens at the default.
+Fix:     `narrowWindow(p)` sets 360 × 460 and emits `resized` (saved, so later captures keep it); each narrow test calls it and asserts innerWidth 360 before measuring (0586896, 97f3e70).
+Note:    when a default changes, grep the tests for the old value and for comments naming it ("default 360 px"), not only for failures: a lower bound passes at any larger size.

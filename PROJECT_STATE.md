@@ -3,15 +3,15 @@
 ## Now
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Installed on Eric's Mac: 0.2.7 (2026-10-23). Goal run in progress. Not yet released: 088, 086 (on master).
-- Closed 088: the window shows right after the grab (~280 ms sooner, measured on the Mac); `capture.timing`
-  log line; checklist row 28 asks Eric for the installed app's numbers. Found 092 (duplicate encode), 093.
-- Closed 086: a footer under each answer, "Opus 5.5 · 12.3 s" (the model claude reported for that turn).
-- Next: 090 (p1) see-through + Transparency (Am. 23/24); then 087 (p2) icon ~15% smaller; 091 (p2) ~9 × 6 in.
-- Blocked: 032 — Eric runs master's docs/checklists/macos.md (28 items after 088).
+- Closed 088 (window shows right after the grab, ~280 ms sooner; capture.timing; found 092, 093) and 086
+  (a footer under each answer, "Opus 5.5 · 12.3 s").
+- In progress: 090 (keel/090, attempt 1) see-through window + tray Transparency. Tests 1e8e343 (red
+  recorded); ea673fc fixes three stale test expectations; code 52aa393, unit green. In flight: task tests +
+  `npm test`. Next: review (brief + Opus reviewer), close, `090: close`; then 087, 091.
+- Blocked: 032 — Eric runs master's docs/checklists/macos.md (29 rows after 090).
 - Backlog 033, 067, 069, 074, 089, 092, 093. Dropped by Eric 2026-10-23: 042, 053, 054, 056, 066, 068, 070, 080, 081.
 
 ## Log
-2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)
 2026-10-19 · 071 · dropped · Eric chose option (b) — the two macOS-only e2e assertions stay as they are and 065 closes on the Mac, so there is nothing to platform-gate (-)
 2026-10-20 · 065 · closed · on the Mac: a capture continues the current chat (newest thread on disk after a restart), + starts a new one (preload newThread on thread:new, SPEC Amendment 10, twelve functions), a typed question after + starts a text thread, hotkeys.append removed and warned, neutral append text; .thumb[hidden]; hand check → 032; found 072 (a3fb69b)
 2026-10-20 · 072 · closed · docs/checklists/macos.md on master: 032's items with Ctrl+Option+C, follow-up and restart rows on the bottom composer, rows 16–21 for the deferred hand checks of 058, 059, 060, 061, 064, 065 (18ced94)
@@ -51,3 +51,4 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · keel · queued · 090 see-through window + tray Transparency (p1), 091 default window ~9 × 6 in centred (p2) (-)
 2026-10-23 · 088 · closed · a capture shows the window as soon as the screen is grabbed (panel.open before currentThread/createThread), Thinking… in the chat it lands in, then PNG / model encode / save (Screenshot.encode(), screenshotOf); a failed save shows captureFailed in that chat; capture.timing log line (grabMs pngMs encodeMs saveMs shownMs); measured ~280 ms sooner on the Mac; checklist row 28; found 092, 093 (31aa1af)
 2026-10-23 · 086 · closed · each finished answer has its own footer right under it, <model name> · <its time> s, the model being the one claude reported in that turn's init event (saved on the turn; claude-opus-5-5 → Opus 5.5, [1m] dropped; old turns use the thread's alias); none while thinking or streaming, none on errors; the chat-wide status line is gone; src/shared/models.ts (b580194)
+2026-10-23 · 090 · paused · for /keel tidy: DECISIONS.md reached 101/100 rows, which fails npm test's caps check (harness.test); code, tests and the 0.8 ground fix are on keel/090 (c8aaba2) (-)

@@ -84,3 +84,4 @@
 2026-10-18 · 065 · paused · parked on keel/065 for the cloud session: code c0f97ed, unit/integration green, panel e2e 18/19 (the new + button test fails); next: fix it, SPEC Amendment 10 + DECISIONS rows, npm test, review, close (c0f97ed)
 2026-10-18 · 065 · blocked · two macOS-only e2e assertions (content protection; userdata without the override) cannot pass in a Linux cloud session, so Done-when and close's full-suite gate cannot be met: platform-gate them (071) or close on the Mac? → keel/065 (caa71ef)
 2026-10-18 · 071 · blocked · platform-gating the two macOS-only e2e assertions is 065's own block question (option a), so it waits for Eric rather than me answering it myself → not started (-)
+2026-10-18 · 063 · blocked · needs a macOS toolchain (swiftc for the native/speech helper) and the Mac dictation check; not startable in a Linux cloud session → not started (-)

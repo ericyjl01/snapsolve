@@ -1,6 +1,6 @@
 // The tray (SPEC §1.2): Show/Hide snapsolve (its hotkey, task 060) · Reset window position (058) · Appearance ›
 // Dark / Light / Match macOS (077) · Pause/Resume hotkeys · Open history folder · Clear history · Quit, and a tooltip
-// with usage (§3.6). The icon is drawn in code (no image files): a ring with a centre dot.
+// with usage (§3.6). The icon is drawn in code (no image files): crop corners framing an equals sign (083).
 import type { Theme } from "../shared/types";
 
 export const TRAY_LABELS = {
@@ -141,19 +141,28 @@ export async function openHistoryFolder(
 }
 
 /**
- * A `size`² BGRA bitmap (`nativeImage.createFromBitmap`): a ring and a centre dot in `rgb`, transparent elsewhere.
- * Pixels are either fully opaque or fully transparent, so a macOS template image stays crisp.
+ * A `size`² BGRA bitmap (`nativeImage.createFromBitmap`) in `rgb`, transparent elsewhere: four screenshot crop
+ * corners framing a bold equals sign (083). Pixels are either fully opaque or fully transparent, so a macOS
+ * template image stays crisp.
  */
 export function drawTrayIcon(size: number, rgb: readonly [number, number, number]): Buffer {
   const buf = Buffer.alloc(size * size * 4);
-  const c = (size - 1) / 2;
-  const outer = size * 0.46;
-  const inner = outer - Math.max(2, size / 8);
-  const dot = size * 0.16;
+  const stroke = Math.max(2, Math.round(size / 8));
+  const arm = Math.round(size * 0.3);
+  // The bars: an even width so they centre exactly, stacked with a stroke-wide gap.
+  const barWidth = 2 * Math.round((size * 0.45) / 2);
+  const barLeft = (size - barWidth) / 2;
+  const barTop = Math.floor((size - 3 * stroke) / 2);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const d = Math.hypot(x - c, y - c);
-      if ((d <= outer && d >= inner) || d <= dot) {
+      // Distances to the nearest vertical and horizontal edge: a corner is an arm along each.
+      const dx = Math.min(x, size - 1 - x);
+      const dy = Math.min(y, size - 1 - y);
+      const corner = (dy < stroke && dx < arm) || (dx < stroke && dy < arm);
+      const inBar = x >= barLeft && x < barLeft + barWidth;
+      const row = y - barTop;
+      const bar = inBar && ((row >= 0 && row < stroke) || (row >= 2 * stroke && row < 3 * stroke));
+      if (corner || bar) {
         const i = (y * size + x) * 4;
         buf[i] = rgb[2];
         buf[i + 1] = rgb[1];

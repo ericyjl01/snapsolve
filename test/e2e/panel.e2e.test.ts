@@ -385,6 +385,29 @@ describe("panel (e2e)", () => {
     }
   }, 60_000);
 
+  // 087 (Amendment 21): the mark is drawn about 15% smaller than 083's. 083 drew the paths' 12 of 16 viewBox units
+  // at 14 px, so its symbol spanned 10.5 × 10.5 px.
+  it("the title bar's mark is drawn 80–90% of 083's 10.5 px symbol, square (087)", async () => {
+    const p = await launchPanel();
+    try {
+      const drawn = await p.page.locator("#titlebar svg.mark").evaluate((svg) => {
+        const rects = [...svg.querySelectorAll("path")].map((el) => el.getBoundingClientRect());
+        const left = Math.min(...rects.map((r) => r.left));
+        const right = Math.max(...rects.map((r) => r.right));
+        const top = Math.min(...rects.map((r) => r.top));
+        const bottom = Math.max(...rects.map((r) => r.bottom));
+        return { width: right - left, height: bottom - top };
+      });
+      for (const side of [drawn.width, drawn.height]) {
+        expect(side / 10.5).toBeGreaterThanOrEqual(0.8);
+        expect(side / 10.5).toBeLessThanOrEqual(0.9);
+      }
+      expect(drawn.width).toBeCloseTo(drawn.height, 5);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
   // 075: config.json theme drives the look whatever macOS uses (dark when unset); 076: the ground is ~88% solid,
   // see-through like a terminal with no blur (Amendment 13).
   it.each([

@@ -199,11 +199,24 @@ describe("tray", () => {
   });
 });
 
-// 083 (Amendment 17): four screenshot crop corners framing a bold equals sign.
+// 083 (Amendment 17): four screenshot crop corners framing a bold equals sign; 087 (Amendment 21): drawn about 15%
+// smaller, centred, inside a transparent margin.
 describe("drawTrayIcon", () => {
   const icon = (size: number) => {
     const buf = drawTrayIcon(size, [9, 105, 218]);
-    return { buf, opaque: (x: number, y: number) => buf[(y * size + x) * 4 + 3] === 255 };
+    const opaque = (x: number, y: number) => buf[(y * size + x) * 4 + 3] === 255;
+    // The symbol's extent: the bounding box of its opaque pixels.
+    let left = size, top = size, right = -1, bottom = -1;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (!opaque(x, y)) continue;
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+      }
+    }
+    return { buf, opaque, box: { left, top, right, bottom, width: right - left + 1, height: bottom - top + 1 } };
   };
 
   it.each([16, 32])("%i px: BGRA of size², every pixel fully opaque or fully transparent, colour stored B, G, R", (size) => {
@@ -221,28 +234,46 @@ describe("drawTrayIcon", () => {
     expect(opaque).toBeLessThan(size * size);
   });
 
-  it.each([16, 32])("%i px: four crop corners, not a full frame", (size) => {
-    const { opaque } = icon(size);
+  it.each([16, 32])("%i px: the symbol is 80–90% of the side, square, centred within 1 px, with a transparent edge ring (087)", (size) => {
+    const { opaque, box } = icon(size);
+    for (const side of [box.width, box.height]) {
+      expect(side / size).toBeGreaterThanOrEqual(0.8);
+      expect(side / size).toBeLessThanOrEqual(0.9);
+    }
+    expect(box.width).toBe(box.height);
+    expect(Math.abs(box.left - (size - 1 - box.right))).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.top - (size - 1 - box.bottom))).toBeLessThanOrEqual(1);
     const s = size - 1;
-    const along = Math.round(size * 0.25); // inside an arm (about 30% of the side)
-    const mid = Math.floor(size / 2);
-    for (const [x, y] of [[0, 0], [s, 0], [0, s], [s, s]]) expect(opaque(x, y), `corner ${x},${y}`).toBe(true);
-    // One arm-length along each edge from each corner.
-    for (const [x, y] of [
-      [along, 0], [0, along], [s - along, 0], [s, along],
-      [0, s - along], [along, s], [s, s - along], [s - along, s],
-    ]) expect(opaque(x, y), `arm ${x},${y}`).toBe(true);
-    // The middle of each edge is open.
-    for (const [x, y] of [[mid, 0], [mid, s], [0, mid], [s, mid]]) expect(opaque(x, y), `edge middle ${x},${y}`).toBe(false);
+    for (let k = 0; k < size; k++) {
+      for (const [x, y] of [[k, 0], [k, s], [0, k], [s, k]]) expect(opaque(x, y), `edge ${x},${y}`).toBe(false);
+    }
   });
 
-  it.each([16, 32])("%i px: two horizontal bars in the middle, the centre between them empty", (size) => {
-    const { opaque } = icon(size);
-    const stroke = Math.max(2, size / 8);
-    const mid = Math.floor(size / 2);
-    // Opaque runs down the centre column, inside the frame.
+  it.each([16, 32])("%i px: four crop corners at the symbol's corners, not a full frame", (size) => {
+    const { opaque, box } = icon(size);
+    const { left: l, top: t, right: r, bottom: b, width: side } = box;
+    // Inside an arm (about 30% of the symbol): floor, as 25% of a 14 px symbol is 3.5 and its arm is 4 px (0–3).
+    const along = Math.floor(side * 0.25);
+    const midX = l + Math.floor(side / 2);
+    const midY = t + Math.floor(side / 2);
+    for (const [x, y] of [[l, t], [r, t], [l, b], [r, b]]) expect(opaque(x, y), `corner ${x},${y}`).toBe(true);
+    // One arm-length along each edge from each corner.
+    for (const [x, y] of [
+      [l + along, t], [l, t + along], [r - along, t], [r, t + along],
+      [l, b - along], [l + along, b], [r, b - along], [r - along, b],
+    ]) expect(opaque(x, y), `arm ${x},${y}`).toBe(true);
+    // The middle of each edge is open.
+    for (const [x, y] of [[midX, t], [midX, b], [l, midY], [r, midY]]) expect(opaque(x, y), `edge middle ${x},${y}`).toBe(false);
+  });
+
+  it.each([16, 32])("%i px: two horizontal bars in the middle of the symbol, the centre between them empty", (size) => {
+    const { opaque, box } = icon(size);
+    const { left: l, top: t, right: r, bottom: b, width: side } = box;
+    const stroke = Math.max(2, Math.round(side / 8));
+    const mid = l + Math.floor(side / 2);
+    // Opaque runs down the symbol's centre column, inside its frame.
     const runs: { top: number; bottom: number }[] = [];
-    for (let y = stroke; y < size - stroke; y++) {
+    for (let y = t + stroke; y <= b - stroke; y++) {
       if (!opaque(mid, y)) continue;
       const last = runs[runs.length - 1];
       if (last && last.bottom === y - 1) last.bottom = y;
@@ -257,18 +288,19 @@ describe("drawTrayIcon", () => {
       while (right < size - 1 && opaque(right + 1, run.top)) right++;
       expect(right - left + 1, `bar at y ${run.top}`).toBeGreaterThan(height);
       // A bar, not a full-width line: it stops short of the frame's sides.
-      expect(left).toBeGreaterThan(stroke);
-      expect(right).toBeLessThan(size - 1 - stroke);
+      expect(left).toBeGreaterThan(l + stroke);
+      expect(right).toBeLessThan(r - stroke);
     }
-    expect(opaque(mid, mid)).toBe(false);
+    expect(opaque(mid, t + Math.floor(side / 2))).toBe(false);
   });
 
-  it.each([16, 32])("%i px: no ring left at the old ring radius on the diagonal", (size) => {
-    const { opaque } = icon(size);
-    const c = (size - 1) / 2;
-    const r = size * 0.4; // between the old ring's inner and outer radius
+  it.each([16, 32])("%i px: no ring left at the old ring radius on the symbol's diagonal", (size) => {
+    const { opaque, box } = icon(size);
+    const cx = (box.left + box.right) / 2;
+    const cy = (box.top + box.bottom) / 2;
+    const r = box.width * 0.4; // between the old ring's inner and outer radius
     const off = Math.round(r / Math.SQRT2);
-    for (const [x, y] of [[c - off, c - off], [c + off, c + off], [c - off, c + off], [c + off, c - off]].map(([x, y]) => [Math.round(x), Math.round(y)])) {
+    for (const [x, y] of [[cx - off, cy - off], [cx + off, cy + off], [cx - off, cy + off], [cx + off, cy - off]].map(([x, y]) => [Math.round(x), Math.round(y)])) {
       expect(opaque(x, y), `${x},${y}`).toBe(false);
     }
   });

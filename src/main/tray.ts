@@ -165,28 +165,31 @@ export async function openHistoryFolder(
 
 /**
  * A `size`² BGRA bitmap (`nativeImage.createFromBitmap`) in `rgb`, transparent elsewhere: four screenshot crop
- * corners framing a bold equals sign (083). Pixels are either fully opaque or fully transparent, so a macOS
- * template image stays crisp.
+ * corners framing a bold equals sign (083), drawn about 15% smaller in a centred square with a transparent margin
+ * (087). Pixels are either fully opaque or fully transparent, so a macOS template image stays crisp.
  */
 export function drawTrayIcon(size: number, rgb: readonly [number, number, number]): Buffer {
   const buf = Buffer.alloc(size * size * 4);
-  const stroke = Math.max(2, Math.round(size / 8));
-  const arm = Math.round(size * 0.3);
+  // The symbol's square: the same margin on every side (whole pixels, so it centres exactly), ~85% of the side.
+  const margin = Math.round(size * 0.075);
+  const side = size - 2 * margin;
+  const stroke = Math.max(2, Math.round(side / 8));
+  const arm = Math.round(side * 0.3);
   // The bars: an even width so they centre exactly, stacked with a stroke-wide gap.
-  const barWidth = 2 * Math.round((size * 0.45) / 2);
-  const barLeft = (size - barWidth) / 2;
-  const barTop = Math.floor((size - 3 * stroke) / 2);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      // Distances to the nearest vertical and horizontal edge: a corner is an arm along each.
-      const dx = Math.min(x, size - 1 - x);
-      const dy = Math.min(y, size - 1 - y);
+  const barWidth = 2 * Math.round((side * 0.45) / 2);
+  const barLeft = (side - barWidth) / 2;
+  const barTop = Math.floor((side - 3 * stroke) / 2);
+  for (let y = 0; y < side; y++) {
+    for (let x = 0; x < side; x++) {
+      // Distances to the symbol's nearest vertical and horizontal edge: a corner is an arm along each.
+      const dx = Math.min(x, side - 1 - x);
+      const dy = Math.min(y, side - 1 - y);
       const corner = (dy < stroke && dx < arm) || (dx < stroke && dy < arm);
       const inBar = x >= barLeft && x < barLeft + barWidth;
       const row = y - barTop;
       const bar = inBar && ((row >= 0 && row < stroke) || (row >= 2 * stroke && row < 3 * stroke));
       if (corner || bar) {
-        const i = (y * size + x) * 4;
+        const i = ((y + margin) * size + x + margin) * 4;
         buf[i] = rgb[2];
         buf[i + 1] = rgb[1];
         buf[i + 2] = rgb[0];

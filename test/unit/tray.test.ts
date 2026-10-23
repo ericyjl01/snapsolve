@@ -3,10 +3,13 @@ import { createTray, drawTrayIcon, openHistoryFolder, TRAY_LABELS } from "../../
 
 interface Item {
   label: string;
-  click: () => void;
+  click?: () => void;
+  type?: string;
+  checked?: boolean;
+  submenu?: Item[];
 }
 
-function setup() {
+function setup(theme: "dark" | "light" | "system" = "dark") {
   const trays: FakeTray[] = [];
   class FakeTray {
     menu: Item[] = [];
@@ -37,19 +40,23 @@ function setup() {
     onOpenHistory: vi.fn(),
     onClearHistory: vi.fn(),
     onQuit: vi.fn(),
+    theme,
+    onTheme: vi.fn(),
   };
   const tray = createTray(deps);
   const labels = () => trays[0].menu.map((i) => i.label);
-  const click = (label: string) => trays[0].menu.find((i) => i.label === label)!.click();
-  return { tray, deps, trays, labels, click };
+  const click = (label: string) => trays[0].menu.find((i) => i.label === label)!.click!();
+  const appearance = () => trays[0].menu.find((i) => i.label === "Appearance")!.submenu!;
+  const pick = (label: string) => appearance().find((i) => i.label === label)!.click!();
+  return { tray, deps, trays, labels, click, appearance, pick };
 }
 
 describe("tray", () => {
-  it("has exactly six items, in order (058 adds Reset window position; 060 renames Open panel)", () => {
+  it("has exactly seven items, in order (058 adds Reset window position; 060 renames Open panel; 077 adds Appearance)", () => {
     const { labels, trays, deps } = setup();
     expect(trays).toHaveLength(1);
     expect(trays[0].image).toBe(deps.image);
-    expect(labels()).toEqual(["Show/Hide snapsolve (⌃⌥X)", "Reset window position", "Pause hotkeys", "Open history folder", "Clear history", "Quit"]);
+    expect(labels()).toEqual(["Show/Hide snapsolve (⌃⌥X)", "Reset window position", "Appearance", "Pause hotkeys", "Open history folder", "Clear history", "Quit"]);
     expect(TRAY_LABELS.resume).toBe("Resume hotkeys");
   });
 
@@ -81,18 +88,18 @@ describe("tray", () => {
     const { click, labels, deps } = setup();
     click("Pause hotkeys");
     expect(deps.onPause).toHaveBeenCalledTimes(1);
-    expect(labels()).toEqual(["Show/Hide snapsolve (⌃⌥X)", "Reset window position", "Resume hotkeys", "Open history folder", "Clear history", "Quit"]);
+    expect(labels()).toEqual(["Show/Hide snapsolve (⌃⌥X)", "Reset window position", "Appearance", "Resume hotkeys", "Open history folder", "Clear history", "Quit"]);
     click("Resume hotkeys");
     expect(deps.onResume).toHaveBeenCalledTimes(1);
-    expect(labels()[2]).toBe("Pause hotkeys");
+    expect(labels()[3]).toBe("Pause hotkeys");
   });
 
   it("setPaused syncs the label without calling the handlers", () => {
     const { tray, labels, deps } = setup();
     tray.setPaused(true);
-    expect(labels()[2]).toBe("Resume hotkeys");
+    expect(labels()[3]).toBe("Resume hotkeys");
     tray.setPaused(false);
-    expect(labels()[2]).toBe("Pause hotkeys");
+    expect(labels()[3]).toBe("Pause hotkeys");
     expect(deps.onPause).not.toHaveBeenCalled();
     expect(deps.onResume).not.toHaveBeenCalled();
   });
@@ -104,6 +111,44 @@ describe("tray", () => {
     expect(trays[0].tooltip).toBe("snapsolve · 5h 12% · 7d 34%");
     tray.setTooltip("");
     expect(trays[0].tooltip).toBe("snapsolve");
+  });
+
+  // 077 (Amendment 14): Appearance › Dark / Light / Match macOS, applied live by the handler.
+  it.each([
+    ["dark", "Dark"],
+    ["light", "Light"],
+    ["system", "Match macOS"],
+  ] as const)("Appearance is a submenu after Reset window position with three radio items; theme %s checks %s (077)", (theme, checkedLabel) => {
+    const { appearance, labels } = setup(theme);
+    expect(labels().indexOf("Appearance")).toBe(labels().indexOf("Reset window position") + 1);
+    const items = appearance();
+    expect(items.map((i) => i.label)).toEqual(["Dark", "Light", "Match macOS"]);
+    expect(items.every((i) => i.type === "radio")).toBe(true);
+    expect(items.filter((i) => i.checked).map((i) => i.label)).toEqual([checkedLabel]);
+    expect(TRAY_LABELS.appearance).toBe("Appearance");
+  });
+
+  it("choosing an Appearance item calls onTheme with dark / light / system; the checked one does nothing (077)", () => {
+    const { pick, deps } = setup("dark");
+    pick("Dark");
+    expect(deps.onTheme).not.toHaveBeenCalled();
+    pick("Light");
+    expect(deps.onTheme).toHaveBeenLastCalledWith("light");
+    pick("Match macOS");
+    expect(deps.onTheme).toHaveBeenLastCalledWith("system");
+    pick("Dark");
+    expect(deps.onTheme).toHaveBeenLastCalledWith("dark");
+    expect(deps.onTheme).toHaveBeenCalledTimes(3);
+  });
+
+  it("after a change the menu is rebuilt with the new item checked, and choosing it again does nothing (077)", () => {
+    const { pick, appearance, deps } = setup("dark");
+    const builds = deps.Menu.buildFromTemplate.mock.calls.length;
+    pick("Light");
+    expect(deps.Menu.buildFromTemplate.mock.calls.length).toBe(builds + 1);
+    expect(appearance().filter((i) => i.checked).map((i) => i.label)).toEqual(["Light"]);
+    pick("Light");
+    expect(deps.onTheme).toHaveBeenCalledTimes(1);
   });
 
   it("destroy removes the tray", () => {

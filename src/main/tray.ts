@@ -1,9 +1,13 @@
-// The tray (SPEC §1.2): Show/Hide snapsolve (its hotkey, task 060) · Reset window position (058) · Pause/Resume
-// hotkeys · Open history folder · Clear history · Quit, and a tooltip with usage (§3.6). The icon is drawn in code (no image files): a ring with a centre dot.
+// The tray (SPEC §1.2): Show/Hide snapsolve (its hotkey, task 060) · Reset window position (058) · Appearance ›
+// Dark / Light / Match macOS (077) · Pause/Resume hotkeys · Open history folder · Clear history · Quit, and a tooltip
+// with usage (§3.6). The icon is drawn in code (no image files): a ring with a centre dot.
+import type { Theme } from "../shared/types";
 
 export const TRAY_LABELS = {
   toggle: (hotkey: string) => `Show/Hide snapsolve (${hotkey})`,
   resetPosition: "Reset window position",
+  appearance: "Appearance",
+  themes: { dark: "Dark", light: "Light", system: "Match macOS" } satisfies Record<Theme, string>,
   pause: "Pause hotkeys",
   resume: "Resume hotkeys",
   history: "Open history folder",
@@ -15,8 +19,13 @@ const TOOLTIP = "snapsolve";
 
 interface MenuItem {
   label: string;
-  click: () => void;
+  click?: () => void;
+  type?: "radio";
+  checked?: boolean;
+  submenu?: MenuItem[];
 }
+
+const THEME_ORDER: readonly Theme[] = ["dark", "light", "system"];
 
 interface TrayLike {
   setContextMenu(menu: never): void;
@@ -35,6 +44,10 @@ export interface TrayDeps<Image, Menu> {
   /** Show/Hide: toggles the window. */
   onOpenPanel: () => void;
   onResetPosition: () => void;
+  /** config.theme at startup: the checked Appearance item. */
+  theme: Theme;
+  /** Appearance › an item other than the checked one: apply and save it (`applyTheme`). */
+  onTheme: (theme: Theme) => void;
   onPause: () => void;
   onResume: () => void;
   onOpenHistory: () => void;
@@ -55,11 +68,26 @@ export interface TrayControl {
 export function createTray<Image, Menu>(deps: TrayDeps<Image, Menu>): TrayControl {
   const tray = new deps.Tray(deps.image);
   let paused = false;
+  let theme = deps.theme;
 
   function build(): void {
     const template: MenuItem[] = [
       { label: TRAY_LABELS.toggle(deps.toggleHotkey), click: deps.onOpenPanel },
       { label: TRAY_LABELS.resetPosition, click: deps.onResetPosition },
+      {
+        label: TRAY_LABELS.appearance,
+        submenu: THEME_ORDER.map((t) => ({
+          label: TRAY_LABELS.themes[t],
+          type: "radio" as const,
+          checked: t === theme,
+          click: () => {
+            if (t === theme) return;
+            theme = t;
+            build();
+            deps.onTheme(t);
+          },
+        })),
+      },
       {
         label: paused ? TRAY_LABELS.resume : TRAY_LABELS.pause,
         click: () => {

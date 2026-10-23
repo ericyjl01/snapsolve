@@ -1,18 +1,19 @@
 // The capture → store → runner → panel pipeline (SPEC §2.1, §3.5, §4.2, Amendment 10): a capture joins the current
 // thread (the newest; after a restart the newest on disk) and starts a new one when there is none, after "+"
-// (`newThread`) or past the screenshot limit; its screenshot is saved and its card is on screen before claude is
-// spawned. Runner events and the renderer's requests (SPEC §4.4) are relayed between runner and panel.
+// (`newThread`) or past the screenshot limit. The window is shown as soon as the screen is grabbed, the card says
+// "Thinking…" while the screenshot is made and saved (task 088), and both happen before claude is spawned. Runner
+// events and the renderer's requests (SPEC §4.4) are relayed between runner and panel.
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { screenRecordingCard, SnapsolveError, voicePermissionCard } from "../shared/errors";
+import { screenRecordingCard, SnapsolveError, userMessage, voicePermissionCard } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
-import type { AssistantTurn, Config, Theme, Thread, VoiceCardKind, VoiceDenial } from "../shared/types";
+import type { AssistantTurn, Config, Theme, Thread, ThreadStatus, VoiceCardKind, VoiceDenial } from "../shared/types";
 import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
 import { isSafeExternalUrl } from "./panel";
 import { type Command, retryTarget, type Runner, type RunnerEvent, type TurnOutcome, type TurnRequest } from "./runner";
-import { isUuid, type Store } from "./store";
+import { isUuid, type SavedScreenshot, type Store } from "./store";
 
 export interface AppDeps {
   store: Store;
@@ -28,11 +29,16 @@ export interface AppDeps {
   onTurnEnded?: () => void;
   /** The usage line ("5h N% · 7d M%") from every `rate_limit_event`: the tray tooltip (SPEC §3.6). */
   onUsage?: (usage: string) => void;
+  /** The capturer's monotonic clock in ms (`performance.now` by default), for the `capture.timing` line (088). */
+  now?: () => number;
 }
 
-/** A capture's full-resolution PNG (`Screenshot` from capture.ts, or a test fixture). */
+/** A capture (`Screenshot` from capture.ts, or a test fixture) whose PNG is made when `encode` is called (088). */
 export interface Shot {
-  png: Uint8Array;
+  /** `now()` when the capture was asked for. */
+  startedAt: number;
+  grabMs: number;
+  encode(): { png: Uint8Array; pngMs: number; encodeMs: number };
 }
 
 export type AppHandlers = {
@@ -49,8 +55,9 @@ export type AppHandlers = {
 
 export interface App {
   /**
-   * Joins the current thread; a new thread when there is none, after "+", or when it is full (SPEC §2.3, seeded).
-   * Resolves with the thread's id once the card is shown and the turn is queued.
+   * Shows the window at once (088), then joins the current thread; a new thread when there is none, after "+", or
+   * when it is full (SPEC §2.3, seeded). Resolves with the thread's id once the turn is queued, or once a screenshot
+   * that could not be saved shows the capture error in that chat.
    */
   onCapture(shot: Shot): Promise<string>;
   /**
@@ -75,6 +82,7 @@ export interface App {
 
 export function createApp(deps: AppDeps): App {
   const { store, runner, panel, config, log } = deps;
+  const now = deps.now ?? (() => performance.now());
   /** The thread a capture joins; undefined until known (then the newest on disk), null when there is none. */
   let current: string | null | undefined;
   /** "+" was clicked: the next capture or question starts a new thread. */
@@ -86,6 +94,8 @@ export function createApp(deps: AppDeps): App {
   let permissionId: string | null = null;
   /** The voice permission card's id while it is shown (task 063); also only in `known`. */
   let voiceCardId: string | null = null;
+  /** New chats whose first screenshot could not be saved (088): the next capture into one is its first turn. */
+  const unstarted = new Set<string>();
 
   function remember(thread: Thread): void {
     known.set(thread.id, thread);
@@ -164,17 +174,47 @@ export function createApp(deps: AppDeps): App {
     permissionId = null;
   }
 
+  /**
+   * Makes and saves a capture's PNG once the window is shown (088) and logs `capture.timing`. When that fails, the
+   * chat shows the capture error where "Thinking…" was (a panel-only turn; a status this capture set goes back to
+   * `idle`) and null is returned.
+   */
+  async function saveShot(threadId: string, shot: Shot, shownMs: number, idle: ThreadStatus): Promise<SavedScreenshot | null> {
+    try {
+      const { png, pngMs, encodeMs } = shot.encode();
+      const saveStart = now();
+      // SPEC §2.1: the full-resolution PNG is on disk before anything is sent.
+      const saved = await store.saveScreenshot(threadId, png);
+      const saveMs = now() - saveStart;
+      log.info("capture.timing", { grabMs: wholeMs(shot.grabMs), pngMs: wholeMs(pngMs), encodeMs: wholeMs(encodeMs), saveMs: wholeMs(saveMs), shownMs: wholeMs(shownMs) });
+      return saved;
+    } catch (e) {
+      log.warn("app.screenshotNotSaved", { threadId, error: e });
+      const thread = known.get(threadId);
+      if (thread) {
+        const status = thread.status === "new" ? idle : thread.status;
+        remember({ ...thread, status, turns: [...thread.turns, errorTurn("captureFailed", userMessage("captureFailed"))] });
+        broadcast();
+      }
+      return null;
+    }
+  }
+
   /** `seed`: the previous thread's last answer, when an append past the screenshot limit starts this one (SPEC §2.3). */
-  async function newThread(shot: Shot, seed?: string): Promise<string> {
+  async function newThread(shot: Shot, shownMs: number, seed?: string): Promise<string> {
     const thread = await store.createThread({ model: config.model, effort: config.effort });
     dropPermissionCard();
-    // SPEC §2.1: the full-resolution PNG is on disk before anything is sent.
-    const saved = await store.saveScreenshot(thread.id, shot.png);
     current = thread.id;
     remember(thread);
-    // SPEC §4.2: the card (thumbnail + "Thinking…") is on screen before claude is spawned.
-    panel.open();
+    // SPEC §4.2: the card ("Thinking…") is on screen before claude is spawned.
     broadcast();
+    const saved = await saveShot(thread.id, shot, shownMs, "done");
+    if (!saved) {
+      unstarted.add(thread.id);
+      // Not busy on disk either, so a restart does not bring it back as an error card with nothing to retry.
+      await store.updateThread(thread.id, { status: "done" }).catch((e: unknown) => log.warn("app.threadNotUpdated", { threadId: thread.id, error: e }));
+      return thread.id;
+    }
     start(thread.id, { kind: "new", screenshot: saved.file, ...(seed !== undefined ? { seed } : {}) });
     return thread.id;
   }
@@ -218,7 +258,7 @@ export function createApp(deps: AppDeps): App {
       createdAt: new Date().toISOString(),
       title,
       status: "error",
-      turns: [{ role: "assistant", text: "", durationMs: 0, ttftMs: null, costUsd: null, isError: true, errorKind, errorMessage }],
+      turns: [errorTurn(errorKind, errorMessage)],
       permission,
     };
   }
@@ -294,6 +334,7 @@ export function createApp(deps: AppDeps): App {
       current = null;
       fresh = false;
       known.clear();
+      unstarted.clear();
       broadcast();
       return true;
     },
@@ -301,16 +342,21 @@ export function createApp(deps: AppDeps): App {
 
   return {
     async onCapture(shot) {
+      // 088: the window is shown as soon as the screen is grabbed; the PNG is made and saved after.
+      panel.open();
+      const shownMs = now() - shot.startedAt;
       const target = await currentThread();
       fresh = false;
-      if (!target) return newThread(shot);
-      if (decideAppend(target, config.maxScreenshotsPerThread) === "newThread") return newThread(shot, lastAnswerText(target));
-      const saved = await store.saveScreenshot(target.id, shot.png);
+      if (!target) return newThread(shot, shownMs);
+      if (decideAppend(target, config.maxScreenshotsPerThread) === "newThread") return newThread(shot, shownMs, lastAnswerText(target));
       dropPermissionCard();
-      if (!known.has(target.id)) remember(target);
-      panel.open();
+      const shown = known.get(target.id) ?? target;
+      // The chat it lands in says "Thinking…" until the runner takes the turn (its status and turn events).
+      remember(BUSY.has(shown.status) ? shown : { ...shown, status: "new" });
       broadcast();
-      start(target.id, { kind: "append", screenshot: saved.file });
+      const saved = await saveShot(target.id, shot, shownMs, shown.status);
+      if (!saved) return target.id;
+      start(target.id, unstarted.delete(target.id) ? { kind: "new", screenshot: saved.file } : { kind: "append", screenshot: saved.file });
       return target.id;
     },
 
@@ -411,6 +457,15 @@ export function resolveClaudeCommand(options: {
     if (options.isFile(file)) return { path: file, prefixArgs: [] };
   }
   return { path: "claude", prefixArgs: [] };
+}
+
+/** An errored assistant turn that was never claude's: a permission card's text, or a capture that could not be saved. */
+function errorTurn(errorKind: AssistantTurn["errorKind"], errorMessage: string): AssistantTurn {
+  return { role: "assistant", text: "", durationMs: 0, ttftMs: null, costUsd: null, isError: true, errorKind, errorMessage };
+}
+
+function wholeMs(ms: number): number {
+  return Math.round(ms);
 }
 
 /** The thread's last successful, non-empty answer: what a thread started past the screenshot limit is seeded with. */

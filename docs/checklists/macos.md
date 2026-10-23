@@ -38,6 +38,7 @@ prompt).
 | 25 | Sidebar stays closed (082) | At a wide size, close the sidebar (Hide chats); resize the window narrower and wider again | It stays closed until you click Show chats | |
 | 26 | Text bar (079) | Look at the box at the bottom with no chat on screen and with one; type and send | A rounded pill: mic on the left, round send button on the right; it says "Ask anything" with no chat and "Ask a follow-up" in one | |
 | 27 | Text fills a wide window (084) | Drag the window to about 1100 px wide, with the sidebar open and closed | The answer and the text bar widen with the window; no fixed-width column | |
+| 28 | Window shows at once (088) | Hide the window (Ctrl+Option+Z), press Ctrl+Option+C on a problem; do it again a few times. Then paste the `capture.timing` lines from `logs/snapsolve.log` | The window appears right after the press with "Thinking…" in the chat, before the thumbnail; the answer follows as before. Each capture logs one `capture.timing` line with grabMs, pngMs, encodeMs, saveMs, shownMs | |
 
 ## Notes
 

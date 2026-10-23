@@ -158,20 +158,78 @@ describe("tray", () => {
   });
 });
 
+// 083 (Amendment 17): four screenshot crop corners framing a bold equals sign.
 describe("drawTrayIcon", () => {
-  it.each([16, 32])("%i px: BGRA of size², opaque in the ring, transparent corners", (size) => {
+  const icon = (size: number) => {
     const buf = drawTrayIcon(size, [9, 105, 218]);
+    return { buf, opaque: (x: number, y: number) => buf[(y * size + x) * 4 + 3] === 255 };
+  };
+
+  it.each([16, 32])("%i px: BGRA of size², every pixel fully opaque or fully transparent, colour stored B, G, R", (size) => {
+    const { buf } = icon(size);
     expect(buf.length).toBe(size * size * 4);
-    const alpha = (x: number, y: number) => buf[(y * size + x) * 4 + 3];
-    expect(alpha(0, 0)).toBe(0);
-    expect(alpha(size - 1, size - 1)).toBe(0);
     let opaque = 0;
-    for (let i = 3; i < buf.length; i += 4) if (buf[i] === 255) opaque++;
-    expect(opaque).toBeGreaterThan(size); // something is drawn
-    expect(opaque).toBeLessThan(size * size); // not a filled square
-    // Colour is stored as B, G, R.
-    const i = buf.findIndex((_, k) => k % 4 === 3 && buf[k] === 255) - 3;
-    expect([buf[i], buf[i + 1], buf[i + 2]]).toEqual([218, 105, 9]);
+    for (let k = 3; k < buf.length; k += 4) {
+      expect([0, 255]).toContain(buf[k]);
+      if (buf[k] === 255) {
+        opaque++;
+        expect([buf[k - 3], buf[k - 2], buf[k - 1]]).toEqual([218, 105, 9]);
+      }
+    }
+    expect(opaque).toBeGreaterThan(size);
+    expect(opaque).toBeLessThan(size * size);
+  });
+
+  it.each([16, 32])("%i px: four crop corners, not a full frame", (size) => {
+    const { opaque } = icon(size);
+    const s = size - 1;
+    const along = Math.round(size * 0.25); // inside an arm (about 30% of the side)
+    const mid = Math.floor(size / 2);
+    for (const [x, y] of [[0, 0], [s, 0], [0, s], [s, s]]) expect(opaque(x, y), `corner ${x},${y}`).toBe(true);
+    // One arm-length along each edge from each corner.
+    for (const [x, y] of [
+      [along, 0], [0, along], [s - along, 0], [s, along],
+      [0, s - along], [along, s], [s, s - along], [s - along, s],
+    ]) expect(opaque(x, y), `arm ${x},${y}`).toBe(true);
+    // The middle of each edge is open.
+    for (const [x, y] of [[mid, 0], [mid, s], [0, mid], [s, mid]]) expect(opaque(x, y), `edge middle ${x},${y}`).toBe(false);
+  });
+
+  it.each([16, 32])("%i px: two horizontal bars in the middle, the centre between them empty", (size) => {
+    const { opaque } = icon(size);
+    const stroke = Math.max(2, size / 8);
+    const mid = Math.floor(size / 2);
+    // Opaque runs down the centre column, inside the frame.
+    const runs: { top: number; bottom: number }[] = [];
+    for (let y = stroke; y < size - stroke; y++) {
+      if (!opaque(mid, y)) continue;
+      const last = runs[runs.length - 1];
+      if (last && last.bottom === y - 1) last.bottom = y;
+      else runs.push({ top: y, bottom: y });
+    }
+    expect(runs).toHaveLength(2);
+    for (const run of runs) {
+      const height = run.bottom - run.top + 1;
+      let left = mid;
+      let right = mid;
+      while (left > 0 && opaque(left - 1, run.top)) left--;
+      while (right < size - 1 && opaque(right + 1, run.top)) right++;
+      expect(right - left + 1, `bar at y ${run.top}`).toBeGreaterThan(height);
+      // A bar, not a full-width line: it stops short of the frame's sides.
+      expect(left).toBeGreaterThan(stroke);
+      expect(right).toBeLessThan(size - 1 - stroke);
+    }
+    expect(opaque(mid, mid)).toBe(false);
+  });
+
+  it.each([16, 32])("%i px: no ring left at the old ring radius on the diagonal", (size) => {
+    const { opaque } = icon(size);
+    const c = (size - 1) / 2;
+    const r = size * 0.4; // between the old ring's inner and outer radius
+    const off = Math.round(r / Math.SQRT2);
+    for (const [x, y] of [[c - off, c - off], [c + off, c + off], [c - off, c + off], [c + off, c - off]].map(([x, y]) => [Math.round(x), Math.round(y)])) {
+      expect(opaque(x, y), `${x},${y}`).toBe(false);
+    }
   });
 });
 

@@ -313,6 +313,45 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
+  // 083 (Amendment 17): the title bar's mark is the tray's symbol, crop corners framing an equals sign.
+  it("the title bar's mark is four crop corners and two bars, stroked in currentColor and accent coloured (083)", async () => {
+    const p = await launchPanel();
+    try {
+      const mark = p.page.locator("#titlebar svg.mark");
+      const shape = await mark.evaluate((svg) => ({
+        stroke: svg.getAttribute("stroke"),
+        fill: svg.getAttribute("fill"),
+        others: svg.querySelectorAll(":scope > :not(path)").length,
+        paths: [...svg.querySelectorAll("path")].map((el) => el.getAttribute("d")),
+      }));
+      expect(shape.stroke).toBe("currentColor");
+      expect(shape.fill).toBe("none");
+      expect(shape.others).toBe(0);
+      expect(shape.paths).toEqual([
+        // Crop corners: top left, top right, bottom right, bottom left.
+        "M2 6V2h4",
+        "M10 2h4v4",
+        "M14 10v4h-4",
+        "M6 14H2v-4",
+        // The equals sign's two bars.
+        "M5 6.5h6",
+        "M5 9.5h6",
+      ]);
+      const [color, accent, text] = await mark.evaluate((svg) => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--accent)";
+        document.body.append(probe);
+        const resolved = [getComputedStyle(svg).color, getComputedStyle(probe).color, getComputedStyle(document.body).color];
+        probe.remove();
+        return resolved;
+      });
+      expect(color).toBe(accent);
+      expect(color).not.toBe(text);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+
   // 075: config.json theme drives the look whatever macOS uses (dark when unset); 076: the ground is ~88% solid,
   // see-through like a terminal with no blur (Amendment 13).
   it.each([

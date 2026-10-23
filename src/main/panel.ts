@@ -1,6 +1,6 @@
-// The panel (SPEC §2.2, §4.1–4.4, Amendments 5–8): one frameless, always-on-top, content-protected floating window,
-// 360 × 460 by default, that the user drags by its title bar (task 058) and resizes from its edges, not below
-// 280 × 300 (059). It is either shown (`showInactive`, so focus stays in the user's app) or hidden (`win.hide()`:
+// The panel (SPEC §2.2, §4.1–4.4, Amendments 5–8, 22): one frameless, always-on-top, content-protected floating window,
+// about 9 in × 6 in real size and centred by default (091), that the user drags by its title bar (task 058) and
+// resizes from its edges, not below 280 × 300 (059). It is either shown (`showInactive`, so focus stays in the user's app) or hidden (`win.hide()`:
 // nothing on screen, no tab; 060). Where the user leaves it, and at what size, is saved per display in
 // `<data>/window.json`. It loads the renderer from `snapsolve://app/…` (never file://), serves thumbnails from
 // `snapsolve://thread/<uuid>/<n>.png`, denies window.open and navigation, and hides on Esc.
@@ -22,9 +22,10 @@ export interface Rect {
   height: number;
 }
 
-/** The floating window's size and its first position: this far in from the work area's right and top edges. */
-export const OPEN_SIZE = Object.freeze({ width: 360, height: 460 });
-export const OPEN_INSET = 24;
+/** The floating window's default size in real inches, centred in the work area (Amendment 22, task 091). */
+export const OPEN_INCHES = Object.freeze({ width: 9, height: 6 });
+/** Points per inch when a display's physical size is unknown: a 34" 3440-wide ultrawide is ~110, a 14" MacBook ~127. */
+export const FALLBACK_POINTS_PER_INCH = 110;
 /** The window cannot be resized below this (task 059). */
 export const MIN_SIZE = Object.freeze({ width: 280, height: 300 });
 /** A drag fires many `moved`; the position is written once it has rested this long. */
@@ -45,12 +46,27 @@ const MIME: Record<string, string> = {
 };
 const SCREENSHOT_NAME = /^([1-9]\d{0,2})\.png$/;
 
-/** The window's default (first-show) bounds on a display: OPEN_SIZE, OPEN_INSET from the top-right; inside its work area. */
-export function defaultBounds(display: { workArea: Rect }): Rect {
+/** A display's physical size in millimetres (CGDisplayScreenSize on macOS). */
+export interface PhysicalSize {
+  width: number;
+  height: number;
+}
+
+/** Points per inch on a display: its width in points over its width in inches. Unknown (no size, 0 mm) → undefined. */
+export function pointsPerInch(display: { bounds: Rect }, mm: PhysicalSize | undefined): number | undefined {
+  if (!mm || !Number.isFinite(mm.width) || mm.width <= 0) return undefined;
+  return display.bounds.width / (mm.width / 25.4);
+}
+
+/**
+ * The window's default (first-show, Reset) bounds on a display: OPEN_INCHES at `perInch` points per inch, at least
+ * MIN_SIZE, centred in its work area and inside it (a small screen gets the largest fit, same centre); whole pixels.
+ */
+export function defaultBounds(display: { workArea: Rect }, perInch = FALLBACK_POINTS_PER_INCH): Rect {
   const area = display.workArea;
-  const right = Math.round(area.x + area.width);
-  const rect = { x: right - OPEN_INSET - OPEN_SIZE.width, y: area.y + OPEN_INSET, ...OPEN_SIZE };
-  return clampIntoWorkArea(rect, area);
+  const width = Math.max(MIN_SIZE.width, Math.round(OPEN_INCHES.width * perInch));
+  const height = Math.max(MIN_SIZE.height, Math.round(OPEN_INCHES.height * perInch));
+  return clampIntoWorkArea({ x: area.x + (area.width - width) / 2, y: area.y + (area.height - height) / 2, width, height }, area);
 }
 
 /** `rect` moved (and shrunk only if larger) so it lies fully inside `area`; whole pixels. */
@@ -201,6 +217,7 @@ export function createAutoHide(options: { seconds: number; isHeld: () => boolean
 
 interface DisplayLike {
   id: number;
+  bounds: Rect;
   workArea: Rect;
 }
 
@@ -226,6 +243,8 @@ export interface PanelDeps {
   bounds: WindowBounds;
   /** Persists the whole map (`saveWindowBounds`); a rejection is logged. */
   saveBounds(saved: WindowBounds): Promise<void>;
+  /** A display's physical size (`readDisplaySizes`, task 091), asked each time a default is needed; unknown → 110 pt/in. */
+  physicalSize?: (displayId: number) => PhysicalSize | undefined;
   /** A shown window was hidden (×, Esc, toggle, auto-hide), not the capture hide path: voice stops (task 063). */
   onClose?: () => void;
 }
@@ -247,7 +266,7 @@ export interface Panel {
   show(): void;
   /** After display changes (SPEC §4.1): a shown window is clamped into its display, not snapped. */
   redock(): void;
-  /** Tray "Reset window position": forgets every saved rect; a shown window goes back to the default. */
+  /** Tray "Reset window position": forgets every saved rect; a shown window goes back to the default (9 × 6 in, centred). */
   resetPosition(): void;
   send<C extends keyof IpcEvents>(channel: C, payload: IpcEvents[C]): void;
   /** Answers the renderer's requests; only the panel's own web contents is served. */
@@ -261,6 +280,8 @@ export interface Panel {
 
 export function createPanel(deps: PanelDeps): Panel {
   const { screen, config, log } = deps;
+  /** Displays whose default fell back to 110 pt/in, logged once each. */
+  const sizeUnknown = new Set<number>();
   let state: PanelState = "hidden";
   let display: DisplayLike = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   let saved: WindowBounds = { ...deps.bounds };
@@ -360,10 +381,20 @@ export function createPanel(deps: PanelDeps): Panel {
   wc.on("dom-ready", () => applyGround(true));
   void win.loadURL(RENDERER_URL).catch((e: unknown) => log.error("panel.loadFailed", { error: e }));
 
+  /** The default on `d` (091): 9 × 6 in from its physical size, else 110 pt/in (logged once for that display). */
+  function defaultOn(d: DisplayLike): Rect {
+    const perInch = pointsPerInch(d, deps.physicalSize?.(d.id));
+    if (perInch === undefined && !sizeUnknown.has(d.id)) {
+      sizeUnknown.add(d.id);
+      log.info("panel.physicalSizeUnknown", { display: d.id, pointsPerInch: FALLBACK_POINTS_PER_INCH });
+    }
+    return defaultBounds(d, perInch);
+  }
+
   /** The window's rect on `d`: its saved rect (at least MIN_SIZE), else the default, clamped into its work area. */
   function openBoundsOn(d: DisplayLike): Rect {
     const rect = saved[String(d.id)];
-    return rect ? clampIntoWorkArea(atLeastMinimum(rect), d.workArea) : defaultBounds(d);
+    return rect ? clampIntoWorkArea(atLeastMinimum(rect), d.workArea) : defaultOn(d);
   }
 
   function moveTo(to: Rect): void {
@@ -438,7 +469,7 @@ export function createPanel(deps: PanelDeps): Panel {
       clearTimeout(saveTimer);
       saved = {};
       persist();
-      if (state === "open") moveTo(defaultBounds(display));
+      if (state === "open") moveTo(defaultOn(display));
     },
     send(channel, payload) {
       if (!win.isDestroyed() && !wc.isDestroyed()) wc.send(channel, payload);

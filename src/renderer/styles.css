@@ -279,13 +279,7 @@ button[hidden] {
     display: block;
   }
 
-  /* The chat column and the composer, centred at the width of a comfortable line. */
-  #threads,
-  .empty,
-  .composer > * {
-    max-width: 560px;
-    margin-inline: auto;
-  }
+  /* No max width on the chat column or the composer (084): they widen with the window. */
 }
 
 .titlebar button,

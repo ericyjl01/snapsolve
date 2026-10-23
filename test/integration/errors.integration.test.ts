@@ -212,7 +212,8 @@ describe("app wiring (fake claude)", () => {
       onUsage,
     });
     const done = new Promise<void>((resolve) => runner.on((e) => e.type === "done" && resolve()));
-    await app.onCapture({ png: await readFile(PNG) });
+    const png = await readFile(PNG);
+    await app.onCapture({ startedAt: 0, grabMs: 0, encode: () => ({ png, pngMs: 0, encodeMs: 0 }) });
     await done;
     expect(onUsage).toHaveBeenLastCalledWith("5h 12% · 7d 34%");
   });

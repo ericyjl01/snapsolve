@@ -349,7 +349,7 @@ describe("screenRecordingDenied card in the panel", () => {
     expect(threads).toHaveLength(1);
     expect(threads[0]).toMatchObject({ permission: { prompted: false }, turns: [{ errorMessage: screenRecordingCard(false).message }] });
 
-    await app.onCapture({ png: new Uint8Array([1]) });
+    await app.onCapture({ startedAt: 0, grabMs: 0, encode: () => ({ png: new Uint8Array([1]), pngMs: 0, encodeMs: 0 }) });
     const after = deps.sent.at(-1) ?? [];
     expect(after.map((t) => t.id)).toEqual(["22222222-2222-4222-8222-222222222222"]);
     expect(after.some((t) => t.permission)).toBe(false);

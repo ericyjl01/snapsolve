@@ -4,6 +4,7 @@ import {
   createCapturer,
   decideAppend,
   ScreenRecordingDeniedError,
+  screenshotOf,
   type CapturerDeps,
   type DisplayLike,
   type SourceLike,
@@ -17,6 +18,8 @@ class FakeThumb implements ImageLike {
     readonly width: number,
     readonly height: number,
     tag = "img",
+    /** Told of every encoding call (toPNG, resize, toJPEG), and passed on to a resized copy. */
+    readonly onEncode?: (call: string) => void,
   ) {
     this.png = Buffer.from(`${tag}:${width}x${height}`);
   }
@@ -24,12 +27,15 @@ class FakeThumb implements ImageLike {
     return { width: this.width, height: this.height };
   }
   resize(options: { width: number; height: number }): ImageLike {
-    return new FakeThumb(options.width, options.height, "resized");
+    this.onEncode?.(`resize ${options.width}x${options.height}`);
+    return new FakeThumb(options.width, options.height, "resized", this.onEncode);
   }
   toPNG(): Buffer {
+    this.onEncode?.(`toPNG ${this.width}x${this.height}`);
     return this.png;
   }
   toJPEG(): Buffer {
+    this.onEncode?.("toJPEG");
     return Buffer.from("jpeg");
   }
 }
@@ -56,6 +62,7 @@ function harness(
     panelOpen?: boolean;
     /** What `getMediaAccessStatus("screen")` returns; a function to change it between captures. */
     mediaStatus?: string | (() => string);
+    now?: () => number;
   } = {},
 ): Harness {
   const displays = options.displays ?? [LEFT, RIGHT];
@@ -112,6 +119,7 @@ function harness(
       await later();
       events.push("waited");
     },
+    ...(options.now ? { now: options.now } : {}),
   };
   return { deps, events, statusChecks, requests, panel };
 }
@@ -142,7 +150,7 @@ describe("capture: source", () => {
       ],
     });
     const shot = await createCapturer(h.deps).capture();
-    expect(shot.png.toString()).toBe("right:1920x1200");
+    expect(shot.encode().png.toString()).toBe("right:1920x1200");
   });
 
   it("empty display_id → the source whose size equals the request", async () => {
@@ -153,7 +161,7 @@ describe("capture: source", () => {
         { display_id: "", thumbnail: new FakeThumb(1920, 1200, "right") },
       ],
     });
-    expect((await createCapturer(h.deps).capture()).png.toString()).toBe("right:1920x1200");
+    expect((await createCapturer(h.deps).capture()).encode().png.toString()).toBe("right:1920x1200");
   });
 
   it("no id or size match → the first source", async () => {
@@ -164,15 +172,15 @@ describe("capture: source", () => {
         { display_id: "", thumbnail: new FakeThumb(900, 600, "second") },
       ],
     });
-    expect((await createCapturer(h.deps).capture()).png.toString()).toBe("first:1000x700");
+    expect((await createCapturer(h.deps).capture()).encode().png.toString()).toBe("first:1000x700");
   });
 
   it("the reported size comes from getSize(), not the request; send is the encoded image", async () => {
     const h = harness({ cursor: { x: 2500, y: 300 }, sources: () => [{ display_id: "2", thumbnail: new FakeThumb(1918, 1199, "odd") }] });
     const shot = await createCapturer(h.deps).capture();
     expect(shot).toMatchObject({ width: 1918, height: 1199 });
-    expect(shot.png.toString()).toBe("odd:1918x1199");
-    expect(shot.send).toEqual({ buf: shot.png, mime: "image/png", width: 1918, height: 1199 });
+    expect(shot.encode().png.toString()).toBe("odd:1918x1199");
+    expect(shot.encode().send).toEqual({ buf: shot.encode().png, mime: "image/png", width: 1918, height: 1199 });
   });
 });
 
@@ -181,9 +189,9 @@ describe("capture: full resolution vs sent image", () => {
     const h = harness({ sources: () => [{ display_id: "1", thumbnail: new FakeThumb(3840, 2160, "uhd") }] });
     const shot = await createCapturer(h.deps).capture();
     expect(shot).toMatchObject({ width: 3840, height: 2160 });
-    expect(shot.png.toString()).toBe("uhd:3840x2160");
-    expect(shot.send).toMatchObject({ mime: "image/png", width: 2576, height: 1449 });
-    expect(shot.send.buf.toString()).toBe("resized:2576x1449");
+    expect(shot.encode().png.toString()).toBe("uhd:3840x2160");
+    expect(shot.encode().send).toMatchObject({ mime: "image/png", width: 2576, height: 1449 });
+    expect(shot.encode().send.buf.toString()).toBe("resized:2576x1449");
   });
 });
 
@@ -199,8 +207,8 @@ describe("capture: mutex", () => {
     });
     const capturer = createCapturer(h.deps);
     const done: string[] = [];
-    const a = capturer.capture().then((s) => done.push(s.png.toString()));
-    const b = capturer.capture().then((s) => done.push(s.png.toString()));
+    const a = capturer.capture().then((s) => done.push(s.encode().png.toString()));
+    const b = capturer.capture().then((s) => done.push(s.encode().png.toString()));
     await new Promise((r) => setTimeout(r, 20));
     expect(h.requests).toHaveLength(1);
     releases[0]();
@@ -287,6 +295,83 @@ describe("capture: failure", () => {
   });
 });
 
+// 088: the window is shown as soon as the screen is grabbed, so capture() resolves before any PNG or model encoding;
+// the pipeline asks for them after the show.
+describe("capture: encoding waits for encode() (088)", () => {
+  it("capture() resolves before toPNG or the model encoding; encode() then makes both, once", async () => {
+    const calls: string[] = [];
+    const h = harness({ sources: () => [{ display_id: "1", thumbnail: new FakeThumb(3440, 1440, "wide", (c) => calls.push(c)) }] });
+    const shot = await createCapturer(h.deps).capture();
+    expect(shot).toMatchObject({ width: 3440, height: 1440 });
+    expect(calls).toEqual([]);
+
+    const encoded = shot.encode();
+    expect(calls).toEqual(["toPNG 3440x1440", "resize 2576x1078", "toPNG 2576x1078"]);
+    expect(encoded.png.toString()).toBe("wide:3440x1440");
+    expect(encoded.send).toMatchObject({ mime: "image/png", width: 2576, height: 1078 });
+    expect(encoded.send.buf.toString()).toBe("resized:2576x1078");
+    // A second call is the same result, not a second encoding.
+    expect(shot.encode()).toBe(encoded);
+    expect(calls).toHaveLength(3);
+  });
+
+  it("startedAt is when capture() was called; grabMs spans the hide, the wait and the grab; pngMs and encodeMs time encode()", async () => {
+    let clock = 1000;
+    const h = harness({
+      platform: "darwin",
+      osRelease: "24.1.0",
+      panelOpen: true,
+      now: () => clock,
+      sources: () => {
+        clock += 40;
+        return [{ display_id: "1", thumbnail: new FakeThumb(3440, 1440, "wide", (c) => (clock += c.startsWith("toPNG 3440") ? 30 : 10)) }];
+      },
+    });
+    h.deps.wait = async (ms) => {
+      clock += ms;
+    };
+    const capturer = createCapturer(h.deps);
+    const pending = capturer.capture();
+    clock = 1005; // the press is at 1000; the grab starts after it
+    const shot = await pending;
+    expect(shot.startedAt).toBe(1000);
+    expect(shot.grabMs).toBe(150 + 40);
+    const encoded = shot.encode();
+    expect(encoded.pngMs).toBe(30);
+    expect(encoded.encodeMs).toBe(20);
+  });
+
+  it("edge: window already open → still hidden for the grab and shown again before capture() resolves; encoding comes after", async () => {
+    const h = harness({
+      platform: "darwin",
+      osRelease: "24.1.0",
+      panelOpen: true,
+      sources: () => [{ display_id: "1", thumbnail: new FakeThumb(1920, 1080, "img", (c) => h.events.push(c)) }],
+    });
+    const shot = await createCapturer(h.deps).capture();
+    expect(h.events).toEqual(["hide", "wait 150", "waited", "getSources", "got sources", "show"]);
+    shot.encode();
+    expect(h.events.slice(6)).toEqual(["toPNG 1920x1080", "toPNG 1920x1080"]);
+  });
+
+  it("an empty grab still fails the capture, with no encoding", async () => {
+    const calls: string[] = [];
+    const h = harness({ sources: () => [{ display_id: "1", thumbnail: new FakeThumb(0, 0, "empty", (c) => calls.push(c)) }] });
+    await expect(createCapturer(h.deps).capture()).rejects.toMatchObject({ kind: "captureFailed" });
+    expect(calls).toEqual([]);
+  });
+
+  it("screenshotOf (test mode's captureFromFile) defers encoding the same way", () => {
+    const calls: string[] = [];
+    let clock = 0;
+    const shot = screenshotOf(new FakeThumb(800, 600, "file", (c) => ((clock += 7), calls.push(c))), { startedAt: 3, grabMs: 4 }, () => clock);
+    expect(shot).toMatchObject({ width: 800, height: 600, startedAt: 3, grabMs: 4 });
+    expect(calls).toEqual([]);
+    expect(shot.encode()).toMatchObject({ pngMs: 7, encodeMs: 7 });
+    expect(shot.encode().png.toString()).toBe("file:800x600");
+  });
+});
+
 describe("decideAppend", () => {
   const shots = (n: number): Turn[] =>
     Array.from({ length: n }, (_, i): Turn => ({ role: "user", kind: "screenshot", file: `${String(i + 1).padStart(3, "0")}.png` }));
@@ -335,7 +420,7 @@ describe("capture: macOS Screen Recording permission (029)", () => {
     const h = harness({ platform: "darwin", mediaStatus: () => ((eventsAtCheck = h.events.length), "granted") });
     const capturer = createCapturer(h.deps);
     const shot = await capturer.capture();
-    expect(shot.png.toString()).toBe("img:1920x1080");
+    expect(shot.encode().png.toString()).toBe("img:1920x1080");
     expect(eventsAtCheck).toBe(0);
     expect(h.events[0]).toBe("hide");
     await capturer.capture();
@@ -395,6 +480,6 @@ describe("capture: macOS Screen Recording permission (029)", () => {
     const second = capturer.capture();
     const error = await rejection(first);
     expect(error.kind).toBe("screenRecordingDenied");
-    expect((await second).png.toString()).toBe("img:1920x1080");
+    expect((await second).encode().png.toString()).toBe("img:1920x1080");
   });
 });

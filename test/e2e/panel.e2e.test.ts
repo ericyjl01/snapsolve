@@ -294,6 +294,39 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
+  it("a capture with the window hidden shows it and the card's Thinking…; each capture logs capture.timing with all five fields (088)", async () => {
+    const p = await launchPanel();
+    try {
+      const id = await capture(p.app);
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "attached", timeout: 20_000 });
+      await expect.poll(() => p.page.locator(`${card(id)} .thinking`).count(), { timeout: 5_000 }).toBe(0);
+      // Hidden the way the show/hide hotkey hides it.
+      await p.app.evaluate(() => (globalThis as unknown as { snapsolveTest: { toggle(): void } }).snapsolveTest.toggle());
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
+
+      expect(await capture(p.app)).toBe(id);
+      expect((await windowInfo(p.app)).visible).toBe(true);
+      expect((await windowInfo(p.app)).focused).toBe(false);
+      await p.page.locator(`${card(id)} .thinking`).waitFor({ state: "visible", timeout: 5_000 });
+
+      const logFile = path.join(p.dataDir, "logs", "snapsolve.log");
+      const timings = () =>
+        readFileSync(logFile, "utf8")
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as Record<string, unknown>)
+          .filter((line) => line.event === "capture.timing");
+      await expect.poll(() => timings().length, { timeout: 5_000 }).toBe(2);
+      for (const line of timings()) {
+        for (const field of ["grabMs", "pngMs", "encodeMs", "saveMs", "shownMs"]) {
+          expect(Number.isInteger(line[field]) && (line[field] as number) >= 0, `${field} = ${String(line[field])}`).toBe(true);
+        }
+      }
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
   it("the title bar's × hides the window with nothing left on screen, and the next capture shows it again (061)", async () => {
     const p = await launchPanel();
     try {

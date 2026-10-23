@@ -4,7 +4,7 @@
 Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
 - Installed on Eric's Mac: 0.2.8 (2026-10-23, f9efb11; running, app.ready 0.2.8, no display-size warnings).
   It has 088, 086, 090, 087, 091. Saved window bounds stay: tray › Reset window position shows 091's default.
-- Goal run ended (2026-10-23): `tasks.py next` → none — all blocked; only 032 left.
+- Goal run ended (2026-10-23): `tasks.py next` → none — all blocked; only 032 left. master pushed to origin.
 - Blocked: 032 — Eric runs master's docs/checklists/macos.md (29 rows; rows 3, 16, 29 cover 087, 091, 090).
 - Backlog 033, 067, 069, 074, 089, 092, 093, 094, 095. Dropped by Eric 2026-10-23: 042, 053, 054, 056, 066, 068, 070, 080, 081.
 

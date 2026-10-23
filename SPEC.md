@@ -199,3 +199,6 @@ The title bar of Amendment 9 gains a **"+" button** (aria-label "New chat") at i
 
 ## Amendment 16 — 2026-10-23
 Amendment 15's sidebar (Eric, chat 2026-10-23: "if I collapse these sidebar and then I resize the window, the sidebar comes out. If I close the sidebar, it should stay closed until I click it again to open."; DECISIONS 2026-10-23 082; task 082): once the user closes the Chats sidebar (Hide chats, the scrim, or choosing a chat or New chat in the narrow overlay), it stays closed through any window resize until the user opens it again with Show chats. Before that, and while it is open, Amendment 15's defaults hold: docked open at 600 px and wider, closed below (narrowing closes the overlay without counting as the user closing it). Out: remembering the sidebar's state across restarts.
+
+## Amendment 17 — 2026-10-23
+§1.2 tray icon and the title-bar mark (Eric, chat 2026-10-23: "crop corners around the equals sign, log it as a task"; DECISIONS 2026-10-23 083; task 083): the tray icon, still drawn in code as a template image, is four screenshot crop corners framing a bold equals sign ("capture" + "answer") instead of the ring and centre dot; the window's title-bar mark is the same symbol. Out: the app icon (task 033).

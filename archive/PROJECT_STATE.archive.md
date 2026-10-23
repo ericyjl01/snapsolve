@@ -66,3 +66,4 @@
 2026-10-17 · 051 · closed · an append past maxScreenshotsPerThread starts a thread seeded with the previous thread's last successful answer (seed on the first screenshot turn: image + seededQuestion, kept on retry, first of the earlier answers in a fallback); the card shows CONTINUED_NOTE; no answer → plain new thread (09c9d4f)
 2026-10-17 · 052 · closed · recoverBusyThreads runs before the panel and hotkeys: threads an earlier run left new/queued/running become error with Retry (done when already answered), logged; unreadable threads untouched; follow-up 054 (backlog) (ad247a9)
 2026-10-17 · 013 · dropped · Windows archived (Amendment 4): Mac only from now on (-)
+2026-10-17 · 026 · dropped · Windows archived (Amendment 4); the first release moves to 055 on the Mac (-)

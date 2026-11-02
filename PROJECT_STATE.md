@@ -5,14 +5,13 @@
 - Built: Solve | Answer toggle, knowledge folder, format (Amendment 25: e5c5059 tests … a6fea15; 2 Opus reviews, pass).
 - Amendment 26 (Eric: "should still be able to function even though if it has no knowledge"): no folder/no text files → answers from the model's own knowledge; gaps for missing personal facts; unreadable → knowledgeUnreadable. d0bf60d tests (red: 12 failed), 4c24185 code, 763a98d docs; review 3 pass with notes → 752683d tests (red: 2), 72ea28b fix, 0629298 docs; review 4 pass. Unit 1120 passed, 7 skipped; build ok; caps ok.
 - Eric's data (~/snapsolve-answer-test, not in git): his General Magic KB + voice copied to knowledge/.source, split into 48 active files (answers/ stories/ me/ projects/ company/, 208 KB) + hidden .archive/; voice rules + never-say rules in answer-format.md, plus "Gaps: keep them few" (Eric chose option 1); config opus/low (fastest measured: first words 3–5 s; Opus fast mode: API says "not enabled" for his account).
-- Next, Eric's request (2 Nov, parked until after his call): voice hold-to-talk (hold ⌃⌥V / mic, release sends) and Esc stops an in-flight answer. Brainstorm open: how he asks and stops on a call. Global shortcuts have no key-up, so hold on ⌃⌥V needs key-release detection.
+- Next session (Eric: "we will built in new session"): 096 voice hold-to-talk, then 097 Esc stops an answer; both in this worktree's tasks.json (backlog, dep 089; master's tasks.json doesn't have them). Start in this worktree, by hand like 089. First finish the brainstorm with Eric (open questions in each task file); hold on ⌃⌥V needs key-release detection (globalShortcut has no key-up).
 - Pending: e2e (window) tests — Eric: "Later, I'll tell you". Then he tries it and says merge.
 - Merge path: queue 089 on master (memory files to W), keel/089 from master, merge e5c5059 → red → merge the rest → review → close.
 - Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
 - master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.
 
 ## Log
-2026-10-20 · 063 · closed · voice follow-up: hotkeys.voice Control+Alt+V shows the window and runs the on-device speech helper (native/speech Swift, SpeechAnalyzer/SFSpeechRecognizer, built by npm run build, released as app/native); listening bar with live transcript; the key again sends via the follow-up path to the current thread (or a text thread) as a voice-marked turn; Esc/hide cancel, ignored while the thread answers, empty → note, denied → settings card, failure → error card; preload 15 (Amendment 11); hand check → 032 row 22 (315f4c6)
 2026-10-21 · adhoc · released snapsolve 0.2.0 into ~/dev/snapsolve-local (redesign 058–061, ⌃⌥C 064, one chat + 065, voice 063 with app/native/snapsolve-speech); Eric: restart Claude Code, then /snapsolve update (b5a6c08)
 2026-10-22 · adhoc · backlog 074: update must re-package snapsolve.app when Info.plist keys change (0.2.0 voice helper SIGABRTs without NSSpeechRecognitionUsageDescription) (-)
 2026-10-22 · adhoc · queued 075: theme setting (dark default) and a more translucent window, Eric's choices (priority 0) (-)
@@ -52,3 +51,4 @@
 2026-10-23 · 087 · closed · the crop-corners symbol drawn about 15% smaller: tray bitmap in a centred square of size − 2·round(0.075·size) (14/16, 28/32 px, same proportions), title-bar mark 12 × 12; checklist row 3 (26a493b)
 2026-10-23 · 091 · closed · the default window is about 9 in × 6 in real size (CGDisplayScreenSize via osascript, 110 pt/in when unknown), centred in the work area, on first open and Reset; e2e sidebar tests narrow the window themselves; checklist row 16; found 095 (17f8751)
 2026-10-23 · adhoc · released snapsolve 0.2.8 into ~/dev/snapsolve-local (090 see-through + Transparency menu, 087 icon ~15% smaller, 091 9 × 6 in centred default, 088 faster show, 086 per-answer footer); updated on Eric's Mac (f9efb11)
+2026-11-02 · keel · queued · 096 voice hold-to-talk (p1) and 097 Esc stops an answer (p2), backlog after 089: Eric's request, to build in a new session on worktree-answer-mode (-)

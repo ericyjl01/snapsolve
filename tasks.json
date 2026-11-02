@@ -2443,6 +2443,52 @@
       "tests_commit": null,
       "no_tests": null,
       "review": null
+    },
+    {
+      "id": "096",
+      "title": "Voice hold-to-talk: hold ⌃⌥V or the mic button to record, release sends",
+      "status": "open",
+      "priority": 1,
+      "milestone": null,
+      "deps": [
+        "089"
+      ],
+      "file": "docs/tasks/096-voice-hold-to-talk.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "Eric 2026-11-02 (chat, before his call): build in a new session, on worktree-answer-mode by hand (tasks.py start/red/close need one checkout on master). Brainstorm open.",
+      "kind": "task",
+      "test_cmd": "npx vitest run --project unit test/unit/voice.test.ts test/unit/app.test.ts test/unit/hotkeys.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
+    },
+    {
+      "id": "097",
+      "title": "Esc stops an answer that is being written (a chatbot's stop)",
+      "status": "open",
+      "priority": 2,
+      "milestone": null,
+      "deps": [
+        "089"
+      ],
+      "file": "docs/tasks/097-esc-stops-answer.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "Eric 2026-11-02 (chat, before his call): build in a new session, on worktree-answer-mode by hand. Brainstorm open.",
+      "kind": "task",
+      "test_cmd": "npx vitest run --project unit test/unit/runner.test.ts test/unit/panel.test.ts test/unit/app.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

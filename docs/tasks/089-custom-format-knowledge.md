@@ -23,11 +23,11 @@ Out: fine-tuning; claude reading the folder with tools; PDFs/Word (convert to te
 
 ## Tests
 Command: `npx vitest run test/unit/knowledge.test.ts test/unit/config.test.ts test/unit/store.test.ts test/unit/runner.test.ts test/unit/app.test.ts test/unit/errors.test.ts test/unit/ipc.test.ts test/unit/paths.test.ts test/e2e/panel.e2e.test.ts`
-- knowledge: files read in path order (nested, BOM dropped, bytes), depth 4, hidden/other types skipped, exact extension list; missing / empty / not a folder / unreadable → knowledgeMissing; over the limit → knowledgeTooLarge (KB rounded up); exactly at it is fine; prompt assembly exact; path attribute escaped; user format vs built-in; `~` expansion; shipped prompts' key rules.
+- knowledge: files read in path order (nested, BOM dropped, bytes), depth 4, hidden/other types skipped, exact extension list; missing / empty / not a folder / unreadable folder, file or subfolder → knowledgeMissing naming it; over the limit → knowledgeTooLarge, the walk stopping there; exactly at it is fine; prompt assembly exact; path attribute escaped; user format vs built-in; `~` expansion; shipped prompts' key rules.
 - config: `mode` and `knowledgeDir` defaults, accepted and rejected values with exact warnings; `saveMode` changes only `mode`.
 - store: `mode: "answer"` saved, none for solve; an invalid mode skips the thread.
-- runner: answer chats get `answerSystemPrompt()` per turn, solve chats the system prompt; answer-mode screenshot questions; knowledge errors fail before spawning with their own message and Retry; unwired → internal.
-- app: new chats take `config.mode`; getMode/setMode (save once, refuse unknown, a failed save logged); setMode leaves the chat a capture joins alone.
+- runner: answer chats get `answerSystemPrompt()` per turn (first, fallback and `--resume` paths), solve chats the system prompt; answer-mode screenshot and seeded questions; knowledge errors fail before spawning with their own message and Retry; unwired → internal.
+- app: new chats take `config.mode`, a full chat's seeded continuation its own; getMode/setMode (save once, refuse unknown, a failed save logged); setMode leaves the chat a capture joins alone.
 - e2e: the toggle end to end, switching with a chat on screen, restart, the empty-folder error and Retry, 280 px fit, 18 preload functions.
 
 ## Spec refs

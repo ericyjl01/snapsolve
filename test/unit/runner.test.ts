@@ -12,6 +12,8 @@ import {
   buildFallbackMessage,
   buildUserMessage,
   createRunner,
+  ANSWER_APPEND_TEXT,
+  ANSWER_NEW_TEXT,
   APPEND_TEXT,
   NEW_TEXT,
   type RunnerEvent,
@@ -23,7 +25,7 @@ import {
   withLoginShellPath,
 } from "../../src/main/runner";
 import { createStore, type Store } from "../../src/main/store";
-import { userMessage } from "../../src/shared/errors";
+import { SnapsolveError, userMessage } from "../../src/shared/errors";
 import type { Thread } from "../../src/shared/types";
 
 const SID = "0b8f6a3c-1d2e-4f50-9a6b-7c8d9e0f1a2b";
@@ -983,6 +985,89 @@ describe("seeded new thread (051): the 7th append carries the previous thread's 
     const outcome = await runner.enqueue(t.id, { kind: "append", screenshot: shot.file, seed: SEED } as unknown as TurnRequest);
     expect(outcome.ok).toBe(false);
     expect(calls).toHaveLength(0);
+  });
+});
+
+// 089 (SPEC Amendment 25): an answer-mode chat drafts the user's own answer from their knowledge folder.
+describe("answer mode (089)", () => {
+  const argOf = (call: SpawnCall, flag: string) => call.args[call.args.indexOf(flag) + 1];
+  const texts = (call: SpawnCall) =>
+    (JSON.parse(call.child.written) as { message: { content: { type: string; text?: string }[] } }).message.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text as string);
+
+  it("an answer chat's claude gets answerSystemPrompt() as its system prompt, built again for every turn; a solve chat keeps systemPrompt", async () => {
+    let built = 0;
+    const answerSystemPrompt = vi.fn(async () => `ANSWER PROMPT ${++built}`);
+    const { runner } = makeRunner({ answerSystemPrompt });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    await runner.enqueue(t.id, { kind: "followUp", text: "Walk me through a project." });
+    await runner.enqueue(t.id, { kind: "followUp", text: "Shorter." });
+    const solve = await store.createThread({ model: "opus", effort: "high" });
+    await runner.enqueue(solve.id, { kind: "followUp", text: "What is 2 + 2?" });
+    expect(calls).toHaveLength(3);
+    expect(argOf(calls[0], "--system-prompt")).toBe("ANSWER PROMPT 1");
+    expect(argOf(calls[1], "--system-prompt")).toBe("ANSWER PROMPT 2");
+    expect(argOf(calls[2], "--system-prompt")).toBe(PROMPT);
+    expect(answerSystemPrompt).toHaveBeenCalledTimes(2);
+    // The rest of the SPEC §3.1 flag set is unchanged.
+    expect(calls[0].args.slice(1)).toEqual(
+      buildArgs({ model: "opus", effort: "high", systemPrompt: "ANSWER PROMPT 1", session: { id: t.sessionId } }),
+    );
+  });
+
+  it("a screenshot in an answer chat asks for the user's answer: ANSWER_NEW_TEXT first, ANSWER_APPEND_TEXT after", async () => {
+    const { runner } = makeRunner({ answerSystemPrompt: async () => "A" });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const first = await store.saveScreenshot(t.id, Buffer.from("png1"));
+    await runner.enqueue(t.id, { kind: "new", screenshot: first.file });
+    expect(JSON.parse(calls[0].child.written)).toEqual(buildUserMessage("new", [PNG], ANSWER_NEW_TEXT));
+    const second = await store.saveScreenshot(t.id, Buffer.from("png2"));
+    await runner.enqueue(t.id, { kind: "append", screenshot: second.file });
+    expect(texts(calls[1]).at(-1)?.endsWith(ANSWER_APPEND_TEXT)).toBe(true);
+    expect(texts(calls[1]).join("\n")).not.toContain(APPEND_TEXT);
+    expect(ANSWER_NEW_TEXT).toBe("Draft my answer to the question on this screen.");
+    expect(ANSWER_APPEND_TEXT).toBe("Here is another screenshot. Draft my answer to the question on it.");
+  });
+
+  it("a solve chat's screenshots are asked as before (NEW_TEXT), even with answer mode wired", async () => {
+    const answerSystemPrompt = vi.fn(async () => "A");
+    const { runner } = makeRunner({ answerSystemPrompt });
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect(texts(calls[0])).toEqual([NEW_TEXT]);
+    expect(answerSystemPrompt).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["knowledgeMissing", "Answer mode has nothing to draw on: no .md, .txt, .toml, .json, .yaml or .csv files in /k. Put your material there, or point knowledgeDir in config.json at your folder."],
+    ["knowledgeTooLarge", "The knowledge folder /k holds 300 KB of text, over answer mode's 256 KB limit. Remove some files, or point knowledgeDir in config.json at a smaller folder."],
+  ] as const)("%s: the turn fails before claude is started, with the error's own message on the card and Retry", async (kind, message) => {
+    const { runner, events } = makeRunner({
+      answerSystemPrompt: async () => {
+        throw new SnapsolveError(kind, message);
+      },
+    });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const outcome = await runner.enqueue(t.id, { kind: "followUp", text: "Tell me about a time you learned something fast." });
+    expect(calls).toHaveLength(0);
+    expect(outcome).toEqual({ ok: false, kind, message });
+    const saved = await store.getThread(t.id);
+    expect(saved.status).toBe("error");
+    expect(saved.turns.map((turn) => turn.role)).toEqual(["user", "assistant"]);
+    expect(saved.turns[1]).toMatchObject({ role: "assistant", text: "", isError: true, errorKind: kind, errorMessage: message });
+    expect(events.filter((e) => e.type === "error")).toEqual([
+      { type: "error", threadId: t.id, kind, message, retry: true, thread: saved },
+    ]);
+    expect(retryTarget(saved)).toEqual({ request: { kind: "followUp", text: "Tell me about a time you learned something fast." }, index: 0 });
+  });
+
+  it("an answer chat with answer mode not wired fails as internal, nothing started", async () => {
+    const { runner } = makeRunner();
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const outcome = await runner.enqueue(t.id, { kind: "followUp", text: "Why this role?" });
+    expect(calls).toHaveLength(0);
+    expect(outcome).toEqual({ ok: false, kind: "internal", message: userMessage("internal") });
   });
 });
 

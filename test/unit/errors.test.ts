@@ -47,6 +47,16 @@ describe("userMessage", () => {
     expect(userMessage("voiceFailed")).toBe("Voice input stopped working. Details are in the snapsolve log.");
   });
 
+  it("answer mode (089): no usable knowledge files, or too much of it, each say what to do", () => {
+    expect(ERROR_KINDS).toEqual(expect.arrayContaining(["knowledgeMissing", "knowledgeTooLarge"]));
+    expect(userMessage("knowledgeMissing")).toBe(
+      "Answer mode has nothing to draw on. Put your material in the knowledge folder, or point knowledgeDir in config.json at your folder.",
+    );
+    expect(userMessage("knowledgeTooLarge")).toBe(
+      "The knowledge folder is too large for answer mode. Remove some files, or point knowledgeDir in config.json at a smaller folder.",
+    );
+  });
+
   it("an unknown kind (e.g. from a stale renderer) falls back to the internal message", () => {
     expect(userMessage("noSuchKind" as ErrorKind)).toBe(userMessage("internal"));
   });

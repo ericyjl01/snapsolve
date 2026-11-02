@@ -82,6 +82,9 @@ describe("dataPaths", () => {
       logFile: path.join(d, "logs", "snapsolve.log"),
       app: path.join(d, "app"),
       windowState: path.join(d, "window.json"),
+      // 089 (Amendment 25): answer mode's default knowledge folder and the user's own answer format.
+      knowledge: path.join(d, "knowledge"),
+      answerFormat: path.join(d, "answer-format.md"),
     });
   });
 });

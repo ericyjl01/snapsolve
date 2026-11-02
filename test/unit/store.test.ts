@@ -116,6 +116,20 @@ describe("createThread", () => {
     const b = await store.createThread({ model: "opus", effort: "high" });
     expect(new Set([a.id, a.sessionId, b.id, b.sessionId]).size).toBe(4);
   });
+
+  // 089 (Amendment 25): an answer-mode chat says so in its thread.json; a solve chat's thread.json is as before.
+  it("mode answer is saved as mode: answer; mode solve or none writes no mode key", async () => {
+    const store = makeStore();
+    const answerChat = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    expect(answerChat.mode).toBe("answer");
+    expect(await readThreadJson(answerChat.id)).toEqual(answerChat);
+    expect((await readThreadJson(answerChat.id)).mode).toBe("answer");
+    for (const options of [{ model: "opus", effort: "high" as const, mode: "solve" as const }, { model: "opus", effort: "high" as const }]) {
+      const solveChat = await store.createThread(options);
+      expect(Object.keys(solveChat)).not.toContain("mode");
+      expect(Object.keys(await readThreadJson(solveChat.id))).not.toContain("mode");
+    }
+  });
 });
 
 describe("saveScreenshot", () => {
@@ -353,6 +367,22 @@ describe("listThreads", () => {
     await writeFile(path.join(threadsDir, badStatus.id, "thread.json"), JSON.stringify({ ...badStatus, status: "?" }));
     expect(await store.listThreads()).toEqual([good]);
     expect(entries.filter((e) => e.event === "store.threadUnreadable")).toHaveLength(3);
+  });
+
+  it("a thread.json's mode must be solve or answer when present (089); another value is skipped and logged", async () => {
+    const store = makeStore();
+    const answerChat = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const solveByHand = await store.createThread({ model: "opus", effort: "high" });
+    const badMode = await store.createThread({ model: "opus", effort: "high" });
+    await writeFile(path.join(threadsDir, solveByHand.id, "thread.json"), JSON.stringify({ ...solveByHand, mode: "solve" }));
+    await writeFile(path.join(threadsDir, badMode.id, "thread.json"), JSON.stringify({ ...badMode, mode: "interview" }));
+    const listed = await store.listThreads();
+    expect(listed.map((t) => t.id).sort()).toEqual([answerChat.id, solveByHand.id].sort());
+    expect(listed.find((t) => t.id === answerChat.id)?.mode).toBe("answer");
+    const warned = entries.filter((e) => e.event === "store.threadUnreadable");
+    expect(warned).toHaveLength(1);
+    expect(JSON.stringify(warned[0].fields)).toContain(badMode.id);
+    expect(JSON.stringify(warned[0].fields)).toContain("has an invalid mode");
   });
 
   it("a thread directory without thread.json is skipped and logged, not deleted", async () => {

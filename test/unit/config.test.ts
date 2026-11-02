@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULTS, loadConfig, saveTheme, saveTransparency } from "../../src/main/config";
+import { DEFAULTS, loadConfig, saveMode, saveTheme, saveTransparency } from "../../src/main/config";
 
 const SPEC_DEFAULTS = {
   // No append key (065): a capture continues the current thread. Voice (063): dictate a follow-up.
@@ -20,6 +20,10 @@ const SPEC_DEFAULTS = {
   theme: "dark",
   // 090 (Amendments 23, 24): how see-through the window's ground is, in percent.
   transparency: 20,
+  // 089 (Amendment 25): the mode new chats start in (the title bar toggle), and answer mode's knowledge folder
+  // (null → <data>/knowledge).
+  mode: "solve",
+  knowledgeDir: null,
 };
 
 let dir: string;
@@ -512,5 +516,92 @@ describe("saveTheme (077)", () => {
     await writeConfig({ theme: "dark" });
     await saveTheme(file, "light");
     expect((await loadConfig(file)).config.theme).toBe("light");
+  });
+});
+
+// 089 (Amendment 25): the title bar's Solve | Answer toggle sets the mode new chats start in.
+describe("mode (089)", () => {
+  it("defaults to solve", () => {
+    expect(DEFAULTS.mode).toBe("solve");
+  });
+
+  it.each(["solve", "answer"])("%s is accepted without a warning", async (mode) => {
+    await writeConfig({ mode });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config).toEqual({ ...SPEC_DEFAULTS, mode });
+  });
+
+  it.each([["interview"], [""], [1], [null]])("%j falls back to solve with one warning naming both modes", async (mode) => {
+    await writeConfig({ mode });
+    const r = await loadConfig(file);
+    expect(r.config.mode).toBe("solve");
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toBe(`"mode" must be one of solve, answer (got ${JSON.stringify(mode)}); using "solve"`);
+  });
+
+  it("an existing file without mode gets solve, no warning, and is not rewritten", async () => {
+    await writeConfig({ model: "opus", theme: "light" });
+    const before = await snapshot();
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.mode).toBe("solve");
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
+// 089 (Amendment 25): answer mode's knowledge folder; null → <data>/knowledge (resolved in knowledge.ts).
+describe("knowledgeDir (089)", () => {
+  it("defaults to null", () => {
+    expect(DEFAULTS.knowledgeDir).toBeNull();
+  });
+
+  it.each([[path.join(os.tmpdir(), "my-knowledge")], ["~/resumes/master"], ["~"]])("%s is kept as written, without a warning", async (knowledgeDir) => {
+    await writeConfig({ knowledgeDir });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.knowledgeDir).toBe(knowledgeDir);
+  });
+
+  it.each([["resumes/master"], ["~resumes"], [""], [42]])("%j falls back to null with one warning", async (knowledgeDir) => {
+    await writeConfig({ knowledgeDir });
+    const r = await loadConfig(file);
+    expect(r.config.knowledgeDir).toBeNull();
+    expect(r.warnings).toEqual([
+      `"knowledgeDir" must be null, an absolute path or a path starting with ~/ (got ${JSON.stringify(knowledgeDir)}); using null`,
+    ]);
+  });
+});
+
+describe("saveMode (089)", () => {
+  it("rewrites only mode: other keys and values (unknown keys too) stay as they are", async () => {
+    const original = { model: "sonnet", theme: "light", knowledgeDir: "~/resumes/master", myNote: "keep me", mode: "solve" };
+    await writeConfig(original);
+    expect(await saveMode(file, "answer")).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ ...original, mode: "answer" });
+    expect(Object.keys(JSON.parse(await readFile(file, "utf8")))).toEqual(Object.keys(original));
+    expect(await readdir(dir)).toEqual(["config.json"]);
+  });
+
+  it("adds mode to a config.json that has none; a missing file gets the defaults plus it", async () => {
+    await writeConfig({ model: "opus" });
+    expect(await saveMode(file, "answer")).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ model: "opus", mode: "answer" });
+    await rm(file);
+    expect(await saveMode(file, "answer")).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ ...SPEC_DEFAULTS, mode: "answer" });
+  });
+
+  it("malformed JSON is left untouched and an error is returned (no throw)", async () => {
+    await writeConfig("{ not json");
+    const before = await snapshot();
+    const result = await saveMode(file, "answer");
+    expect(result.ok).toBe(false);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("the saved mode is what loadConfig then reads", async () => {
+    await saveMode(file, "answer");
+    expect((await loadConfig(file)).config.mode).toBe("answer");
   });
 });

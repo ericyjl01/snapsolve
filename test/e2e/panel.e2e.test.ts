@@ -9,7 +9,7 @@ import { readDisplaySizes } from "../../src/main/macos";
 import { defaultBounds, pointsPerInch } from "../../src/main/panel";
 import { CONTINUED_NOTE } from "../../src/shared/errors";
 import type { Thread } from "../../src/shared/types";
-import { fixturesDir } from "../paths";
+import { fixturesDir, repoRoot } from "../paths";
 import { launchApp, type LaunchedApp } from "./helpers";
 
 const FAKE = path.join(fixturesDir, "fake-claude.mjs");
@@ -37,6 +37,9 @@ const PRELOAD_NAMES = [
   "toggleVoice",
   "openVoiceSettings",
   "openThread",
+  // Amendment 25 (task 089): the title bar's Solve | Answer toggle.
+  "getMode",
+  "setMode",
 ];
 
 interface Panel extends LaunchedApp {
@@ -273,7 +276,7 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the sixteen preload functions", async () => {
+  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the eighteen preload functions", async () => {
     const p = await launchPanel();
     try {
       expect((await windowInfo(p.app)).contentProtected).toBe(true);
@@ -1657,6 +1660,202 @@ describe("panel (e2e)", () => {
       await expect.poll(() => p.page.locator("#listening").isVisible(), { timeout: 5_000 }).toBe(false);
       expect(await p.page.locator("#follow-up").isVisible()).toBe(true);
       expect(await escapeRegistered(p.app)).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+});
+
+// Task 089 (SPEC Amendment 25): the title bar's Solve | Answer toggle and answer mode's knowledge folder.
+describe("answer mode (e2e, 089)", () => {
+  const ANSWER_EMPTY = "Answer mode. Ask a question and snapsolve drafts your answer from your knowledge folder.";
+
+  /** A data dir whose default knowledge folder (<data>/knowledge) holds one story. */
+  function dataDirWithKnowledge(): string {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    mkdirSync(path.join(dataDir, "knowledge", "stories"), { recursive: true });
+    writeFileSync(path.join(dataDir, "knowledge", "stories", "fast.md"), "I learned Electron in a week to build snapsolve.\n");
+    return dataDir;
+  }
+
+  /** The fake claude's `start` lines (FAKE_LOG): its argv per spawn; none when it never ran. */
+  function starts(fakeLog: string): { argv: string[] }[] {
+    let text = "";
+    try {
+      text = readFileSync(fakeLog, "utf8");
+    } catch {
+      return [];
+    }
+    return text
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { event: string; argv: string[] })
+      .filter((e) => e.event === "start");
+  }
+
+  const modeRadio = (page: Page, name: "Solve" | "Answer") =>
+    page.locator("#titlebar").getByRole("radiogroup", { name: "Mode" }).getByRole("radio", { name });
+  const checked = (page: Page) =>
+    page.locator('#titlebar [role="radio"][aria-checked="true"]').evaluateAll((els) => els.map((e) => e.textContent?.trim()));
+  const configMode = (dataDir: string) => (JSON.parse(readFileSync(path.join(dataDir, "config.json"), "utf8")) as { mode?: string }).mode;
+  const savedThread = (dataDir: string, id: string) => JSON.parse(readFileSync(path.join(dataDir, "threads", id, "thread.json"), "utf8")) as Thread;
+
+  async function launchWithLog(dataDir: string): Promise<{ launched: LaunchedApp; page: Page; fakeLog: string; projects: string }> {
+    const projects = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-projects-"));
+    const fakeLog = path.join(projects, "fake.log");
+    const launched = await launchApp({
+      dataDir,
+      env: { SNAPSOLVE_TEST_CLAUDE: FAKE, SNAPSOLVE_TEST_PROJECTS: projects, FAKE_PROJECTS: projects, FAKE_LOG: fakeLog },
+    });
+    const page = await launched.app.firstWindow();
+    await page.waitForLoadState("domcontentloaded");
+    return { launched, page, fakeLog, projects };
+  }
+
+  function cleanup(...dirs: string[]): void {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  }
+
+  it("Solve by default; Answer with no chat on screen saves mode answer; a typed question starts an answer chat whose claude gets the answer prompt, the format and the knowledge files", async () => {
+    const dataDir = dataDirWithKnowledge();
+    const { launched, page, fakeLog, projects } = await launchWithLog(dataDir);
+    try {
+      await expect.poll(() => checked(page), { timeout: 5_000 }).toEqual(["Solve"]);
+      await modeRadio(page, "Answer").click();
+      await expect.poll(() => checked(page), { timeout: 5_000 }).toEqual(["Answer"]);
+      await expect.poll(() => configMode(dataDir), { timeout: 5_000 }).toBe("answer");
+      expect(await page.locator("#empty").textContent()).toBe(ANSWER_EMPTY);
+      expect(await page.locator("#empty").isVisible()).toBe(true);
+
+      const box = page.locator("#composer textarea");
+      await box.fill("Tell me about a time you learned a technology quickly.");
+      await box.press("Enter");
+      await expect.poll(() => chats(page).then((c) => c.length), { timeout: 10_000 }).toBe(1);
+      const [id] = await chats(page);
+      await page.locator(`${card(id!)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(await checked(page)).toEqual(["Answer"]);
+      expect(savedThread(dataDir, id!).mode).toBe("answer");
+
+      const [start] = starts(fakeLog);
+      const system = start.argv[start.argv.indexOf("--system-prompt") + 1];
+      const base = readFileSync(path.join(repoRoot, "prompts", "answer.md"), "utf8").trimEnd();
+      const format = readFileSync(path.join(repoRoot, "prompts", "answer-format.md"), "utf8").trim();
+      expect(system).toBe(
+        `${base}\n\n## Answer format\n\n${format}\n\n## Reference material\n\n<file path="stories/fast.md">\nI learned Electron in a week to build snapsolve.\n</file>\n`,
+      );
+    } finally {
+      await launched.close();
+      cleanup(dataDir, projects);
+    }
+  }, 90_000);
+
+  it("switching while a chat is on screen starts a new chat in that mode; each chat keeps its mode, shown again when chosen; a restart keeps the choice", async () => {
+    const dataDir = dataDirWithKnowledge();
+    let run = await launchWithLog(dataDir);
+    try {
+      const first = await capture(run.launched.app);
+      await run.page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(await checked(run.page)).toEqual(["Solve"]);
+
+      await modeRadio(run.page, "Answer").click();
+      await expect.poll(() => run.page.locator("[data-thread-id]").count(), { timeout: 5_000 }).toBe(0);
+      expect(await run.page.locator("#empty").textContent()).toBe(ANSWER_EMPTY);
+      expect(await checked(run.page)).toEqual(["Answer"]);
+      expect(await chats(run.page)).toEqual([first]);
+
+      const box = run.page.locator("#composer textarea");
+      await box.fill("Walk me through a project.");
+      await box.press("Enter");
+      await expect.poll(() => chats(run.page).then((c) => c.length), { timeout: 10_000 }).toBe(2);
+      const [second] = await chats(run.page);
+      expect(second).not.toBe(first);
+      await run.page.locator(`${card(second!)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(savedThread(dataDir, second!).mode).toBe("answer");
+      expect(Object.keys(savedThread(dataDir, first))).not.toContain("mode");
+
+      await chooseChat(run.page, first);
+      await expect.poll(() => checked(run.page), { timeout: 5_000 }).toEqual(["Solve"]);
+      await chooseChat(run.page, second!);
+      await expect.poll(() => checked(run.page), { timeout: 5_000 }).toEqual(["Answer"]);
+
+      // Back to Solve while the answer chat is on screen: a new chat again, in Solve; the next capture starts it.
+      await modeRadio(run.page, "Solve").click();
+      await expect.poll(() => run.page.locator("[data-thread-id]").count(), { timeout: 5_000 }).toBe(0);
+      expect(await checked(run.page)).toEqual(["Solve"]);
+      const third = await capture(run.launched.app);
+      expect([first, second]).not.toContain(third);
+      await run.page.locator(`${card(third)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(Object.keys(savedThread(dataDir, third))).not.toContain("mode");
+
+      // A restart keeps the last choice for new chats (config.json mode); the newest chat shows its own mode.
+      await modeRadio(run.page, "Answer").click();
+      await expect.poll(() => configMode(dataDir), { timeout: 5_000 }).toBe("answer");
+      await run.launched.close();
+      cleanup(run.projects);
+      run = await launchWithLog(dataDir);
+      await expect.poll(() => chats(run.page).then((c) => c.length), { timeout: 10_000 }).toBe(3);
+      await expect.poll(() => checked(run.page), { timeout: 5_000 }).toEqual(["Solve"]);
+      await newChat(run.page);
+      await expect.poll(() => checked(run.page), { timeout: 5_000 }).toEqual(["Answer"]);
+    } finally {
+      await run.launched.close();
+      cleanup(dataDir, run.projects);
+    }
+  }, 150_000);
+
+  it("answer mode with no knowledge files: the chat shows the error naming the folder, offers Retry, and claude is never started; Retry works once a file is there", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    const { launched, page, fakeLog, projects } = await launchWithLog(dataDir);
+    try {
+      await modeRadio(page, "Answer").click();
+      await expect.poll(() => checked(page), { timeout: 5_000 }).toEqual(["Answer"]);
+      const box = page.locator("#composer textarea");
+      await box.fill("Why do you want this role?");
+      await box.press("Enter");
+      await expect.poll(() => chats(page).then((c) => c.length), { timeout: 10_000 }).toBe(1);
+      const [id] = await chats(page);
+      const error = page.locator(`${card(id!)} .error`);
+      await error.waitFor({ state: "visible", timeout: 10_000 });
+      expect(await error.textContent()).toBe(
+        `Answer mode has nothing to draw on: no .md, .txt, .toml, .json, .yaml or .csv files in ${path.join(dataDir, "knowledge")}. Put your material there, or point knowledgeDir in config.json at your folder.`,
+      );
+      expect(await page.locator(`${card(id!)} .retry`).isVisible()).toBe(true);
+      expect(starts(fakeLog)).toEqual([]);
+
+      mkdirSync(path.join(dataDir, "knowledge"), { recursive: true });
+      writeFileSync(path.join(dataDir, "knowledge", "me.md"), "I like building tools.\n");
+      await page.locator(`${card(id!)} .retry`).click();
+      await page.locator(`${card(id!)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(starts(fakeLog)).toHaveLength(1);
+    } finally {
+      await launched.close();
+      cleanup(dataDir, projects);
+    }
+  }, 90_000);
+
+  it("at the narrowest window (280 px) the toggle and every title bar button stay inside the window", async () => {
+    const p = await launchPanel();
+    try {
+      await p.app.evaluate(({ BrowserWindow }) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        win.show();
+        const { x, y } = win.getBounds();
+        win.setBounds({ x, y, width: 280, height: 400 });
+        win.emit("resized");
+      });
+      await expect.poll(() => p.page.evaluate(() => window.innerWidth), { timeout: 5_000 }).toBe(280);
+      const rights = await p.page
+        .locator("#titlebar > *")
+        .evaluateAll((els) =>
+          els
+            .filter((e) => getComputedStyle(e).display !== "none")
+            .map((e) => [e.id || e.getAttribute("class") || e.tagName, e.getBoundingClientRect().right] as const),
+        );
+      expect(rights.length).toBeGreaterThan(4);
+      for (const [name, right] of rights) expect(right, String(name)).toBeLessThanOrEqual(280);
+      expect(await modeRadio(p.page, "Answer").isVisible()).toBe(true);
+      expect(await p.page.locator("#hide").isVisible()).toBe(true);
     } finally {
       await p.close();
     }

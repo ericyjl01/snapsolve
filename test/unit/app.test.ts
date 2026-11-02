@@ -47,7 +47,7 @@ beforeEach(async () => {
       open: vi.fn(() => calls.push("open")),
       send: vi.fn((channel: string) => calls.push(channel)),
     },
-    config: { model: "opus", effort: "high", maxScreenshotsPerThread: 6 },
+    config: { model: "opus", effort: "high", maxScreenshotsPerThread: 6, mode: "solve" },
     log: quietLog,
     openExternal: vi.fn(async () => undefined),
     confirmClearHistory: vi.fn(async () => true),
@@ -1149,5 +1149,83 @@ describe("openThread (078)", () => {
     expect(app.isAnswering()).toBe(true);
     await app.handlers.openThread(errored.id);
     expect(app.isAnswering()).toBe(false);
+  });
+});
+
+// 089 (SPEC Amendment 25): the title bar's Solve | Answer toggle. config.mode is the mode new chats start in; a chat
+// keeps the mode it started in, and a capture or question still goes to the chat on screen.
+describe("mode (089)", () => {
+  it("with mode answer, a capture, a typed question and a dictation each start an answer chat", async () => {
+    deps.config.mode = "answer";
+    const app = createApp(deps);
+    const captured = await app.onCapture(shot(PNG));
+    expect((await store.getThread(captured)).mode).toBe("answer");
+    await app.handlers.newThread();
+    await app.handlers.newThread("Walk me through a project.");
+    const typed = (await store.listThreads()).find((t) => t.turns.length === 0 && t.id !== captured);
+    expect(typed?.mode).toBe("answer");
+    await app.handlers.newThread();
+    const dictated = await app.onVoice("Tell me about a time you learned something fast.");
+    expect((await store.getThread(dictated)).mode).toBe("answer");
+    expect(new Set([captured, typed?.id, dictated]).size).toBe(3);
+  });
+
+  it("with mode solve, new chats have no mode key, as before", async () => {
+    const app = createApp(deps);
+    const captured = await app.onCapture(shot(PNG));
+    expect(Object.keys(await store.getThread(captured))).not.toContain("mode");
+  });
+
+  it("getMode is config.mode; setMode switches it for new chats and saves it once; choosing the same mode again saves nothing", async () => {
+    const saveMode = vi.fn(async (_mode: string) => ({ ok: true as const }));
+    const app = createApp({ ...deps, saveMode });
+    expect(await app.handlers.getMode()).toBe("solve");
+    await app.handlers.setMode("answer");
+    expect(await app.handlers.getMode()).toBe("answer");
+    expect(deps.config.mode).toBe("answer");
+    expect(saveMode.mock.calls).toEqual([["answer"]]);
+    await app.handlers.setMode("answer");
+    expect(saveMode).toHaveBeenCalledTimes(1);
+    const id = await app.onCapture(shot(PNG));
+    expect((await store.getThread(id)).mode).toBe("answer");
+  });
+
+  it("setMode does not move captures: the chat on screen keeps them until the renderer starts a new chat (+)", async () => {
+    const app = createApp({ ...deps, saveMode: async () => ({ ok: true as const }) });
+    const solveChat = await app.onCapture(shot(PNG));
+    await app.handlers.setMode("answer");
+    expect(await app.onCapture(shot(PNG2))).toBe(solveChat);
+    expect(Object.keys(await store.getThread(solveChat))).not.toContain("mode");
+    await app.handlers.newThread();
+    const answerChat = await app.onCapture(shot(PNG));
+    expect(answerChat).not.toBe(solveChat);
+    expect((await store.getThread(answerChat)).mode).toBe("answer");
+    expect((await store.listThreads()).map((t) => t.id).sort()).toEqual([answerChat, solveChat].sort());
+  });
+
+  it.each([["interview"], [""], [undefined], [null], [1]])("setMode(%j) from the renderer is refused: nothing changes, nothing is saved", async (bad) => {
+    const saveMode = vi.fn(async () => ({ ok: true as const }));
+    const app = createApp({ ...deps, saveMode });
+    await expect(app.handlers.setMode(bad as never)).rejects.toMatchObject({ name: "SnapsolveError", kind: "internal" });
+    expect(await app.handlers.getMode()).toBe("solve");
+    expect(saveMode).not.toHaveBeenCalled();
+  });
+
+  it("a failed save is logged and the mode still holds for this run", async () => {
+    const warnings: { event: string; fields?: Record<string, unknown> }[] = [];
+    const log = { ...quietLog, warn: (event: string, fields?: Record<string, unknown>) => void warnings.push({ event, fields }) };
+    const app = createApp({ ...deps, log, saveMode: async () => ({ ok: false as const, error: "cannot write config.json (EACCES)" }) });
+    await app.handlers.setMode("answer");
+    expect(await app.handlers.getMode()).toBe("answer");
+    expect(warnings).toEqual([{ event: "mode.saveFailed", fields: { mode: "answer", error: "cannot write config.json (EACCES)" } }]);
+    const rejecting = createApp({
+      ...deps,
+      log,
+      saveMode: async () => {
+        throw new Error("boom");
+      },
+    });
+    await rejecting.handlers.setMode("solve");
+    expect(warnings.at(-1)?.event).toBe("mode.saveFailed");
   });
 });

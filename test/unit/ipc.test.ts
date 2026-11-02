@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IPC, PRELOAD_CHANNELS } from "../../src/shared/ipc";
 
 describe("IPC contract", () => {
-  it("maps exactly the sixteen preload functions (SPEC §4.4 + Amendments 2, 9, 10, 11 and 15)", () => {
+  it("maps exactly the eighteen preload functions (SPEC §4.4 + Amendments 2, 9, 10, 11, 15 and 25)", () => {
     expect(Object.keys(PRELOAD_CHANNELS).sort()).toEqual(
       [
         "onDelta",
@@ -21,8 +21,17 @@ describe("IPC contract", () => {
         "toggleVoice",
         "openVoiceSettings",
         "openThread",
+        "getMode",
+        "setMode",
       ].sort(),
     );
+  });
+
+  it("the Solve | Answer toggle is two calls: mode:get and mode:set (089)", () => {
+    expect(PRELOAD_CHANNELS.getMode).toBe("mode:get");
+    expect(PRELOAD_CHANNELS.setMode).toBe("mode:set");
+    expect(IPC.modeGet).toBe("mode:get");
+    expect(IPC.modeSet).toBe("mode:set");
   });
 
   it("Copy is gone and the × hides the window instead (061)", () => {

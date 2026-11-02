@@ -4,7 +4,7 @@
 Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089 answer mode, then 096 and 097, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
 - 089 done (Amendments 25–26, 4 Opus reviews, pass). Eric's data in ~/snapsolve-answer-test (not in git); config opus/low.
 - 096 voice hold-to-talk DONE (Amendment 27): 2204ac9 tests (red 51) … c84e07c; review 1 fail → fixed; review 2 pass.
-- 097 Esc stops an answer (Eric: "just go"; Amendment 28): 2e3185d tests (red 22), 9dbbd80 code, docs commit after. Unit 1192 passed, 7 skipped; build ok. Next: Opus review of 097 (base 24e06f8).
+- 097 Esc stops an answer (Eric: "just go"; Amendment 28): 2e3185d tests (red 22), 9dbbd80 code, 7fd2b61 docs; review 1 fail (e2e 058/059 Esc mid-answer; 1 s grace untested) → 96dfceb tests (red 1), 51a468a fixes. Unit 1196 passed, 7 skipped. Next: review 2 (base 24e06f8).
 - Ask Eric: the speech helper now imports CoreGraphics (system framework); ARCHITECTURE Approved libraries names only Speech + AVFoundation for it (changes only with him).
 - Hand checks for Eric (checklist 032 at merge): docs/tasks/096 and 097 Notes.
 - Pending: e2e (window) tests, updated for 096/097 but not run — Eric: "Later, I'll tell you". Then he tries it and says merge.

@@ -1678,6 +1678,85 @@ describe("panel (e2e)", () => {
   }, 60_000);
 });
 
+// Task 097 (SPEC Amendment 28): Esc stops an answer that is being written, as in a chatbot.
+describe("Esc stops an answer (e2e, 097)", () => {
+  /** A real Esc to the focused window, as the OS delivers it (main's before-input-event; Playwright's keyboard skips it). */
+  function escape(app: ElectronApplication): Promise<void> {
+    return app.evaluate(({ BrowserWindow }) => {
+      const { webContents } = BrowserWindow.getAllWindows()[0];
+      webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+      webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+    });
+  }
+
+  it("Esc while it streams: claude stops, the text so far stays marked Stopped with Retry, the window stays; the next question is answered; Esc then hides", async () => {
+    const scenarioDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-scenario-"));
+    const scenarioFile = path.join(scenarioDir, "scenario");
+    // hang: the first piece of the answer ("Answer "), then nothing.
+    writeFileSync(scenarioFile, "hang");
+    const p = await launchPanel(undefined, { FAKE_CLAUDE_SCENARIO_FILE: scenarioFile });
+    try {
+      const id = await capture(p.app);
+      const streaming = p.page.locator(`${card(id)} .answer.streaming`);
+      await streaming.waitFor({ state: "visible", timeout: 20_000 });
+      await expect.poll(() => streaming.innerText(), { timeout: 5_000 }).toContain("Answer");
+      await streaming.click();
+      const stoppedAt = Date.now();
+      await escape(p.app);
+
+      const stopped = p.page.locator(`${card(id)} .partial.stopped`);
+      await stopped.waitFor({ state: "visible", timeout: 5_000 });
+      expect(Date.now() - stoppedAt).toBeLessThan(3_000);
+      expect((await stopped.innerText()).trim()).toBe("Answer");
+      expect(await p.page.locator(`${card(id)} p.stopped`).innerText()).toBe("Stopped.");
+      expect(await p.page.locator(`${card(id)} .retry`).isVisible()).toBe(true);
+      expect(await p.page.locator(`${card(id)} .answer.streaming`).count()).toBe(0);
+      expect((await windowInfo(p.app)).visible).toBe(true);
+      // The sidebar does not mark a stopped chat as failed.
+      expect(await p.page.locator(`[data-chat-id="${id}"] .chat-dot.error`).count()).toBe(0);
+      const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", id, "thread.json"), "utf8")) as Thread;
+      expect(saved.status).toBe("error");
+      expect(saved.turns.at(-1)).toMatchObject({ role: "assistant", text: "Answer ", isError: true, errorKind: "stopped", errorMessage: "Stopped." });
+
+      writeFileSync(scenarioFile, "ok");
+      await p.page.locator("#follow-up").fill("why?");
+      await p.page.locator("#follow-up").press("Enter");
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+
+      await escape(p.app);
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
+    } finally {
+      await p.close();
+      rmSync(scenarioDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 90_000);
+
+  it("Esc during Thinking… (before any text) stops it too: Stopped with no text, and Retry answers it", async () => {
+    const scenarioDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-scenario-"));
+    const scenarioFile = path.join(scenarioDir, "scenario");
+    writeFileSync(scenarioFile, "slow");
+    // slow with a long delay: "Thinking…" for seconds before the first piece.
+    const p = await launchPanel(undefined, { FAKE_CLAUDE_SCENARIO_FILE: scenarioFile, FAKE_DELAY_MS: "30000" });
+    try {
+      const id = await capture(p.app);
+      const thinking = p.page.locator(`${card(id)} .thinking`);
+      await thinking.waitFor({ state: "visible", timeout: 20_000 });
+      await thinking.click();
+      await escape(p.app);
+      await p.page.locator(`${card(id)} p.stopped`).waitFor({ state: "visible", timeout: 5_000 });
+      expect(await p.page.locator(`${card(id)} .partial`).count()).toBe(0);
+      expect((await windowInfo(p.app)).visible).toBe(true);
+
+      writeFileSync(scenarioFile, "ok");
+      await p.page.locator(`${card(id)} .retry`).click();
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+    } finally {
+      await p.close();
+      rmSync(scenarioDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 90_000);
+});
+
 // Task 089 (SPEC Amendment 25): the title bar's Solve | Answer toggle and answer mode's knowledge folder.
 describe("answer mode (e2e, 089)", () => {
   const ANSWER_EMPTY = "Answer mode. Ask a question and snapsolve drafts your answer, using your knowledge folder for anything about you.";

@@ -22,7 +22,7 @@ let store: Store;
 let calls: string[];
 let listener: ((e: RunnerEvent) => void) | null;
 let deps: AppDeps & {
-  runner: { enqueue: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> };
+  runner: { enqueue: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> };
   panel: { open: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn> };
 };
 
@@ -42,6 +42,8 @@ beforeEach(async () => {
         listener = l;
         return () => undefined;
       }),
+      // 097: nothing is running unless a test says so.
+      stop: vi.fn((_threadId: string) => false),
     },
     panel: {
       open: vi.fn(() => calls.push("open")),
@@ -86,6 +88,66 @@ const errorTurn: AssistantTurn = {
 };
 
 const answer = (text: string): AssistantTurn => ({ role: "assistant", text, durationMs: 5, ttftMs: 1, costUsd: null, isError: false });
+
+// 097: Esc with the window focused stops the answer of the chat on screen; false lets Esc hide the window as before.
+describe("stopAnswer (097)", () => {
+  it("the chat a capture landed in is the one stopped: runner.stop(its id), true when the runner stopped a turn", async () => {
+    deps.runner.stop.mockReturnValue(true);
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    expect(app.stopAnswer()).toBe(true);
+    expect(deps.runner.stop).toHaveBeenCalledTimes(1);
+    expect(deps.runner.stop).toHaveBeenCalledWith(id);
+  });
+
+  it("nothing running in that chat: false (Esc hides)", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    expect(app.stopAnswer()).toBe(false);
+    expect(deps.runner.stop).toHaveBeenCalledWith(id);
+  });
+
+  it("after + nothing is on screen: false, the runner is not asked", async () => {
+    deps.runner.stop.mockReturnValue(true);
+    const app = createApp(deps);
+    await app.onCapture(shot(PNG));
+    await app.handlers.newThread();
+    expect(app.stopAnswer()).toBe(false);
+    expect(deps.runner.stop).not.toHaveBeenCalled();
+  });
+
+  it("a chat chosen in the sidebar is the one stopped", async () => {
+    const app = createApp(deps);
+    const a = await store.createThread({ model: "opus", effort: "high" });
+    await new Promise((r) => setTimeout(r, 5));
+    await store.createThread({ model: "opus", effort: "high" });
+    await app.handlers.listThreads();
+    await app.handlers.openThread(a.id);
+    app.stopAnswer();
+    expect(deps.runner.stop).toHaveBeenCalledWith(a.id);
+  });
+
+  it("after a restart, before any capture: the newest chat (the one the window shows) is stopped, never a permission card", async () => {
+    const app = createApp(deps);
+    await store.createThread({ model: "opus", effort: "high" });
+    await new Promise((r) => setTimeout(r, 5));
+    const newest = await store.createThread({ model: "opus", effort: "high" });
+    await app.handlers.listThreads();
+    // A typed follow-up runs in the chat on screen without making it "current" in main.
+    await app.handlers.followUp(newest.id, "why?");
+    await new Promise((r) => setTimeout(r, 5));
+    await app.onVoiceDenied("microphone");
+    app.stopAnswer();
+    expect(deps.runner.stop).toHaveBeenCalledTimes(1);
+    expect(deps.runner.stop).toHaveBeenCalledWith(newest.id);
+  });
+
+  it("no chats at all: false, the runner is not asked", () => {
+    const app = createApp(deps);
+    expect(app.stopAnswer()).toBe(false);
+    expect(deps.runner.stop).not.toHaveBeenCalled();
+  });
+});
 
 describe("onCapture", () => {
   it("creates a thread with the configured model, opens the panel with the card, saves the PNG, then enqueues the turn", async () => {

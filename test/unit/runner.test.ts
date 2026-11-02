@@ -26,7 +26,7 @@ import {
 } from "../../src/main/runner";
 import { createStore, type Store } from "../../src/main/store";
 import { SnapsolveError, userMessage } from "../../src/shared/errors";
-import type { Thread } from "../../src/shared/types";
+import type { AssistantTurn, Thread } from "../../src/shared/types";
 
 const SID = "0b8f6a3c-1d2e-4f50-9a6b-7c8d9e0f1a2b";
 const PROMPT = 'You are snapsolve.\nUse "Markdown" & $math$; never <html>.';
@@ -700,6 +700,290 @@ describe("timeout escalation: a timed-out claude never outlives its turn", () =>
     expect(events).toHaveLength(settledEvents);
     expect(errorsFor(events, a.t.id)).toEqual([expect.objectContaining({ kind: "timeout", retry: true })]);
     expect(outcome).toMatchObject({ ok: false, kind: "timeout" });
+  });
+});
+
+// ── stop (097): Esc stops the chat's running answer ──────────────────────────────────────────────────
+
+/**
+ * Prints init and one text delta (`text`), then waits. Records every kill; on a kill it first prints `after` (text that
+ * arrives too late) when given, then closes `exitAfter(signal)` ms later, or never when null.
+ */
+class StreamingChild extends FakeChild {
+  signals: string[] = [];
+  constructor(
+    sid: string,
+    text: string,
+    private readonly exitAfter: (signal: string) => number | null,
+    private readonly after?: string,
+  ) {
+    super();
+    setImmediate(() => {
+      this.stdout.write(`${JSON.stringify({ type: "system", subtype: "init", session_id: sid, apiKeySource: "none", model: "claude-opus-5-5" })}\n`);
+      this.stdout.write(`${JSON.stringify(textDelta(text))}\n`);
+    });
+  }
+  override kill(signal?: string): boolean {
+    const s = signal ?? "SIGTERM";
+    this.signals.push(s);
+    if (this.after !== undefined) this.stdout.write(`${JSON.stringify(textDelta(this.after))}\n`);
+    const delay = this.exitAfter(s);
+    if (delay !== null) {
+      setTimeout(() => {
+        this.stdout.end();
+        this.stderr.end();
+        this.emit("close", null, s);
+      }, delay);
+    }
+    return true;
+  }
+}
+
+function textDelta(text: string) {
+  return { type: "stream_event", event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text } } };
+}
+
+describe("stop (097): Esc stops the chat's running answer", () => {
+  const STOPPED = "Stopped.";
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  async function until(check: () => boolean, ms = 3_000): Promise<void> {
+    const end = Date.now() + ms;
+    while (!check()) {
+      if (Date.now() > end) throw new Error("timed out waiting");
+      await new Promise<void>((r) => setImmediate(r));
+    }
+  }
+  const deltasFor = (events: RunnerEvent[], threadId: string) =>
+    events.filter((e): e is Extract<RunnerEvent, { type: "delta" }> => e.type === "delta" && e.threadId === threadId).map((e) => e.text);
+  const errorsFor = (events: RunnerEvent[], threadId: string) =>
+    events.filter((e): e is Extract<RunnerEvent, { type: "error" }> => e.type === "error" && e.threadId === threadId);
+
+  /** The first `streaming` spawns stream and wait (`make(sid)`); every later spawn answers normally. */
+  function stoppable(make: (sid: string) => StreamingChild, over: Partial<Parameters<typeof createRunner>[0]> = {}, streaming = 1) {
+    let n = 0;
+    const children: StreamingChild[] = [];
+    const made = makeRunner({
+      stopGraceMs: 100,
+      ...over,
+      spawn: ((file: string, args: string[], options: SpawnCall["options"]) => {
+        const sid = args[args.indexOf("--session-id") + 1];
+        if (n++ < streaming) {
+          const child = make(sid);
+          children.push(child);
+          calls.push({ file, args, options, sessionsDirExisted: true, child });
+          return child;
+        }
+        const child = new FakeChild();
+        const call = { file, args, options, sessionsDirExisted: true, child };
+        calls.push(call);
+        child.script(okLines(call, "because"));
+        return child;
+      }) as never,
+    });
+    return { ...made, children };
+  }
+
+  it("stop on a running turn: SIGTERM, the turn saved as errored `stopped` with the text streamed so far, status error, an error event with retry", async () => {
+    const { runner, events, children } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0));
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    expect(runner.stop(t.id)).toBe(true);
+    expect(await outcome).toEqual({ ok: false, kind: "stopped", message: STOPPED });
+    expect(children[0].signals).toEqual(["SIGTERM"]);
+    const saved = await store.getThread(t.id);
+    expect(saved.status).toBe("error");
+    expect(saved.turns).toEqual([
+      { role: "user", kind: "screenshot", file: "001.png" },
+      {
+        role: "assistant",
+        text: "x = ",
+        durationMs: expect.any(Number),
+        ttftMs: expect.any(Number),
+        costUsd: null,
+        isError: true,
+        errorKind: "stopped",
+        errorMessage: STOPPED,
+        model: "claude-opus-5-5",
+      },
+    ]);
+    expect(errorsFor(events, t.id)).toEqual([{ type: "error", threadId: t.id, kind: "stopped", message: STOPPED, retry: true, thread: saved }]);
+  });
+
+  it("text that arrives after the stop is neither streamed nor kept", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 20, "4 (too late)"));
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    await outcome;
+    expect(deltasFor(events, t.id)).toEqual(["x = "]);
+    const last = (await store.getThread(t.id)).turns.at(-1) as AssistantTurn;
+    expect(last.text).toBe("x = ");
+  });
+
+  it("a claude that ignores SIGTERM gets SIGKILL after the stop grace (not the 5 s timeout grace); still stopped; the queue moves on", async () => {
+    const { runner, events, children } = stoppable(
+      (sid) => new StreamingChild(sid, "x = ", (s) => (s === "SIGKILL" ? 0 : null)),
+      { config: { maxConcurrent: 1, timeoutSec: 30, allowApiKey: false }, stopGraceMs: 50 },
+    );
+    const a = await newThread();
+    const b = await newThread();
+    const oa = runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    const ob = runner.enqueue(b.t.id, { kind: "new", screenshot: b.shot.file });
+    await until(() => deltasFor(events, a.t.id).length === 1);
+    const stoppedAt = Date.now();
+    runner.stop(a.t.id);
+    expect(await oa).toMatchObject({ ok: false, kind: "stopped" });
+    expect(Date.now() - stoppedAt).toBeLessThan(2_000);
+    expect(children[0].signals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect((await ob).ok).toBe(true);
+  });
+
+  it("a claude that never closes, even after SIGKILL, is settled at the SIGKILL: stopped", async () => {
+    const { runner, events, children } = stoppable((sid) => new StreamingChild(sid, "x = ", () => null), { stopGraceMs: 50 });
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    expect(await outcome).toMatchObject({ ok: false, kind: "stopped" });
+    expect(children[0].signals).toEqual(["SIGTERM", "SIGKILL"]);
+  });
+
+  it("stop again while it is stopping: still true, one SIGTERM, one error", async () => {
+    const { runner, events, children } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 30));
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    expect(runner.stop(t.id)).toBe(true);
+    expect(runner.stop(t.id)).toBe(true);
+    await outcome;
+    expect(children[0].signals).toEqual(["SIGTERM"]);
+    expect(errorsFor(events, t.id)).toHaveLength(1);
+  });
+
+  it("stop with nothing running: false, no event; stop on another chat leaves the running one alone", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0));
+    const idle = await newThread();
+    expect(runner.stop(idle.t.id)).toBe(false);
+    expect(runner.stop("00000000-0000-4000-8000-000000000000")).toBe(false);
+    expect(events).toEqual([]);
+
+    const a = await newThread();
+    const outcome = runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    await until(() => deltasFor(events, a.t.id).length === 1);
+    expect(runner.stop(idle.t.id)).toBe(false);
+    await sleep(50);
+    expect(errorsFor(events, a.t.id)).toEqual([]);
+    runner.stop(a.t.id);
+    await outcome;
+  });
+
+  it("a stop after the answer finished is false and changes nothing", async () => {
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    expect((await runner.enqueue(t.id, { kind: "new", screenshot: shot.file })).ok).toBe(true);
+    expect(runner.stop(t.id)).toBe(false);
+    expect((await store.getThread(t.id)).status).toBe("done");
+  });
+
+  it("a chat only waiting in the queue (another chat holds the one slot) is not stopped: false, it still runs after", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0), {
+      config: { maxConcurrent: 1, timeoutSec: 30, allowApiKey: false },
+    });
+    const a = await newThread();
+    const b = await newThread();
+    const oa = runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    const ob = runner.enqueue(b.t.id, { kind: "new", screenshot: b.shot.file });
+    await until(() => deltasFor(events, a.t.id).length === 1);
+    expect(runner.stop(b.t.id)).toBe(false);
+    runner.stop(a.t.id);
+    expect(await oa).toMatchObject({ ok: false, kind: "stopped" });
+    expect((await ob).ok).toBe(true);
+  });
+
+  it("a question waiting behind the stopped turn in the same chat still runs after it (a stop drops nothing queued)", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0));
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    const second = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    expect(await first).toMatchObject({ ok: false, kind: "stopped" });
+    expect((await second).ok).toBe(true);
+    const shape = (turn: Thread["turns"][number]) =>
+      turn.role === "user" ? `user:${turn.kind === "text" ? turn.text : turn.file}` : turn.isError ? `error:${turn.errorKind}` : `answer:${turn.text}`;
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "error:stopped", "user:why?", "answer:because"]);
+  });
+
+  it("a stop while the turn is being prepared (before claude starts) stops it there: no claude, stopped with no text", async () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const answerSystemPrompt = vi.fn(async () => {
+      await gate;
+      return "ANSWER PROMPT";
+    });
+    const { runner, events } = makeRunner({ answerSystemPrompt });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const outcome = runner.enqueue(t.id, { kind: "followUp", text: "Walk me through a project." });
+    await until(() => answerSystemPrompt.mock.calls.length === 1);
+    expect(runner.stop(t.id)).toBe(true);
+    open();
+    expect(await outcome).toEqual({ ok: false, kind: "stopped", message: STOPPED });
+    expect(calls).toHaveLength(0);
+    const last = (await store.getThread(t.id)).turns.at(-1) as AssistantTurn;
+    expect(last).toMatchObject({ role: "assistant", text: "", isError: true, errorKind: "stopped", errorMessage: STOPPED });
+    expect(errorsFor(events, t.id)).toEqual([expect.objectContaining({ kind: "stopped", retry: true })]);
+  });
+
+  it("the stopped turn's retry target re-runs the same question in place; Retry answers it", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0));
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    await first;
+    expect(retryTarget(await store.getThread(t.id))?.request).toEqual({ kind: "new", screenshot: "001.png" });
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    const saved = await store.getThread(t.id);
+    expect(saved.status).toBe("done");
+    expect(saved.turns.map((turn) => (turn.role === "user" ? "user" : turn.isError ? turn.errorKind : turn.text))).toEqual(["user", "stopped", "because"]);
+  });
+
+  it("a follow-up after a stopped answer continues the chat: the session is resumed when its transcript was adopted", async () => {
+    const { runner, events } = stoppable((sid) => {
+      // claude had written the session's transcript before it was stopped.
+      const dir = path.join(root, "projects", "C--snapsolve-sessions");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, `${sid}.jsonl`), `${JSON.stringify({ type: "user", sessionId: sid })}\n`);
+      return new StreamingChild(sid, "x = ", () => 0);
+    });
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    await first;
+    const stopped = await store.getThread(t.id);
+    expect(stopped.transcriptPath).not.toBeNull();
+    expect(await runner.enqueue(t.id, { kind: "followUp", text: "why?" })).toMatchObject({ ok: true });
+    expect(calls[1].args.slice(-2)).toEqual(["--resume", stopped.transcriptPath]);
+    expect(JSON.parse(calls[1].child.written)).toEqual(buildUserMessage("followUp", [], "why?"));
+  });
+
+  it("no answer text, question or prompt in the log lines of a stop; runner.stop is logged", async () => {
+    const file = path.join(root, "data", "logs", "snapsolve.log");
+    const log = createLogger(file);
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "SECRET-PARTIAL", () => 0), { log });
+    const t = await store.createThread({ model: "opus", effort: "high" });
+    const outcome = runner.enqueue(t.id, { kind: "followUp", text: "SECRET-QUESTION" });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    await outcome;
+    await log.flush();
+    const text = await readFile(file, "utf8");
+    expect(text).not.toContain("SECRET");
+    expect(text).not.toContain(PROMPT);
+    expect(text.split("\n").filter(Boolean).map((l) => JSON.parse(l).event)).toContain("runner.stop");
   });
 });
 

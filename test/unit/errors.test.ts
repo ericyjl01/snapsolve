@@ -47,6 +47,12 @@ describe("userMessage", () => {
     expect(userMessage("voiceFailed")).toBe("Voice input stopped working. Details are in the snapsolve log.");
   });
 
+  it("stopped (097): an answer stopped with Esc says so, in a word", () => {
+    expect(ERROR_KINDS).toContain("stopped");
+    expect(userMessage("stopped")).toBe("Stopped.");
+    expect(new SnapsolveError("stopped").message).toBe("Stopped.");
+  });
+
   it("answer mode (089): an unreadable knowledge folder, or too much text in it, each say what to do; no material is not an error (Amendment 26)", () => {
     expect(ERROR_KINDS).toEqual(expect.arrayContaining(["knowledgeUnreadable", "knowledgeTooLarge"]));
     expect(ERROR_KINDS).not.toContain("knowledgeMissing");

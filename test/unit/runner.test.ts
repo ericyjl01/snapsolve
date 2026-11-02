@@ -1016,6 +1016,35 @@ describe("answer mode (089)", () => {
     );
   });
 
+  it("a follow-up that resumes an answer chat's owned transcript gets a freshly built answer prompt, not the solve prompt (review 1)", async () => {
+    let n = 0;
+    script = (child, call) => {
+      n++;
+      if (n === 1) {
+        // The first turn's transcript lands in claude's projects dir; the store adopts it into the thread dir.
+        const sid = call.args[call.args.indexOf("--session-id") + 1];
+        const dir = path.join(root, "projects", "C--snapsolve-sessions");
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(path.join(dir, `${sid}.jsonl`), `${JSON.stringify({ type: "user", sessionId: sid })}\n`);
+      }
+      child.script(okLines(call, `answer ${n}`));
+    };
+    let built = 0;
+    const answerSystemPrompt = vi.fn(async () => `ANSWER PROMPT ${++built}`);
+    const { runner } = makeRunner({ answerSystemPrompt });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    await runner.enqueue(t.id, { kind: "followUp", text: "Walk me through a project." });
+    const owned = (await store.getThread(t.id)).transcriptPath;
+    expect(owned).not.toBeNull();
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "Shorter." })).ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].args.slice(1)).toEqual(
+      buildArgs({ model: "opus", effort: "high", systemPrompt: "ANSWER PROMPT 2", session: { resume: owned as string } }),
+    );
+    expect(JSON.parse(calls[1].child.written)).toEqual(buildUserMessage("followUp", [], "Shorter."));
+    expect(answerSystemPrompt).toHaveBeenCalledTimes(2);
+  });
+
   it("a screenshot in an answer chat asks for the user's answer: ANSWER_NEW_TEXT first, ANSWER_APPEND_TEXT after", async () => {
     const { runner } = makeRunner({ answerSystemPrompt: async () => "A" });
     const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
@@ -1030,6 +1059,17 @@ describe("answer mode (089)", () => {
     expect(ANSWER_APPEND_TEXT).toBe("Here is another screenshot. Draft my answer to the question on it.");
   });
 
+  it("a seeded answer chat (past the screenshot limit) sends the previous answer, then ANSWER_APPEND_TEXT (review 1)", async () => {
+    const { runner } = makeRunner({ answerSystemPrompt: async () => "A" });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const s = await store.saveScreenshot(t.id, Buffer.from("png"));
+    await runner.enqueue(t.id, { kind: "new", screenshot: s.file, seed: "My earlier answer." });
+    expect(JSON.parse(calls[0].child.written)).toEqual(
+      buildUserMessage("new", [PNG], seededQuestion("My earlier answer.", ANSWER_APPEND_TEXT)),
+    );
+    expect(seededQuestion("My earlier answer.", ANSWER_APPEND_TEXT).endsWith(`---\n\n${ANSWER_APPEND_TEXT}`)).toBe(true);
+  });
+
   it("a solve chat's screenshots are asked as before (NEW_TEXT), even with answer mode wired", async () => {
     const answerSystemPrompt = vi.fn(async () => "A");
     const { runner } = makeRunner({ answerSystemPrompt });
@@ -1041,7 +1081,7 @@ describe("answer mode (089)", () => {
 
   it.each([
     ["knowledgeMissing", "Answer mode has nothing to draw on: no .md, .txt, .toml, .json, .yaml or .csv files in /k. Put your material there, or point knowledgeDir in config.json at your folder."],
-    ["knowledgeTooLarge", "The knowledge folder /k holds 300 KB of text, over answer mode's 256 KB limit. Remove some files, or point knowledgeDir in config.json at a smaller folder."],
+    ["knowledgeTooLarge", "The knowledge folder /k has more than 256 KB of text, answer mode's limit. Remove some files, or point knowledgeDir in config.json at a smaller folder."],
   ] as const)("%s: the turn fails before claude is started, with the error's own message on the card and Retry", async (kind, message) => {
     const { runner, events } = makeRunner({
       answerSystemPrompt: async () => {

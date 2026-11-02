@@ -48,33 +48,39 @@ export async function readKnowledge(dir: string, options: { maxBytes?: number } 
       `Answer mode can't read the knowledge folder ${dir} (${code ?? "unknown error"}). Check its permissions, or point knowledgeDir in config.json at another folder.`,
     );
   }
-  const found = { files: [] as { rel: string; size: number }[], skipped: [] as string[] };
+  const found: Found = { files: [], skipped: [], bytes: 0, maxBytes };
   await walk(dir, "", top, 0, found);
   if (found.files.length === 0) throw new SnapsolveError("knowledgeMissing", missing(dir));
   found.files.sort((a, b) => compare(a.rel, b.rel));
   found.skipped.sort(compare);
-  const bytes = found.files.reduce((sum, f) => sum + f.size, 0);
-  if (bytes > maxBytes) {
-    throw new SnapsolveError(
-      "knowledgeTooLarge",
-      `The knowledge folder ${dir} holds ${kb(bytes)} KB of text, over answer mode's ${kb(maxBytes)} KB limit. Remove some files, or point knowledgeDir in config.json at a smaller folder.`,
-    );
-  }
   const files: KnowledgeFile[] = [];
   for (const f of found.files) {
-    files.push({ path: f.rel, text: withoutBom(await readFile(path.join(dir, ...f.rel.split("/")), "utf8")) });
+    const full = path.join(dir, ...f.rel.split("/"));
+    let text: string;
+    try {
+      text = await readFile(full, "utf8");
+    } catch (e) {
+      throw unreadable(full, e);
+    }
+    files.push({ path: f.rel, text: withoutBom(text) });
   }
-  return { dir, files, bytes, skipped: found.skipped };
+  return { dir, files, bytes: found.bytes, skipped: found.skipped };
 }
 
-async function walk(
-  root: string,
-  rel: string,
-  entries: Dirent[],
-  depth: number,
-  found: { files: { rel: string; size: number }[]; skipped: string[] },
-): Promise<void> {
-  for (const entry of entries) {
+interface Found {
+  files: { rel: string; size: number }[];
+  skipped: string[];
+  bytes: number;
+  maxBytes: number;
+}
+
+/**
+ * Collects text files in name order. Stops with `knowledgeTooLarge` as soon as they pass the limit, so a huge folder
+ * (`knowledgeDir: "~"`) costs no more than the limit's worth of walking; an unreadable subfolder stops it with
+ * `knowledgeMissing` naming that folder.
+ */
+async function walk(root: string, rel: string, entries: Dirent[], depth: number, found: Found): Promise<void> {
+  for (const entry of [...entries].sort((a, b) => compare(a.name, b.name))) {
     if (entry.name.startsWith(".")) continue;
     const childRel = rel ? `${rel}/${entry.name}` : entry.name;
     const full = path.join(root, ...childRel.split("/"));
@@ -83,13 +89,35 @@ async function walk(
     if (!info) continue;
     if (info.isDirectory()) {
       if (depth >= MAX_DEPTH) continue;
-      const children = await readdir(full, { withFileTypes: true }).catch(() => null);
-      if (children) await walk(root, childRel, children, depth + 1, found);
+      let children: Dirent[];
+      try {
+        children = await readdir(full, { withFileTypes: true });
+      } catch (e) {
+        throw unreadable(full, e);
+      }
+      await walk(root, childRel, children, depth + 1, found);
     } else if (info.isFile()) {
-      if (KNOWLEDGE_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())) found.files.push({ rel: childRel, size: info.size });
-      else found.skipped.push(childRel);
+      if (!KNOWLEDGE_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())) {
+        found.skipped.push(childRel);
+        continue;
+      }
+      found.files.push({ rel: childRel, size: info.size });
+      found.bytes += info.size;
+      if (found.bytes > found.maxBytes) {
+        throw new SnapsolveError(
+          "knowledgeTooLarge",
+          `The knowledge folder ${root} has more than ${kb(found.maxBytes)} KB of text, answer mode's limit. Remove some files, or point knowledgeDir in config.json at a smaller folder.`,
+        );
+      }
     }
   }
+}
+
+function unreadable(file: string, e: unknown): SnapsolveError {
+  return new SnapsolveError(
+    "knowledgeMissing",
+    `Answer mode can't read ${file} (${errorCode(e) ?? "unknown error"}). Check its permissions, or move it out of the knowledge folder.`,
+  );
 }
 
 /** The answer chat's system prompt: the answer prompt, `## Answer format`, then `## Reference material` with each file. */

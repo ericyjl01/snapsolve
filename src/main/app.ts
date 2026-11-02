@@ -210,14 +210,17 @@ export function createApp(deps: AppDeps): App {
     }
   }
 
-  /** A new chat, in the mode the toggle says new chats start in (089). */
-  function createThread(): Promise<Thread> {
-    return store.createThread({ model: config.model, effort: config.effort, mode: config.mode });
+  /** A new chat, in the mode the toggle says new chats start in (089) unless it continues one (`mode`). */
+  function createThread(mode: ChatMode = config.mode): Promise<Thread> {
+    return store.createThread({ model: config.model, effort: config.effort, mode });
   }
 
-  /** `seed`: the previous thread's last answer, when an append past the screenshot limit starts this one (SPEC §2.3). */
-  async function newThread(shot: Shot, shownMs: number, seed?: string): Promise<string> {
-    const thread = await createThread();
+  /**
+   * `seed`: the previous thread's last answer, when an append past the screenshot limit starts this one (SPEC §2.3);
+   * `mode`: that thread's mode, which the continuation keeps (089).
+   */
+  async function newThread(shot: Shot, shownMs: number, seed?: string, mode?: ChatMode): Promise<string> {
+    const thread = await createThread(mode);
     dropPermissionCard();
     current = thread.id;
     remember(thread);
@@ -379,7 +382,9 @@ export function createApp(deps: AppDeps): App {
       const target = await currentThread();
       fresh = false;
       if (!target) return newThread(shot, shownMs);
-      if (decideAppend(target, config.maxScreenshotsPerThread) === "newThread") return newThread(shot, shownMs, lastAnswerText(target));
+      if (decideAppend(target, config.maxScreenshotsPerThread) === "newThread") {
+        return newThread(shot, shownMs, lastAnswerText(target), target.mode === "answer" ? "answer" : "solve");
+      }
       dropPermissionCard();
       const shown = known.get(target.id) ?? target;
       // The chat it lands in says "Thinking…" until the runner takes the turn (its status and turn events).

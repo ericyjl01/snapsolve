@@ -126,15 +126,47 @@ describe("readKnowledge", () => {
     );
   });
 
-  it("more text than the limit → knowledgeTooLarge with the folder, its size and the limit, in whole KB rounded up", async () => {
+  it("more text than the limit → knowledgeTooLarge naming the folder and the limit in KB", async () => {
     await put("a.md", "x".repeat(3000));
     await put("b.md", "y".repeat(2000));
     const e = await rejection(readKnowledge(dir, { maxBytes: 4096 }));
     expect(e).toMatchObject({ name: "SnapsolveError", kind: "knowledgeTooLarge" });
     expect(e.message).toBe(
-      `The knowledge folder ${dir} holds 5 KB of text, over answer mode's 4 KB limit. Remove some files, or point knowledgeDir in config.json at a smaller folder.`,
+      `The knowledge folder ${dir} has more than 4 KB of text, answer mode's limit. Remove some files, or point knowledgeDir in config.json at a smaller folder.`,
     );
   });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)("an unreadable file → knowledgeMissing naming that file (review 1)", async () => {
+    await put("me.md", "me\n");
+    const file = path.join(dir, "me.md");
+    await chmod(file, 0o000);
+    try {
+      const e = await rejection(readKnowledge(dir));
+      expect(e.kind).toBe("knowledgeMissing");
+      expect(e.message).toBe(`Answer mode can't read ${file} (EACCES). Check its permissions, or move it out of the knowledge folder.`);
+    } finally {
+      await chmod(file, 0o644);
+    }
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "an unreadable subfolder → knowledgeMissing naming it; text already over the limit stops the walk before it is reached (review 1)",
+    async () => {
+      await put("a.md", "x".repeat(5000));
+      await put("z/later.md", "later\n");
+      const sub = path.join(dir, "z");
+      await chmod(sub, 0o000);
+      try {
+        const e = await rejection(readKnowledge(dir));
+        expect(e.kind).toBe("knowledgeMissing");
+        expect(e.message).toBe(`Answer mode can't read ${sub} (EACCES). Check its permissions, or move it out of the knowledge folder.`);
+        const early = await rejection(readKnowledge(dir, { maxBytes: 4096 }));
+        expect(early.kind).toBe("knowledgeTooLarge");
+      } finally {
+        await chmod(sub, 0o755);
+      }
+    },
+  );
 
   it("text exactly at the limit is read; skipped files do not count toward it", async () => {
     await put("a.md", "x".repeat(4096));

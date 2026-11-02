@@ -1203,6 +1203,30 @@ describe("mode (089)", () => {
     expect((await store.listThreads()).map((t) => t.id).sort()).toEqual([answerChat, solveChat].sort());
   });
 
+  it("a full chat's seeded continuation keeps that chat's mode, whatever the toggle says now (review 1)", async () => {
+    deps.config.maxScreenshotsPerThread = 1;
+    const app = createApp({ ...deps, saveMode: async () => ({ ok: true as const }) });
+    const solveChat = await app.onCapture(shot(PNG));
+    // The fake runner records no turns: the screenshot turn and its answer, as the real one would.
+    await store.appendTurn(solveChat, { role: "user", kind: "screenshot", file: "001.png" });
+    await store.appendTurn(solveChat, answer("x = 4"));
+    await app.handlers.setMode("answer");
+    const solveNext = await app.onCapture(shot(PNG2));
+    expect(solveNext).not.toBe(solveChat);
+    expect(Object.keys(await store.getThread(solveNext))).not.toContain("mode");
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(solveNext, { kind: "new", screenshot: "001.png", seed: "x = 4" });
+
+    await app.handlers.newThread();
+    const answerChat = await app.onCapture(shot(PNG));
+    expect((await store.getThread(answerChat)).mode).toBe("answer");
+    await store.appendTurn(answerChat, { role: "user", kind: "screenshot", file: "001.png" });
+    await store.appendTurn(answerChat, answer("My story."));
+    await app.handlers.setMode("solve");
+    const answerNext = await app.onCapture(shot(PNG2));
+    expect([answerChat, solveNext]).not.toContain(answerNext);
+    expect((await store.getThread(answerNext)).mode).toBe("answer");
+  });
+
   it.each([["interview"], [""], [undefined], [null], [1]])("setMode(%j) from the renderer is refused: nothing changes, nothing is saved", async (bad) => {
     const saveMode = vi.fn(async () => ({ ok: true as const }));
     const app = createApp({ ...deps, saveMode });

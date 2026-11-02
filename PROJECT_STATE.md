@@ -4,9 +4,9 @@
 089 answer mode, in worktree .claude/worktrees/answer-mode on branch worktree-answer-mode (from master 70bcce1). Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
 - Built: Solve | Answer toggle, knowledge folder, format (Amendment 25: e5c5059 tests … a6fea15; 2 Opus reviews, pass).
 - Amendment 26 (Eric: "should still be able to function even though if it has no knowledge"): no folder/no text files → answers from the model's own knowledge; gaps for missing personal facts; unreadable → knowledgeUnreadable. d0bf60d tests (red: 12 failed), 4c24185 code, 763a98d docs; review 3 pass with notes → 752683d tests (red: 2), 72ea28b fix, 0629298 docs; review 4 pass. Unit 1120 passed, 7 skipped; build ok; caps ok.
-- Live check (real claude, empty folder): technical answer in full; "learned a technology quickly" a [gap] template; "AI news" a draft with option gaps, though it states some habits ("every morning", "on my commute") outright.
-- Next: Eric restarts his worktree build (pid 74917, ~/snapsolve-answer-test; dist/ already rebuilt) and tries it; his errored chat can be retried. Open question for him: should "how do you…" drafts bracket habits too?
-- Pending: e2e (window) tests — Eric: "Later, I'll tell you". Then Eric fills the knowledge folder and format, tries it, says merge.
+- Eric's data (~/snapsolve-answer-test, not in git): his General Magic KB + voice copied to knowledge/.source, split into 48 active files (answers/ stories/ me/ projects/ company/, 208 KB) + hidden .archive/; voice rules + never-say rules in answer-format.md, plus "Gaps: keep them few" (Eric chose option 1); config opus/low (fastest measured: first words 3–5 s; Opus fast mode: API says "not enabled" for his account).
+- Next, Eric's request (2 Nov, parked until after his call): voice hold-to-talk (hold ⌃⌥V / mic, release sends) and Esc stops an in-flight answer. Brainstorm open: how he asks and stops on a call. Global shortcuts have no key-up, so hold on ⌃⌥V needs key-release detection.
+- Pending: e2e (window) tests — Eric: "Later, I'll tell you". Then he tries it and says merge.
 - Merge path: queue 089 on master (memory files to W), keel/089 from master, merge e5c5059 → red → merge the rest → review → close.
 - Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
 - master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.

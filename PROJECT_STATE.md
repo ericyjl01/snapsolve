@@ -3,8 +3,9 @@
 ## Now
 089 answer mode, in worktree .claude/worktrees/answer-mode on branch worktree-answer-mode (from master 70bcce1). Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
 - Built: Solve | Answer toggle, knowledge folder, format (Amendment 25: e5c5059 tests … a6fea15; 2 Opus reviews, pass).
-- Amendment 26 (Eric: "should still be able to function even though if it has no knowledge"): no folder/no text files → answers from the model's own knowledge; gaps for missing personal facts; unreadable → knowledgeUnreadable. d0bf60d tests (red: 12 failed), 4c24185 code, then docs.
-- Verified: build ok; unit + integration 1119 passed, 7 skipped (Windows-only); caps ok. Next: Opus review of Amendment 26 (no e2e), then tell Eric to restart his build (pid 74917, ~/snapsolve-answer-test).
+- Amendment 26 (Eric: "should still be able to function even though if it has no knowledge"): no folder/no text files → answers from the model's own knowledge; gaps for missing personal facts; unreadable → knowledgeUnreadable. d0bf60d tests (red: 12 failed), 4c24185 code, 763a98d docs; review 3 pass with notes → 752683d tests (red: 2), then the fix.
+- Live check (real claude, empty folder): technical answer in full; "learned a technology quickly" a [gap] template; "AI news" a draft with option gaps, though it states some habits ("every morning", "on my commute") outright.
+- Next: unit + build + caps, a fresh Opus review of the follow-up, then tell Eric to restart his build (pid 74917, ~/snapsolve-answer-test).
 - Pending: e2e (window) tests — Eric: "Later, I'll tell you". Then Eric fills the knowledge folder and format, tries it, says merge.
 - Merge path: queue 089 on master (memory files to W), keel/089 from master, merge e5c5059 → red → merge the rest → review → close.
 - Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.

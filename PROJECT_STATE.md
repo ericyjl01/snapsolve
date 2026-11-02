@@ -1,12 +1,15 @@
 # PROJECT_STATE
 
 ## Now
-Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.8 (2026-10-23, f9efb11; running, app.ready 0.2.8, no display-size warnings).
-  It has 088, 086, 090, 087, 091. Saved window bounds stay: tray › Reset window position shows 091's default.
-- Goal run ended (2026-10-23): `tasks.py next` → none — all blocked; only 032 left. master pushed to origin.
-- Blocked: 032 — Eric runs master's docs/checklists/macos.md (29 rows; rows 3, 16, 29 cover 087, 091, 090).
-- Backlog 033, 067, 069, 074, 089, 092, 093, 094, 095. Dropped by Eric 2026-10-23: 042, 053, 054, 056, 066, 068, 070, 080, 081.
+089 answer mode, in worktree .claude/worktrees/answer-mode on branch worktree-answer-mode (from master 70bcce1). Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
+- Built: title bar Solve | Answer toggle (config `mode`), knowledge folder (`knowledgeDir`, default <data>/knowledge), format (<data>/answer-format.md, else prompts/answer-format.md); SPEC Amendment 25.
+- Commits: e5c5059 tests (red: 91 failed, knowledge.test.ts unloadable), b2c0cc6 code, 38ec200 docs, ff38d60 review-1 fixes, a6fea15 docs.
+- Verified: build ok; unit + integration 1117 passed, 7 skipped (Windows-only); caps ok. Opus review 1 fail (resume path untested) → fixed; review 2 pass.
+- Live check (real claude, sample material in the scratchpad): walkthrough and STAR answers kept to the material, gaps in [brackets].
+- Pending: e2e (window) tests — Eric: "Later, I'll tell you". Then Eric fills the knowledge folder and format, tries it, says merge.
+- Merge path: queue 089 on master (memory files to W), keel/089 from master, merge e5c5059 → red → merge the rest → review → close.
+- Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
+- master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.
 
 ## Log
 2026-10-20 · 063 · closed · voice follow-up: hotkeys.voice Control+Alt+V shows the window and runs the on-device speech helper (native/speech Swift, SpeechAnalyzer/SFSpeechRecognizer, built by npm run build, released as app/native); listening bar with live transcript; the key again sends via the follow-up path to the current thread (or a text thread) as a voice-marked turn; Esc/hide cancel, ignored while the thread answers, empty → note, denied → settings card, failure → error card; preload 15 (Amendment 11); hand check → 032 row 22 (315f4c6)

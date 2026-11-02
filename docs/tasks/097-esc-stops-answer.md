@@ -19,7 +19,7 @@ Out: a stop button in the UI; a global Esc while the window is not focused (it w
 - [x] Esc during "Thinking…" or streaming stops claude within about a second; the card shows the stopped state; the chat accepts the next question. (unit: runner.test stop, app.test stopAnswer, panel.test; e2e written, not run)
 - [x] Esc with nothing running still hides the window; Esc while dictating still cancels dictation. (unit: panel.test; the voice path is unchanged, 063/096 tests)
 - [x] Unit suite green (`npx vitest run --project unit`: 1196 passed, 7 skipped after review 1), build ok, caps ok; e2e written but not run (windows pop up; Eric says when).
-- [ ] An Opus review passes.
+- [x] An Opus review passes (review 1 fail, two reasons fixed; review 2 pass).
 
 ## Tests
 Command: `npx vitest run --project unit test/unit/runner.test.ts test/unit/panel.test.ts test/unit/app.test.ts test/unit/errors.test.ts`
@@ -37,4 +37,5 @@ SPEC Amendment 3 (Esc hides), Amendment 11 (voice Esc), Amendment 28, §3 runner
 ## Notes
 - Built on branch `worktree-answer-mode` in `.claude/worktrees/answer-mode` by hand like 089 (tests 2e3185d, red: 22 failed; code 9dbbd80). No `npm test`, no e2e runs.
 - Review 1 (fail): e2e 058/059 pressed Esc while the slow fake answer streamed (now a stop, the window stayed); the 1 s stop grace had no test (all overrode it). Fixed in tests 96dfceb (red: 1 failed, the auth recheck; the rest guard behavior that already held) and code 51a468a, with notes taken: the stopped text is drawn as `.answer.stopped` (keeps code-block and math styles; was a faded `.partial`), no `claude auth status` recheck on a stop. Not changed (notes): a stop after the timeout's kill began still ends as timeout; a stop landing after claude closed but before the turn is saved keeps the window up for that press; main.ts's voice-idle condition is covered only by reading (no e2e takes the global Esc away).
+- Review 2 notes, not done (follow-ups): pin `!attempt.stopped` before the resume fallback (assert sessionId/transcriptPath unchanged after a stopped resume) and `entry.kill = undefined` (a stop after claude exited keeps a finished answer); Esc in the sub-second "Thinking…" before the runner has the turn hides instead of stopping; on a first turn the red "Something went wrong." flashes for one disk write before the stopped turn arrives (pre-existing ordering in renderer `update`).
 - Hand check on Eric's Mac (checklist 032 at merge): ask something long, click into the window, Esc while it writes → it stops within a second, text kept with "Stopped." and Retry; Esc again → hides.

@@ -21,7 +21,7 @@ export interface HotkeysDeps {
   onCapture: () => void;
   /** Shows or hides the window. */
   onToggle: () => void;
-  /** Starts a dictation; pressed again, stops and sends it (voice.ts decides). */
+  /** The voice key went down (no key-up exists here): voice.ts starts a dictation; the speech helper reports the release (096). */
   onVoice: () => void;
   /** Shows a tray notification. */
   notify: (message: string) => void;

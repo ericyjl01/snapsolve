@@ -1,5 +1,5 @@
-// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2, 9, 10, 11, 15 and 25) that maps
-// 1:1 onto them.
+// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2, 9, 10, 11, 15, 25 and 27) that
+// maps 1:1 onto them.
 import type { AnswerDelta, AnswerDone, ChatMode, Thread, VoiceState } from "./types";
 
 export const IPC = {
@@ -24,9 +24,9 @@ export const IPC = {
   // SPEC Amendment 2 (macOS Screen Recording card); neither takes an argument.
   screenRecordingSettingsOpen: "settings:openScreenRecording",
   appRelaunch: "app:relaunch",
-  // SPEC Amendment 11 (task 063): the mic buttons (as the voice hotkey) and the voice card's Open System Settings; no
-  // argument.
-  voiceToggle: "voice:toggle",
+  // SPEC Amendment 27 (task 096): a mic button held (true) or let go (false), as the voice hotkey is held.
+  voiceHold: "voice:hold",
+  // SPEC Amendment 11 (task 063): the voice card's Open System Settings; no argument.
   voiceSettingsOpen: "settings:openVoice",
   // SPEC Amendment 25 (task 089): the title bar's Solve | Answer toggle — the mode new chats start in.
   modeGet: "mode:get",
@@ -51,7 +51,7 @@ export const PRELOAD_CHANNELS = {
   openScreenRecordingSettings: IPC.screenRecordingSettingsOpen,
   relaunch: IPC.appRelaunch,
   onVoice: IPC.voiceState,
-  toggleVoice: IPC.voiceToggle,
+  holdVoice: IPC.voiceHold,
   openVoiceSettings: IPC.voiceSettingsOpen,
   getMode: IPC.modeGet,
   setMode: IPC.modeSet,
@@ -77,7 +77,7 @@ export interface IpcRequests {
   [IPC.historyClear]: { args: []; result: boolean };
   [IPC.screenRecordingSettingsOpen]: { args: []; result: void };
   [IPC.appRelaunch]: { args: []; result: void };
-  [IPC.voiceToggle]: { args: []; result: void };
+  [IPC.voiceHold]: { args: [held: boolean]; result: void };
   [IPC.voiceSettingsOpen]: { args: []; result: void };
   [IPC.modeGet]: { args: []; result: ChatMode };
   [IPC.modeSet]: { args: [mode: ChatMode]; result: void };
@@ -106,8 +106,8 @@ export interface SnapsolveApi {
   relaunch(): Promise<void>;
   /** The voice composer's state as it changes (task 063). */
   onVoice(listener: (state: VoiceState) => void): () => void;
-  /** A mic button: what the voice hotkey does (start; again: stop and send). */
-  toggleVoice(): Promise<void>;
+  /** A mic button held (true: start listening) or let go (false: stop and send), as the voice hotkey is held (096). */
+  holdVoice(held: boolean): Promise<void>;
   /** macOS: main opens System Settings at the pane voice was refused (a fixed URL); elsewhere nothing. */
   openVoiceSettings(): Promise<void>;
   /** The mode new chats start in (config.json `mode`, task 089). */

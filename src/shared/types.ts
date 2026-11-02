@@ -126,7 +126,8 @@ export type VoiceCardKind = VoiceDenial | "failed";
  */
 export type VoiceState =
   | { state: "idle"; note?: string }
-  | { state: "listening"; text: string; level: number; key: string }
+  /** `hold`: letting go sends (096); false only for a voice key with no modifier to watch, pressed again to send. */
+  | { state: "listening"; text: string; level: number; key: string; hold: boolean }
   | { state: "stopping"; text: string; key: string };
 
 /** main → renderer: a streamed chunk of answer text. */

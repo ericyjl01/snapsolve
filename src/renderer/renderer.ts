@@ -11,13 +11,15 @@
 // grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings / Relaunch,
 // nothing else; voice's refused Microphone or Speech Recognition does the same with Open System Settings only. While
 // a question is dictated (Amendment 11, task 063) the composer is a listening bar: a red dot, input level bars, the
-// live transcript and how to send or cancel; a dictated question shows with a mic mark. The title bar's Solve | Answer
+// live transcript and how to send or cancel; a dictated question shows with a mic mark. The mic buttons are held to
+// talk (Amendment 27, task 096: hold.ts). The title bar's Solve | Answer
 // toggle (Amendment 25, task 089) shows the mode of the chat on screen, or with none the mode a new chat starts in;
 // switching while a chat is on screen starts a new chat in the other mode (a chat keeps the mode it started in).
 import { continuedNote, screenRecordingCard, userMessage, voicePermissionCard } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
 import type { AssistantTurn, ChatMode, Thread, UserTurn, VoiceState } from "../shared/types";
 import { modelName } from "../shared/models";
+import { bindHold } from "./hold";
 import { renderAnswer } from "./render";
 
 declare global {
@@ -492,7 +494,7 @@ function showVoice(state: VoiceState): void {
   }
   (listening.querySelector(".transcript") as HTMLElement).textContent = state.text || "Listening…";
   (listening.querySelector(".hint") as HTMLElement).textContent =
-    state.state === "listening" ? `${state.key} to send · esc to cancel` : "Sending…";
+    state.state === "listening" ? `${state.hold ? "let go" : state.key} to send · esc to cancel` : "Sending…";
   const level = state.state === "listening" ? state.level : 0;
   // Five bars, the middle ones tallest, scaled by the input level.
   const shape = [0.5, 0.8, 1, 0.8, 0.5];
@@ -515,10 +517,12 @@ box.addEventListener("keydown", (event) => {
 });
 box.addEventListener("input", fitComposer);
 send.addEventListener("click", sendFollowUp);
-// The mic buttons (title bar and composer) do what the voice hotkey does: start, and again stop and send.
-for (const id of ["voice", "composer-voice"]) {
-  (document.getElementById(id) as HTMLButtonElement).addEventListener("click", () => void api.toggleVoice().catch(() => undefined));
-}
+// The mic buttons (title bar and composer) are held as the voice hotkey is: down starts, letting go sends (096).
+bindHold(
+  ["voice", "composer-voice"].map((id) => document.getElementById(id) as HTMLButtonElement),
+  window,
+  (held) => void api.holdVoice(held).catch(() => undefined),
+);
 api.onVoice(showVoice);
 (document.getElementById("hide") as HTMLButtonElement).addEventListener("click", () => void api.hide().catch(() => undefined));
 (document.getElementById("new-chat") as HTMLButtonElement).addEventListener("click", startNewChat);

@@ -56,7 +56,7 @@
           <button type="button" role="radio" data-mode="solve" aria-checked="true" title="Solve what's on your screen">Solve</button>
           <button type="button" role="radio" data-mode="answer" aria-checked="false" title="Draft your own answer from your knowledge folder">Answer</button>
         </div>
-        <button id="voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
+        <button id="voice" class="icon voice" type="button" aria-label="Dictate" title="Hold to dictate a question">
           <svg aria-hidden="true" width="12" height="13" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.6">
             <rect x="3.5" y="1" width="5" height="8" rx="2.5"></rect>
             <path d="M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2"></path>
@@ -81,7 +81,7 @@
         <label class="visually-hidden" for="follow-up">Ask a follow-up</label>
         <!-- Task 079: a pill — the mic at the left, the text, a round send at the right. -->
         <div id="composer-box" class="composer-box">
-          <button id="composer-voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
+          <button id="composer-voice" class="icon voice" type="button" aria-label="Dictate" title="Hold to dictate a question">
             <svg aria-hidden="true" width="12" height="13" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.6">
               <rect x="3.5" y="1" width="5" height="8" rx="2.5"></rect>
               <path d="M1.5 6.5a4.5 4.5 0 0 0 9 0M6 11v2"></path>
@@ -94,7 +94,7 @@
             </svg>
           </button>
         </div>
-        <!-- Task 063: while dictating, the composer is this bar (the voice hotkey again sends, Esc cancels). -->
+        <!-- Task 063: while dictating, the composer is this bar (letting go of the voice hotkey or the mic sends, 096; Esc cancels). -->
         <div id="listening" class="listening" role="status" hidden>
           <span class="dot" aria-hidden="true"></span>
           <span class="levels" aria-hidden="true"><span class="level"></span><span class="level"></span><span class="level"></span><span class="level"></span><span class="level"></span></span>

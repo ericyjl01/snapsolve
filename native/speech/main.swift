@@ -2,7 +2,12 @@
 // stdout: {"type":"ready"}, {"type":"level","level":0…1}, {"type":"partial","text":…}, then {"type":"final","text":…}
 // after SIGINT or stdin closing; {"type":"error","kind":"micDenied"|"speechDenied"|"unavailable"|"failed",
 // "message":…} and exit 1 on failure. No audio is written anywhere.
+// `--hold control,option` (task 096, hold to talk): from the start, before any permission prompt, it also watches those
+// modifier keys and prints {"type":"released"} once, as soon as one of them is no longer down. It reads only the
+// modifier flags (CGEventSource.flagsState), no key events (no event tap, so no Input Monitoring prompt is expected;
+// confirmed by hand on the Mac, checklist 032).
 import AVFoundation
+import CoreGraphics
 import Foundation
 import Speech
 
@@ -50,6 +55,35 @@ final class StopSignal: @unchecked Sendable {
     lock.unlock()
     for h in run { h() }
   }
+}
+
+/** The `--hold` modifiers as event flags; nil without the option (or with no name it knows). */
+func holdFlags(_ arguments: [String]) -> CGEventFlags? {
+  guard let i = arguments.firstIndex(of: "--hold"), i + 1 < arguments.count else { return nil }
+  var flags: CGEventFlags = []
+  for name in arguments[i + 1].split(separator: ",") {
+    switch name {
+    case "control": flags.insert(.maskControl)
+    case "option": flags.insert(.maskAlternate)
+    case "shift": flags.insert(.maskShift)
+    case "command": flags.insert(.maskCommand)
+    default: break
+    }
+  }
+  return flags.isEmpty ? nil : flags
+}
+
+/** Polls the held modifiers every 20 ms; the first poll that finds one up prints "released" and ends the watch. */
+let holdWatch: DispatchSourceTimer? = holdFlags(CommandLine.arguments).map { held in
+  let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
+  timer.schedule(deadline: .now(), repeating: .milliseconds(20))
+  timer.setEventHandler { [weak timer] in
+    if CGEventSource.flagsState(.combinedSessionState).isSuperset(of: held) { return }
+    emit(["type": "released"])
+    timer?.cancel()
+  }
+  timer.resume()
+  return timer
 }
 
 let stop = StopSignal()

@@ -39,7 +39,7 @@ import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
 import { createStore } from "./store";
 import { createTray, drawTrayIcon, openHistoryFolder, type TrayControl } from "./tray";
-import { createVoice, resolveSpeechHelper, type Voice } from "./voice";
+import { createVoice, holdModifiers, resolveSpeechHelper, type Voice } from "./voice";
 
 // `electron dist/main.js` does not read package.json, so name and version are injected at build time.
 app.setName(__APP_NAME__);
@@ -242,6 +242,8 @@ async function start(): Promise<void> {
     env: fakeSpeech ? { ...process.env, ELECTRON_RUN_AS_NODE: "1" } : process.env,
     globalShortcut,
     keyLabel: hotkeySymbols(config.hotkeys.voice, process.platform),
+    // Hold to talk (096): the helper watches these while the voice hotkey is held (globalShortcut has no key-up).
+    holdKeys: holdModifiers(config.hotkeys.voice),
     onState: (state) => panel.send(IPC.voiceState, state),
     send: (text) => core.onVoice(text),
     onDenied: (denial) => {
@@ -273,8 +275,12 @@ async function start(): Promise<void> {
     [IPC.historyClear]: core.handlers.clearHistory,
     [IPC.screenRecordingSettingsOpen]: permissionHandlers.openScreenRecordingSettings,
     [IPC.appRelaunch]: permissionHandlers.relaunch,
-    // The mic buttons do what the voice hotkey does (SPEC Amendment 11).
-    [IPC.voiceToggle]: async () => voice?.toggle(),
+    // The mic buttons are held as the voice hotkey is (SPEC Amendment 27): true starts, false stops and sends.
+    [IPC.voiceHold]: async (held) => {
+      if (typeof held !== "boolean") throw new SnapsolveError("internal", "voice:hold takes a boolean");
+      if (held) voice?.press("button");
+      else voice?.release("button");
+    },
     [IPC.voiceSettingsOpen]: permissionHandlers.openVoiceSettings,
     // The title bar's Solve | Answer toggle (SPEC Amendment 25).
     [IPC.modeGet]: core.handlers.getMode,
@@ -315,7 +321,8 @@ async function start(): Promise<void> {
     config,
     onCapture: captureInto(core.onCapture),
     onToggle: () => panel.toggle(),
-    onVoice: () => voice?.toggle(),
+    // Key down only; the release comes from the speech helper's watch (096).
+    onVoice: () => voice?.press("key"),
     notify,
     label: (accelerator) => hotkeyLabel(accelerator, process.platform),
     log,
@@ -351,8 +358,8 @@ async function start(): Promise<void> {
       resetPosition: () => panel.resetPosition(),
       /** What the tray's Transparency steps do (090). */
       setTransparency: (transparency: number) => setTransparency(transparency),
-      /** What the voice hotkey does (063). */
-      voice: () => voice?.toggle(),
+      /** The voice hotkey held (true) or let go (false, as the helper's released line reports it) (096). */
+      voiceKey: (down: boolean) => (down ? voice?.press("key") : voice?.release("key")),
       /** What the temporary Esc shortcut does while listening. */
       voiceEscape: () => voice?.cancel(),
     };

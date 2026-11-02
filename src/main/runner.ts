@@ -98,7 +98,7 @@ export interface RunnerDeps {
   /** Contents of prompts/system.md: a solve chat's system prompt. */
   systemPrompt: string;
   /**
-   * An answer chat's system prompt (089), built again for every turn (knowledge.ts). It rejects with `knowledgeMissing`
+   * An answer chat's system prompt (089), built again for every turn (knowledge.ts). It rejects with `knowledgeUnreadable`
    * or `knowledgeTooLarge`, whose message the card shows; the turn then fails before claude is started. Not wired →
    * an answer chat's turns fail as `internal`.
    */
@@ -762,7 +762,7 @@ function spawnFailure(e: NodeJS.ErrnoException): { code: string | null; syscall:
 
 /** The card's error: Claude's own words for a usage limit, the fixed text for the rest (details are logged). */
 /** Kinds whose card shows the error's own message: Claude's words for a usage limit; the folder for answer mode (089). */
-const OWN_MESSAGE: ReadonlySet<ErrorKind> = new Set(["usageLimit", "knowledgeMissing", "knowledgeTooLarge"]);
+const OWN_MESSAGE: ReadonlySet<ErrorKind> = new Set(["usageLimit", "knowledgeUnreadable", "knowledgeTooLarge"]);
 
 function classifyError(e: unknown): { kind: ErrorKind; message: string } {
   if (e instanceof SnapsolveError) {

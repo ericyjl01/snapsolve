@@ -1,7 +1,8 @@
-// Answer mode (task 089, SPEC Amendment 25): an answer chat's system prompt is prompts/answer.md, the answer format (the
-// user's <data>/answer-format.md, else prompts/answer-format.md) and every text file in the knowledge folder
-// (config.json `knowledgeDir`, else <data>/knowledge). The runner builds it again for every turn, so edits to the
-// folder or the format count from the next question. Nothing here is logged: the files are the user's own material.
+// Answer mode (task 089, SPEC Amendments 25 and 26): an answer chat's system prompt is prompts/answer.md, the answer
+// format (the user's <data>/answer-format.md, else prompts/answer-format.md) and every text file in the knowledge folder
+// (config.json `knowledgeDir`, else <data>/knowledge), which may be missing or empty: the model answers from its own
+// knowledge too. The runner builds it again for every turn, so edits to the folder or the format count from the next
+// question. Nothing here is logged: the files are the user's own material.
 import type { Dirent } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -31,9 +32,10 @@ export interface Knowledge {
 }
 
 /**
- * Every text file under `dir` (four folders down at most; hidden files and folders skipped). Rejects with
- * `knowledgeMissing` when there is no such folder, it cannot be read, or it holds no text file, and with
- * `knowledgeTooLarge` when the text files add up to more than `maxBytes`; either message names the folder.
+ * Every text file under `dir` (four folders down at most; hidden files and folders skipped). No such folder (or a
+ * file in its place) and a folder with no text file are empty knowledge, not an error (Amendment 26). Rejects with
+ * `knowledgeUnreadable` naming the folder, file or subfolder that cannot be read, and with `knowledgeTooLarge` naming
+ * the folder when the text files add up to more than `maxBytes`.
  */
 export async function readKnowledge(dir: string, options: { maxBytes?: number } = {}): Promise<Knowledge> {
   const maxBytes = options.maxBytes ?? KNOWLEDGE_MAX_BYTES;
@@ -42,15 +44,14 @@ export async function readKnowledge(dir: string, options: { maxBytes?: number } 
     top = await readdir(dir, { withFileTypes: true });
   } catch (e) {
     const code = errorCode(e);
-    if (code === "ENOENT" || code === "ENOTDIR") throw new SnapsolveError("knowledgeMissing", missing(dir));
+    if (code === "ENOENT" || code === "ENOTDIR") return { dir, files: [], bytes: 0, skipped: [] };
     throw new SnapsolveError(
-      "knowledgeMissing",
+      "knowledgeUnreadable",
       `Answer mode can't read the knowledge folder ${dir} (${code ?? "unknown error"}). Check its permissions, or point knowledgeDir in config.json at another folder.`,
     );
   }
   const found: Found = { files: [], skipped: [], bytes: 0, maxBytes };
   await walk(dir, "", top, 0, found);
-  if (found.files.length === 0) throw new SnapsolveError("knowledgeMissing", missing(dir));
   found.files.sort((a, b) => compare(a.rel, b.rel));
   found.skipped.sort(compare);
   const files: KnowledgeFile[] = [];
@@ -77,7 +78,7 @@ interface Found {
 /**
  * Collects text files in name order. Stops with `knowledgeTooLarge` as soon as they pass the limit, so a huge folder
  * (`knowledgeDir: "~"`) costs no more than the limit's worth of walking; an unreadable subfolder stops it with
- * `knowledgeMissing` naming that folder.
+ * `knowledgeUnreadable` naming that folder.
  */
 async function walk(root: string, rel: string, entries: Dirent[], depth: number, found: Found): Promise<void> {
   for (const entry of [...entries].sort((a, b) => compare(a.name, b.name))) {
@@ -115,15 +116,28 @@ async function walk(root: string, rel: string, entries: Dirent[], depth: number,
 
 function unreadable(file: string, e: unknown): SnapsolveError {
   return new SnapsolveError(
-    "knowledgeMissing",
+    "knowledgeUnreadable",
     `Answer mode can't read ${file} (${errorCode(e) ?? "unknown error"}). Check its permissions, or move it out of the knowledge folder.`,
   );
 }
 
-/** The answer chat's system prompt: the answer prompt, `## Answer format`, then `## Reference material` with each file. */
+/** What `## Reference material` says when the knowledge folder has no text file (Amendment 26). */
+const NO_MATERIAL = "None: the user's knowledge folder has no text files.";
+
+/**
+ * The answer chat's system prompt: the answer prompt, `## Answer format`, then `## Reference material` with each file.
+ * With no file, that section says there is none and names any files of other types left unread (a PDF résumé), so
+ * the answer can say they need saving as text.
+ */
 export function answerSystemPrompt(parts: { base: string; format: string; knowledge: Knowledge }): string {
-  const files = parts.knowledge.files.map((f) => `<file path="${escapeAttribute(f.path)}">\n${f.text.trimEnd()}\n</file>`);
-  return `${[parts.base.trimEnd(), `## Answer format\n\n${parts.format.trim()}`, `## Reference material\n\n${files.join("\n\n")}`].join("\n\n")}\n`;
+  const { files, skipped } = parts.knowledge;
+  const material =
+    files.length > 0
+      ? files.map((f) => `<file path="${escapeAttribute(f.path)}">\n${f.text.trimEnd()}\n</file>`).join("\n\n")
+      : skipped.length > 0
+        ? `${NO_MATERIAL}\n\nNot read (not text files): ${skipped.join(", ")}`
+        : NO_MATERIAL;
+  return `${[parts.base.trimEnd(), `## Answer format\n\n${parts.format.trim()}`, `## Reference material\n\n${material}`].join("\n\n")}\n`;
 }
 
 /** The user's answer format when `userFile` exists and is not blank (a BOM dropped); otherwise `builtIn`. */
@@ -142,10 +156,6 @@ export function knowledgeFolder(configured: string | null, fallback: string, hom
   if (configured === "~") return home;
   if (configured.startsWith("~/")) return path.join(home, ...configured.slice(2).split("/"));
   return configured;
-}
-
-function missing(dir: string): string {
-  return `Answer mode has nothing to draw on: no .md, .txt, .toml, .json, .yaml or .csv files in ${dir}. Put your material there, or point knowledgeDir in config.json at your folder.`;
 }
 
 /** Whole KB, rounded up, so text just over the limit never reads as equal to it. */

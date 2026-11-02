@@ -414,7 +414,7 @@ function layout(): void {
   }
   empty.textContent =
     shownMode() === "answer"
-      ? "Answer mode. Ask a question and snapsolve drafts your answer from your knowledge folder."
+      ? "Answer mode. Ask a question and snapsolve drafts your answer, using your knowledge folder for anything about you."
       : threads.size === 0
         ? "Press the snapsolve hotkey to solve what's on your screen."
         : "New chat. Press the snapsolve hotkey or type a question.";

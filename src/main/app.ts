@@ -17,7 +17,7 @@ import { isUuid, type SavedScreenshot, type Store } from "./store";
 
 export interface AppDeps {
   store: Store;
-  runner: Pick<Runner, "enqueue" | "on">;
+  runner: Pick<Runner, "enqueue" | "on" | "stop">;
   panel: { open(): void; send<C extends keyof IpcEvents>(channel: C, payload: IpcEvents[C]): void };
   /** `mode` is the mode new chats start in (089); `setMode` changes it for this run and saves it with `saveMode`. */
   config: Pick<Config, "model" | "effort" | "maxScreenshotsPerThread" | "mode">;
@@ -86,6 +86,12 @@ export interface App {
   onVoiceFailed(): Promise<void>;
   /** The thread a capture or question would join is new, queued or running (a voice press is then ignored, 063). */
   isAnswering(): boolean;
+  /**
+   * Esc with the window focused (097): stops the running answer of the chat on screen (`runner.stop`) — the current
+   * thread, or before one is known the newest chat (permission cards aside); nothing after "+". False when nothing is
+   * running there, so Esc hides the window as before.
+   */
+  stopAnswer(): boolean;
   /** The renderer's requests (arguments come from the renderer, so each is checked). */
   handlers: AppHandlers;
 }
@@ -425,6 +431,13 @@ export function createApp(deps: AppDeps): App {
       if (fresh || !current) return false;
       const thread = known.get(current);
       return thread !== undefined && BUSY.has(thread.status);
+    },
+
+    stopAnswer() {
+      if (fresh || current === null) return false;
+      // Before the first capture or chosen chat, the window shows the newest chat (as the renderer's `current`).
+      const shown = current ?? byNewest([...known.values()].filter((t) => !t.permission))[0]?.id;
+      return shown ? runner.stop(shown) : false;
     },
 
     handlers,

@@ -208,6 +208,8 @@ async function start(): Promise<void> {
     saveBounds: (saved) => saveWindowBounds(paths.windowState, saved),
     physicalSize: (id) => sizes.get(id),
     onClose: () => voice?.cancel(),
+    // Esc (097): stops the chat on screen's answer. While dictating, Esc stays voice's (it cancels via the hide).
+    onEscape: () => (voice?.status() ?? "idle") === "idle" && core.stopAnswer(),
   });
   const core = createApp({
     store,

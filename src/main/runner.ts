@@ -1,7 +1,7 @@
 // Runs Claude turns (SPEC §3.1–3.5): builds argv, env and the stdin message, spawns `claude -p` once per turn,
-// streams its events, serializes turns per thread under a global cap, kills on timeout, adopts a new session's
-// transcript once its first turn exits (failed or not) and falls back to a fresh session carrying the thread's
-// history when resume fails.
+// streams its events, serializes turns per thread under a global cap, kills on timeout or on a stop (Esc, task 097),
+// adopts a new session's transcript once its first turn exits (failed or not) and falls back to a fresh session
+// carrying the thread's history when resume fails.
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -24,6 +24,8 @@ export const SEED_HEADER = "The previous thread's last answer:";
 const SCREENSHOT = /^(\d{3})\.png$/;
 const STDERR_KEEP = 4096;
 const KILL_GRACE_MS = 5000;
+/** How long a stopped claude gets to exit after SIGTERM before SIGKILL (097: Esc should end it within about a second). */
+const STOP_GRACE_MS = 1000;
 
 export interface Command {
   path: string;
@@ -112,6 +114,8 @@ export interface RunnerDeps {
   loadSendImage: (file: string) => Promise<SendImage>;
   /** How long a timed-out claude gets to exit after the first kill before SIGKILL; default `KILL_GRACE_MS`. */
   killGraceMs?: number;
+  /** The same after a stop (097); default `STOP_GRACE_MS`. */
+  stopGraceMs?: number;
   /** `claude auth status`, rechecked after an error result (SPEC §3.6); logged out turns the error into notLoggedIn. */
   checkAuth?: () => Promise<AuthStatus>;
 }
@@ -121,6 +125,13 @@ export interface Runner {
   enqueue(threadId: string, request: TurnRequest): Promise<TurnOutcome>;
   /** Subscribes to every event; returns the unsubscribe function. */
   on(listener: (event: RunnerEvent) => void): () => void;
+  /**
+   * Esc (097): stops the thread's running turn. Its claude gets SIGTERM (SIGKILL after `stopGraceMs`), or is never
+   * started if the turn is still being prepared; text after the stop is dropped and the turn ends as an errored
+   * `stopped` answer keeping the text streamed so far (Retry re-runs it). True when a turn was running (or already
+   * stopping); false when none is (a turn only waiting in the queue is left alone, as are the thread's later turns).
+   */
+  stop(threadId: string): boolean;
 }
 
 /** SPEC §3.1, exactly; the system prompt is one argv element. */
@@ -242,6 +253,13 @@ interface Job {
   resolve: (outcome: TurnOutcome) => void;
 }
 
+/** A thread's running turn, for `stop` (097). */
+interface Active {
+  stopped: boolean;
+  /** Set while its claude runs: SIGTERM, then SIGKILL after the stop grace. */
+  kill?: () => void;
+}
+
 type Mode = "first" | "resume" | "fallback";
 
 interface Attempt {
@@ -260,6 +278,8 @@ interface Attempt {
   ran: boolean;
   spawnError: NodeJS.ErrnoException | null;
   timedOut: boolean;
+  /** Stopped (097): claude was killed for it, or never started. */
+  stopped: boolean;
   code: number | null;
   stderr: string;
 }
@@ -270,6 +290,8 @@ export function createRunner(deps: RunnerDeps): Runner {
   const listeners = new Set<(event: RunnerEvent) => void>();
   const waiting: Job[] = [];
   const busy = new Set<string>();
+  /** The running turn of each busy thread (097). */
+  const active = new Map<string, Active>();
   let running = 0;
   /** The latest `rate_limit_event` of any turn: while it blocks, turns fail before spawning (SPEC §3.6). */
   let usage: UsageInfo | null = null;
@@ -291,11 +313,13 @@ export function createRunner(deps: RunnerDeps): Runner {
       const [job] = waiting.splice(i, 1);
       running++;
       busy.add(job.threadId);
+      active.set(job.threadId, { stopped: false });
       void run(job.threadId, job.request)
         .catch((e: unknown) => fail(job.threadId, e, null))
         .then((outcome) => {
           running--;
           busy.delete(job.threadId);
+          active.delete(job.threadId);
           job.resolve(outcome);
           pump();
         });
@@ -410,7 +434,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     let note: "resumeFallback" | undefined;
     if (mode === "resume") {
       attempt = await spawnTurn(thread, { resume: thread.transcriptPath as string }, await requestMessage(thread, asked), systemPrompt);
-      if (isResumeFailure(attempt)) {
+      if (!attempt.stopped && isResumeFailure(attempt)) {
         log.warn("runner.resumeFailed", { threadId, sessionId: thread.sessionId });
         mode = "fallback";
       }
@@ -429,6 +453,8 @@ export function createRunner(deps: RunnerDeps): Runner {
     // SPEC §3.4: a new session's transcript (it holds the screenshots) leaves claude's projects dir as soon as
     // its first turn exits, whatever the outcome; a resumed one is already in the thread dir.
     if (mode !== "resume" && attempt.ran) await adopt(threadId, thread.sessionId);
+    // 097: a stop wins over whatever claude printed after it.
+    if (attempt.stopped) return fail(threadId, new SnapsolveError("stopped"), attempt, { startedAt });
     if (!attempt.result || attempt.result.isError || attempt.spawnError) {
       return fail(threadId, attemptError(attempt), attempt, { startedAt });
     }
@@ -487,6 +513,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       ran: false,
       spawnError: null,
       timedOut: false,
+      stopped: false,
       code: null,
       stderr: "",
     };
@@ -496,6 +523,12 @@ export function createRunner(deps: RunnerDeps): Runner {
       ...buildArgs({ model: thread.model, effort: thread.effort, systemPrompt, session }),
     ];
     await mkdir(deps.sessionsDir, { recursive: true });
+    // Stopped while the turn was being prepared (097): claude is never started. No await from here to `entry.kill`.
+    const entry = active.get(thread.id);
+    if (entry?.stopped) {
+      attempt.stopped = true;
+      return attempt;
+    }
     const startedAt = now();
     let child: ChildProcess;
     try {
@@ -523,6 +556,8 @@ export function createRunner(deps: RunnerDeps): Runner {
       if (!event) return;
       switch (event.type) {
         case "text":
+          // After a stop nothing more is streamed or kept (097).
+          if (attempt.stopped) return;
           attempt.ttftMs ??= now() - startedAt;
           attempt.sawText = true;
           attempt.text += event.text;
@@ -573,25 +608,42 @@ export function createRunner(deps: RunnerDeps): Runner {
         settled = true;
         clearTimeout(timer);
         clearTimeout(graceTimer);
+        if (entry) entry.kill = undefined;
         log.info("runner.exit", {
           threadId: thread.id,
           code: attempt.code,
           timedOut: attempt.timedOut,
+          stopped: attempt.stopped,
           ms: now() - startedAt,
         });
         resolve(attempt);
       };
-      const timer = setTimeout(() => {
-        attempt.timedOut = true;
-        log.warn("runner.timeout", { threadId: thread.id, timeoutSec: config.timeoutSec, pid: child.pid ?? null });
+      /** SIGTERM, then SIGKILL after `graceMs` (a claude that ignores SIGTERM, seen as a risk on macOS, must not outlive its turn). */
+      let killing = false;
+      const terminate = (graceMs: number) => {
+        if (killing) return;
+        killing = true;
         child.kill();
-        // A claude that ignores SIGTERM (seen as a risk on macOS) must not outlive its turn.
         graceTimer = setTimeout(() => {
           log.warn("runner.sigkill", { threadId: thread.id, pid: child.pid ?? null });
           child.kill("SIGKILL");
           settle();
-        }, deps.killGraceMs ?? KILL_GRACE_MS);
+        }, graceMs);
+      };
+      const timer = setTimeout(() => {
+        if (killing) return;
+        attempt.timedOut = true;
+        log.warn("runner.timeout", { threadId: thread.id, timeoutSec: config.timeoutSec, pid: child.pid ?? null });
+        terminate(deps.killGraceMs ?? KILL_GRACE_MS);
       }, config.timeoutSec * 1000);
+      if (entry) {
+        entry.kill = () => {
+          if (killing) return;
+          attempt.stopped = true;
+          log.info("runner.stop", { threadId: thread.id, pid: child.pid ?? null });
+          terminate(deps.stopGraceMs ?? STOP_GRACE_MS);
+        };
+      }
 
       child.on("error", (e: NodeJS.ErrnoException) => {
         attempt.spawnError ??= e;
@@ -632,6 +684,15 @@ export function createRunner(deps: RunnerDeps): Runner {
     on(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    stop(threadId) {
+      const entry = active.get(threadId);
+      if (!entry) return false;
+      if (!entry.stopped) {
+        entry.stopped = true;
+        entry.kill?.();
+      }
+      return true;
     },
   };
 }
@@ -721,7 +782,7 @@ function requestProblem(request: TurnRequest): string | null {
 
 /** "No conversation found" before any answer text: the transcript is missing or unreadable (measured, 005). */
 function isResumeFailure(attempt: Attempt): boolean {
-  if (attempt.sawText || attempt.spawnError || attempt.timedOut || (attempt.result && !attempt.result.isError)) return false;
+  if (attempt.sawText || attempt.spawnError || attempt.timedOut || attempt.stopped || (attempt.result && !attempt.result.isError)) return false;
   const said = [...(attempt.result?.errors ?? []), attempt.result?.result ?? "", attempt.stderr].join("\n");
   return /no conversation found/i.test(said);
 }

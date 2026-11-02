@@ -202,6 +202,12 @@ function titleOf(thread: Thread): string {
   return line || (asked?.kind === "text" ? asked.text.trim() : "") || "Screenshot";
 }
 
+/** The chat's last turn is an answer stopped with Esc (097): not a failure in the sidebar. */
+function endsStopped(thread: Thread): boolean {
+  const last = thread.turns.at(-1);
+  return last?.role === "assistant" && last.isError && last.errorKind === "stopped";
+}
+
 function firstUserTurn(thread: Thread): UserTurn | undefined {
   return thread.turns.find((t): t is UserTurn => t.role === "user");
 }
@@ -235,8 +241,10 @@ function renderTurns(card: Card, thread: Thread): void {
       }
     } else if (turn.isError) {
       if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));
-      if (turn.text) nodes.push(answerNode("partial", turn.text));
-      nodes.push(el("p", "error", turn.errorMessage ?? userMessage(turn.errorKind ?? "internal")));
+      // 097: an answer stopped with Esc keeps its text as written, with a quiet "Stopped." instead of an error.
+      const stopped = turn.errorKind === "stopped";
+      if (turn.text) nodes.push(answerNode(stopped ? "partial stopped" : "partial", turn.text));
+      nodes.push(el("p", stopped ? "stopped" : "error", turn.errorMessage ?? userMessage(turn.errorKind ?? "internal")));
     } else {
       if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));
       if (turn.note === "resumeFallback") nodes.push(el("p", "note", userMessage("resumeFailed")));
@@ -299,7 +307,7 @@ function renderChats(order: Thread[]): void {
     row.type = "button";
     row.dataset.chatId = thread.id;
     if (thread.id === shown) row.setAttribute("aria-current", "true");
-    const dot = el("span", `chat-dot${isBusy(thread) ? " busy" : thread.status === "error" ? " error" : ""}`);
+    const dot = el("span", `chat-dot${isBusy(thread) ? " busy" : thread.status === "error" && !endsStopped(thread) ? " error" : ""}`);
     dot.setAttribute("aria-hidden", "true");
     row.append(dot, el("span", "chat-name", titleOf(thread)));
     row.addEventListener("click", () => chooseChat(thread.id));

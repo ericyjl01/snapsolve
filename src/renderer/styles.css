@@ -458,6 +458,11 @@ button[hidden] {
   opacity: 0.7;
 }
 
+/* 097: an answer stopped with Esc reads as written; only the note under it says it stopped. */
+.partial.stopped {
+  opacity: 1;
+}
+
 /* highlight.js paints the block itself (hljs-theme.css, or hljs-theme-dark.css in the dark theme); the pre adds only
    the rounding and a hairline. */
 .answer pre {
@@ -503,9 +508,14 @@ button[hidden] {
   color: var(--error);
 }
 
-.note {
+.note,
+p.stopped {
   color: var(--muted);
   font-size: 11px;
+}
+
+p.stopped {
+  margin: 0;
 }
 
 .warning {

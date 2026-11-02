@@ -3,11 +3,11 @@
 ## Now
 Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089 answer mode, then 096 and 097, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
 - 089 done (Amendments 25–26, 4 Opus reviews, pass). Eric's data in ~/snapsolve-answer-test (not in git); config opus/low.
-- 096 voice hold-to-talk DONE (Eric: "just go"; Amendment 27): 2204ac9 tests (red 51), 9891ef3, c29b118 code, 2d126c2 docs; review 1 fail (⌃⌥Esc; hidden-mic key-up) → 7f33687 tests (red 12), c84e07c fixes; review 2 pass. Unit 1169 passed, 7 skipped.
-- Now: 097 Esc stops an answer (tests next; my calls: keep the partial text marked Stopped with Retry; only the chat on screen's running turn; queued turns still run; no global Esc, no stop button).
+- 096 voice hold-to-talk DONE (Amendment 27): 2204ac9 tests (red 51) … c84e07c; review 1 fail → fixed; review 2 pass.
+- 097 Esc stops an answer (Eric: "just go"; Amendment 28): 2e3185d tests (red 22), 9dbbd80 code, docs commit after. Unit 1192 passed, 7 skipped; build ok. Next: Opus review of 097 (base 24e06f8).
 - Ask Eric: the speech helper now imports CoreGraphics (system framework); ARCHITECTURE Approved libraries names only Speech + AVFoundation for it (changes only with him).
-- Hand check for Eric (checklist 032 at merge): docs/tasks/096 Notes (hold/let go, tap note, ⌃⌥Esc, no Input Monitoring prompt, mic dragged off, first-use prompts).
-- Pending: e2e (window) tests, updated for 096 but not run — Eric: "Later, I'll tell you". Then he tries it and says merge.
+- Hand checks for Eric (checklist 032 at merge): docs/tasks/096 and 097 Notes.
+- Pending: e2e (window) tests, updated for 096/097 but not run — Eric: "Later, I'll tell you". Then he tries it and says merge.
 - Merge path: queue 089/096/097 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.
 - Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
 - master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.

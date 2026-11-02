@@ -2485,7 +2485,7 @@
       "commit": null,
       "notes": "Eric 2026-11-02 (chat, before his call): build in a new session, on worktree-answer-mode by hand. Brainstorm open.",
       "kind": "task",
-      "test_cmd": "npx vitest run --project unit test/unit/runner.test.ts test/unit/panel.test.ts test/unit/app.test.ts",
+      "test_cmd": "npx vitest run --project unit test/unit/runner.test.ts test/unit/panel.test.ts test/unit/app.test.ts test/unit/errors.test.ts",
       "tests_commit": null,
       "no_tests": null,
       "review": null

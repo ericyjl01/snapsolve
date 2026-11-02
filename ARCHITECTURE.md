@@ -10,12 +10,12 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `log.ts`: JSON-lines logger to `<data>/logs/snapsolve.log`
   - `store.ts`: threads on disk (thread.json, PNGs, owned transcripts), atomic writes, clear history
   - `stream.ts`: stream-json line splitter and event classifier (pure)
-  - `runner.ts`: builds args/env/stdin, spawns `claude`, per-thread FIFO, global cap, timeouts, transcript adoption, resume fallback
+  - `runner.ts`: builds args/env/stdin, spawns `claude`, per-thread FIFO, global cap, timeouts, `stop` (Esc, task 097), transcript adoption, resume fallback
   - `auth.ts`: `claude auth status`, usage/rate-limit formatting
   - `encode.ts`: resize / PNG→JPEG fallback for the image sent to the model (pure, over an image interface)
   - `capture.ts`: display + source selection, capture mutex, platform panel handling; the PNG and the model's image made only on `encode()` (`screenshotOf`, task 088), so the window is shown first
-  - `panel.ts`: the panel BrowserWindow, tab and floating-window bounds (saved per display in `<data>/window.json`: `loadWindowBounds` / `saveWindowBounds`, task 058; the default 9 × 6 in centred, `defaultBounds` / `pointsPerInch`, task 091), content protection, the ground's alpha (`groundRule` injected with insertCSS, `setTransparency`, task 090), IPC handlers, `snapsolve://` protocol (`app/<file>` = the renderer from `dist/renderer`, `thread/<uuid>/<n>.png` = thumbnails), auto-hide timer
-  - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `newThread`), the renderer's request handlers, runner events → panel, `resolveClaudeCommand`
+  - `panel.ts`: the panel BrowserWindow, tab and floating-window bounds (saved per display in `<data>/window.json`: `loadWindowBounds` / `saveWindowBounds`, task 058; the default 9 × 6 in centred, `defaultBounds` / `pointsPerInch`, task 091), content protection, the ground's alpha (`groundRule` injected with insertCSS, `setTransparency`, task 090), IPC handlers, `snapsolve://` protocol (`app/<file>` = the renderer from `dist/renderer`, `thread/<uuid>/<n>.png` = thumbnails), auto-hide timer, Esc (stops the answer on screen via `onEscape`, else hides; task 097)
+  - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `newThread`), the renderer's request handlers, runner events → panel, `stopAnswer` (Esc stops the chat on screen's answer, 097), `resolveClaudeCommand`
   - `hotkeys.ts`: globalShortcut registration, debounce, pause/resume
   - `tray.ts`: tray menu and tooltip
   - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the displays' physical sizes (`readDisplaySizes`: one osascript JavaScript run of CGDisplayScreenSize, task 091), the permission cards' actions (fixed settings URLs: Screen Recording, Microphone, Speech Recognition; relaunch), hotkey labels per platform

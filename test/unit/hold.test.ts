@@ -24,8 +24,11 @@ describe("bindHold (096, mic buttons held to talk)", () => {
     title = document.getElementById("voice") as HTMLButtonElement;
     composer = document.getElementById("composer-voice") as HTMLButtonElement;
     other = document.getElementById("other") as HTMLElement;
-    calls = [];
-    bindHold([title, composer], window, (held) => void calls.push(held));
+    // Each test's binding records into its own array: an earlier test's binding (its buttons gone, maybe still held)
+    // also listens on window and must not write into this one's.
+    const mine: boolean[] = [];
+    calls = mine;
+    bindHold([title, composer], window, (held) => void mine.push(held));
   });
 
   it("pointer down on a mic → held once; up anywhere in the window → let go once", () => {

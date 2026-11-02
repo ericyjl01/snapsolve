@@ -94,6 +94,32 @@ describe("bindHold (096, mic buttons held to talk)", () => {
     expect(calls).toEqual([true, false]);
   });
 
+  it.each([" ", "Enter"])("held by %j on the composer mic, which the listening bar then hides (focus moves to body): the key-up anywhere lets go", (k) => {
+    composer.focus();
+    composer.dispatchEvent(key("keydown", k));
+    expect(calls).toEqual([true]);
+    composer.hidden = true;
+    composer.blur();
+    document.body.dispatchEvent(key("keyup", k));
+    expect(calls).toEqual([true, false]);
+  });
+
+  it("a Space key-up elsewhere while the mic is held by the pointer does not let go; the pointer's up does", () => {
+    composer.dispatchEvent(pointer("pointerdown"));
+    document.body.dispatchEvent(key("keyup", " "));
+    expect(calls).toEqual([true]);
+    other.dispatchEvent(pointer("pointerup"));
+    expect(calls).toEqual([true, false]);
+  });
+
+  it("a pointer up while the mic is held by the keyboard does not let go; the key's up does", () => {
+    title.dispatchEvent(key("keydown", " "));
+    other.dispatchEvent(pointer("pointerup"));
+    expect(calls).toEqual([true]);
+    document.body.dispatchEvent(key("keyup", " "));
+    expect(calls).toEqual([true, false]);
+  });
+
   it("other keys on a mic do nothing", () => {
     title.dispatchEvent(key("keydown", "a"));
     title.dispatchEvent(key("keyup", "a"));

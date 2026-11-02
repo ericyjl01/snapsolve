@@ -8,6 +8,7 @@ import type { Logger } from "../../src/main/log";
 import {
   createVoice,
   ESCAPE,
+  holdEscape,
   holdModifiers,
   parseHelperLine,
   resolveSpeechHelper,
@@ -211,6 +212,21 @@ describe("holdModifiers (096): the voice accelerator's modifiers, as the helper'
   });
 });
 
+describe("holdEscape (096 review 1): Esc as it arrives while the voice keys are held", () => {
+  it.each([
+    [["control", "option"], "Control+Alt+Escape"],
+    [["control", "option", "shift"], "Control+Alt+Shift+Escape"],
+    [["shift", "command"], "Shift+Command+Escape"],
+    [["command"], "Command+Escape"],
+  ])("%j → %s", (keys, accelerator) => {
+    expect(holdEscape(keys)).toBe(accelerator);
+  });
+
+  it("nothing held → null (the bare Escape is enough)", () => {
+    expect(holdEscape([])).toBeNull();
+  });
+});
+
 describe("voice (hold to talk, 096)", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -375,6 +391,63 @@ describe("voice (hold to talk, 096)", () => {
     t.tick(VOICE_MIN_HOLD_MS);
     t.voice.release("button");
     expect(t.child().signals).toEqual(["SIGINT"]);
+  });
+
+  it("Esc pressed while ⌃⌥ are still held arrives as ⌃⌥Esc: that is held too during a key hold, cancels, and both are released after", async () => {
+    const t = setup();
+    t.voice.press("key");
+    expect(t.shortcut.registered.has(ESCAPE)).toBe(true);
+    expect(t.shortcut.registered.has("Control+Alt+Escape")).toBe(true);
+    t.child().line({ type: "ready" });
+    await flush();
+    t.tick(HELD_MS);
+    t.shortcut.press("Control+Alt+Escape");
+    expect(t.child().signals).toEqual(["SIGTERM"]);
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
+    expect(t.shortcut.registered.has("Control+Alt+Escape")).toBe(false);
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("both Escapes are released when a key hold ends by sending too", async () => {
+    const t = setup();
+    await t.holdKeyAndLetGo();
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send).toHaveBeenCalledWith(QUESTION);
+    expect([...t.shortcut.registered.keys()]).toEqual([]);
+    expect(t.shortcut.unregister.mock.calls.map((c) => c[0]).sort()).toEqual(["Control+Alt+Escape", ESCAPE].sort());
+  });
+
+  it("a mic button's dictation holds only the bare Escape (no modifier is down); so does a voice key with nothing to watch", () => {
+    const button = setup();
+    button.voice.press("button");
+    expect([...button.shortcut.registered.keys()]).toEqual([ESCAPE]);
+    const plain = setup({ holdKeys: [] });
+    plain.voice.press("key");
+    expect([...plain.shortcut.registered.keys()]).toEqual([ESCAPE]);
+  });
+
+  it("a ⌃⌥Esc taken by another app still lets the key hold run (logged); only what was ours is unregistered", async () => {
+    const t = setup();
+    t.shortcut.registered.set("Control+Alt+Escape", () => undefined);
+    t.voice.press("key");
+    expect(t.voice.status()).toBe("listening");
+    expect(t.logLines.some((l) => l[0] === "voice.escapeTaken")).toBe(true);
+    t.voice.cancel();
+    expect(t.shortcut.unregister.mock.calls.map((c) => c[0])).toEqual([ESCAPE]);
+    expect(t.shortcut.registered.has("Control+Alt+Escape")).toBe(true);
+  });
+
+  it("a press while the text is on its way is logged as ignored (063's voice.pressIgnored)", async () => {
+    const t = setup();
+    t.holdButtonAndLetGo();
+    expect(t.voice.status()).toBe("stopping");
+    t.voice.press("button");
+    expect(t.logLines.filter((l) => l[0] === "voice.pressIgnored")).toHaveLength(1);
+    expect(t.spawn).toHaveBeenCalledTimes(1);
   });
 
   it("Esc while held cancels: nothing sent, Esc released; a later release or released line does nothing", async () => {

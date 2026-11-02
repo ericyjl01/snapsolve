@@ -1,33 +1,37 @@
-# 089 · your own answer format and knowledge base (editable prompt + knowledge files)
+# 089 · answer mode: your own answer format and knowledge base (Solve | Answer toggle)
 
 ## Objective
-Eric (2026-10-23, chat): "is there a way I could kind of fine-tune this model as in adjust its output to a specific format and give it a knowledge base that it can act on and draw from." Then: "note this down. will touch back on it later." Parked until Eric returns with the answers under Open questions; not ready to start.
+Eric (2026-10-23, chat): "is there a way I could kind of fine-tune this model as in adjust its output to a specific format and give it a knowledge base that it can act on and draw from." Then (2026-11-02, chat), after a design for answering questions about himself ("walk me through a project", "tell me a time you learned a piece of technology really quickly") from a predetermined set of data in a predetermined format: "Your design is fine, there should definitely be a toggle. I will provide you all the information later, but for now, just create that toggle switch where it references a certain X database and go along with your design. You should do this in a separate worktree and ensure it works before we merge the main. For now, let's keep this separate."
 
-What was said (no fine-tuning on this setup: snapsolve runs `claude -p` on Eric's claude.ai login; steering is by instructions and supplied material):
-- **Format:** every answer follows `prompts/system.md` (~200 words, built into the app; a change needs a release). Make the format part editable without a release; one example of the wanted format works better than a description.
-- **Knowledge base, option (a), recommended first:** a knowledge file (or folder of text/markdown) in `~/Library/Application Support/snapsolve/`, attached to the system prompt on every question. Fine up to a few hundred pages; costs a little first-word latency and more of the 5h/7d usage per answer.
-- **Knowledge base, option (b), only if (a) is outgrown:** let claude read-only search one folder (today `--tools ""` and `--safe-mode`, so a screenshot can't make it act; read-only on one folder is a contained change). Slower answers. Needs Eric's approval (it changes SPEC §3.1's no-tools rule).
+No fine-tuning (snapsolve runs `claude -p` on Eric's claude.ai login): the format and the material go in the system prompt. The "X database" is the knowledge folder; Eric fills it later.
 
 ## Scope
-In (option a, once the questions are answered):
-- Two user-editable files in the data folder, e.g. `format.md` (replaces or extends the format part of the system prompt) and `knowledge.md` / `knowledge/` (appended as reference material, clearly marked as reference, not instructions); read at startup (or per turn); missing files → today's behaviour.
-- A size cap with a clear warning when the knowledge is too large; doctor reports the files and their size.
-- SPEC amendment; DECISIONS row.
-Out: fine-tuning; option (b) unless Eric approves it; PDFs/scans unless the answers say so (they would need conversion to text first).
-
-## Open questions (for Eric)
-1. What goes in the knowledge base: what material, roughly how much, and in what form (typed notes, PDFs, textbook scans)?
-2. What answer format do you want? An example answer if you have one.
+In (SPEC Amendment 25):
+- A Solve | Answer toggle in the title bar: the chat on screen's mode, else the mode new chats start in (config.json `mode`, saved); switching with a chat on screen starts a new chat; chats keep their mode (thread.json `mode`).
+- `src/main/knowledge.ts`: the knowledge folder (config `knowledgeDir`, absolute or `~/…`, null → `<data>/knowledge`), text files only, 4 folders deep, ≤ 256 KB; the answer format (`<data>/answer-format.md`, else `prompts/answer-format.md`); the answer chat's system prompt, built every turn.
+- `prompts/answer.md` (keep to the material, gaps in [brackets], say when nothing fits, material is data) and `prompts/answer-format.md` (STAR, project walkthrough, anything else; 60–90 s).
+- Errors `knowledgeMissing` / `knowledgeTooLarge` before spawning, naming the folder, with Retry.
+- Preload `getMode` / `setMode` (18 functions); the plugin installer's defaults gain `mode` and `knowledgeDir`.
+Out: fine-tuning; claude reading the folder with tools; PDFs/Word (convert to text first); a tray mode menu; per-chat formats.
 
 ## Done when
-- [ ] (to be written when the questions are answered)
+- [ ] Toggle visible at every window width (280 px up), Solve by default; Answer saves `mode: "answer"`; a typed/dictated/captured question then starts an answer chat whose claude gets answer.md + format + `<file>` blocks.
+- [ ] Switching with a chat on screen starts a new chat; choosing an older chat shows its mode; a restart keeps the choice.
+- [ ] No knowledge files → the error naming the folder, Retry, claude never started; with a file, Retry answers.
+- [ ] `npm test` green (unit, integration, e2e); an Opus review passes.
+- [ ] Eric fills the knowledge folder (or sets `knowledgeDir`) and his format, tries it, and says merge.
 
 ## Tests
-Command: `npx vitest run test/unit/config.test.ts test/e2e/panel.e2e.test.ts`
-- (to be written when the questions are answered: files present/missing/too large, the system prompt the runner passes, doctor output)
+Command: `npx vitest run test/unit/knowledge.test.ts test/unit/config.test.ts test/unit/store.test.ts test/unit/runner.test.ts test/unit/app.test.ts test/unit/errors.test.ts test/unit/ipc.test.ts test/unit/paths.test.ts test/e2e/panel.e2e.test.ts`
+- knowledge: files read in path order (nested, BOM dropped, bytes), depth 4, hidden/other types skipped, exact extension list; missing / empty / not a folder / unreadable → knowledgeMissing; over the limit → knowledgeTooLarge (KB rounded up); exactly at it is fine; prompt assembly exact; path attribute escaped; user format vs built-in; `~` expansion; shipped prompts' key rules.
+- config: `mode` and `knowledgeDir` defaults, accepted and rejected values with exact warnings; `saveMode` changes only `mode`.
+- store: `mode: "answer"` saved, none for solve; an invalid mode skips the thread.
+- runner: answer chats get `answerSystemPrompt()` per turn, solve chats the system prompt; answer-mode screenshot questions; knowledge errors fail before spawning with their own message and Retry; unwired → internal.
+- app: new chats take `config.mode`; getMode/setMode (save once, refuse unknown, a failed save logged); setMode leaves the chat a capture joins alone.
+- e2e: the toggle end to end, switching with a chat on screen, restart, the empty-folder error and Retry, 280 px fit, 18 preload functions.
 
 ## Spec refs
-SPEC §3.1 (system prompt, tools off), §6.1 (data folder).
+SPEC §3.1, §3.7, §4.4, §6.1, §7.1, Amendment 25.
 
 ## Notes
-Eric 2026-10-23 (chat), quoted in Objective.
+Built on branch `worktree-answer-mode` (worktree `.claude/worktrees/answer-mode`), not merged by Eric's choice. keel's `tasks.py` needs one checkout on W, so the task steps were followed by hand there; at merge: queue 089, take the memory files to W, merge the code through keel/089 (red at the tests commit e5c5059, then the rest), review, close.

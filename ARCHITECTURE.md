@@ -20,10 +20,12 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `tray.ts`: tray menu and tooltip
   - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the displays' physical sizes (`readDisplaySizes`: one osascript JavaScript run of CGDisplayScreenSize, task 091), the permission cards' actions (fixed settings URLs: Screen Recording, Microphone, Speech Recognition; relaunch), hotkey labels per platform
   - `voice.ts`: dictation (task 063): the speech helper's JSON-line protocol, listen → stop and send / Esc / hide cancel, the temporary Esc shortcut, `resolveSpeechHelper`
-- `src/preload/preload.ts`: contextBridge exposing exactly the sixteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10, 11 and 15 (`copy` → `hide`; `newThread`; `onVoice`, `toggleVoice`, `openVoiceSettings`; `openThread`)
+  - `knowledge.ts`: answer mode (task 089): `readKnowledge` (the knowledge folder's text files, limits, `knowledgeMissing` / `knowledgeTooLarge`), `readAnswerFormat`, `knowledgeFolder` (config `knowledgeDir` → a folder), `answerSystemPrompt` (an answer chat's system prompt, built by the runner for every turn)
+- `src/preload/preload.ts`: contextBridge exposing exactly the eighteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10, 11, 15 and 25 (`copy` → `hide`; `newThread`; `onVoice`, `toggleVoice`, `openVoiceSettings`; `openThread`; `getMode`, `setMode`)
 - `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `styles.css`
 - `src/shared/`: `types.ts` (Thread, Turn, Config, events), `ipc.ts` (channel names), `errors.ts` (error kinds + user messages), `models.ts` (`modelName`: a reported model id as the answer footer shows it, task 086)
-- `prompts/system.md`: the system prompt
+- `prompts/system.md`: the system prompt (solve chats)
+- `prompts/answer.md`, `prompts/answer-format.md` (task 089): an answer chat's prompt and its default answer format (the user's `<data>/answer-format.md` replaces the latter)
 - `assets/`: icons (tray, app)
 - `native/speech/` (063, macOS): `main.swift` (the on-device speech helper) and `Info.plist` (linked into it); built to `dist/native/snapsolve-speech`, released as `app/native/`
 - `scripts/`: `build.mjs` (esbuild; compiles `native/speech` on macOS), `renderer-assets.mjs` (copies KaTeX CSS + fonts and the highlight.js themes (github, github-dark) into `dist/renderer/`), `smoke.mjs`, `make-problem-fixtures.ps1` (draws the live-test problem PNGs; Windows, run by hand); `release.mjs` (M2: assembles the plugin into a claude-skills marketplace folder, see `plugin/`)
@@ -62,7 +64,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
 - async: `fs/promises`; atomic JSON writes via `store.writeJsonAtomic` (temp + rename)
 - platform branches: `process.platform` checked only in `paths.ts`, `capture.ts`, `panel.ts`, `main.ts`, and passed in as a parameter elsewhere (tests cover both branches)
 - decisions: rows of closed tasks 001–029 (tidy 2026-10-17) and 030–065 (tidy 2026-10-23) live in `archive/DECISIONS.archive.md`; grep it as well as DECISIONS.md before a choice. Rules kept from them:
-  - preload API: exactly the functions SPEC §4.4 and its Amendments list (16 after 078); a new one needs a SPEC Amendment and a DECISIONS row; renderer calls take no URLs (030, 061, 063, 065)
+  - preload API: exactly the functions SPEC §4.4 and its Amendments list (18 after 089); a new one needs a SPEC Amendment and a DECISIONS row; renderer calls take no URLs (030, 061, 063, 065)
   - panel-only cards: the Screen Recording and voice cards are Threads that live only in app.ts `known` (never saved); a later denial updates the same card, the next success removes it (030, 063)
   - capture routing lives in main: app.ts `current` / `fresh`; a capture continues the current thread, "+" (`newThread`) starts a new one, the screenshot limit rolls over seeded with the last answer (051, 065)
   - Retry is a runner request `{ kind: "retry" }` that re-runs the failed last user turn in place; busy threads left by a crash are recovered at startup (`recoverBusyThreads`) before the first listing (050, 052)

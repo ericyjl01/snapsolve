@@ -1080,7 +1080,7 @@ describe("answer mode (089)", () => {
   });
 
   it.each([
-    ["knowledgeMissing", "Answer mode has nothing to draw on: no .md, .txt, .toml, .json, .yaml or .csv files in /k. Put your material there, or point knowledgeDir in config.json at your folder."],
+    ["knowledgeUnreadable", "Answer mode can't read the knowledge folder /k (EACCES). Check its permissions, or point knowledgeDir in config.json at another folder."],
     ["knowledgeTooLarge", "The knowledge folder /k has more than 256 KB of text, answer mode's limit. Remove some files, or point knowledgeDir in config.json at a smaller folder."],
   ] as const)("%s: the turn fails before claude is started, with the error's own message on the card and Retry", async (kind, message) => {
     const { runner, events } = makeRunner({

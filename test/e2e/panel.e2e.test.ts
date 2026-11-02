@@ -1668,7 +1668,7 @@ describe("panel (e2e)", () => {
 
 // Task 089 (SPEC Amendment 25): the title bar's Solve | Answer toggle and answer mode's knowledge folder.
 describe("answer mode (e2e, 089)", () => {
-  const ANSWER_EMPTY = "Answer mode. Ask a question and snapsolve drafts your answer from your knowledge folder.";
+  const ANSWER_EMPTY = "Answer mode. Ask a question and snapsolve drafts your answer, using your knowledge folder for anything about you.";
 
   /** A data dir whose default knowledge folder (<data>/knowledge) holds one story. */
   function dataDirWithKnowledge(): string {
@@ -1804,30 +1804,29 @@ describe("answer mode (e2e, 089)", () => {
     }
   }, 150_000);
 
-  it("answer mode with no knowledge files: the chat shows the error naming the folder, offers Retry, and claude is never started; Retry works once a file is there", async () => {
+  it("answer mode with no knowledge folder still answers (Amendment 26): claude is started, its system prompt says there is no reference material, and no error shows", async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
     const { launched, page, fakeLog, projects } = await launchWithLog(dataDir);
     try {
       await modeRadio(page, "Answer").click();
       await expect.poll(() => checked(page), { timeout: 5_000 }).toEqual(["Answer"]);
       const box = page.locator("#composer textarea");
-      await box.fill("Why do you want this role?");
+      await box.fill("How do you keep up with AI news?");
       await box.press("Enter");
       await expect.poll(() => chats(page).then((c) => c.length), { timeout: 10_000 }).toBe(1);
       const [id] = await chats(page);
-      const error = page.locator(`${card(id!)} .error`);
-      await error.waitFor({ state: "visible", timeout: 10_000 });
-      expect(await error.textContent()).toBe(
-        `Answer mode has nothing to draw on: no .md, .txt, .toml, .json, .yaml or .csv files in ${path.join(dataDir, "knowledge")}. Put your material there, or point knowledgeDir in config.json at your folder.`,
-      );
-      expect(await page.locator(`${card(id!)} .retry`).isVisible()).toBe(true);
-      expect(starts(fakeLog)).toEqual([]);
-
-      mkdirSync(path.join(dataDir, "knowledge"), { recursive: true });
-      writeFileSync(path.join(dataDir, "knowledge", "me.md"), "I like building tools.\n");
-      await page.locator(`${card(id!)} .retry`).click();
       await page.locator(`${card(id!)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
-      expect(starts(fakeLog)).toHaveLength(1);
+      expect(await page.locator(`${card(id!)} .error`).count()).toBe(0);
+      expect(savedThread(dataDir, id!).status).not.toBe("error");
+
+      const all = starts(fakeLog);
+      expect(all).toHaveLength(1);
+      const system = all[0].argv[all[0].argv.indexOf("--system-prompt") + 1];
+      const base = readFileSync(path.join(repoRoot, "prompts", "answer.md"), "utf8").trimEnd();
+      const format = readFileSync(path.join(repoRoot, "prompts", "answer-format.md"), "utf8").trim();
+      expect(system).toBe(
+        `${base}\n\n## Answer format\n\n${format}\n\n## Reference material\n\nNone: the user's knowledge folder has no text files.\n`,
+      );
     } finally {
       await launched.close();
       cleanup(dataDir, projects);

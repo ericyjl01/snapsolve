@@ -728,6 +728,20 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("an onEscape that throws (097) is logged and the window hides, as Esc always did", () => {
+    const lines: unknown[][] = [];
+    const log: Logger = { ...quietLog, error: (...a: unknown[]) => void lines.push(a) };
+    const onEscape = vi.fn((): boolean => {
+      throw new Error("boom");
+    });
+    const { panel, win } = panelSetup({ onEscape, log });
+    panel.open();
+    win.webContents.emit("before-input-event", { preventDefault: vi.fn() }, { type: "keyDown", key: "Escape" });
+    expect(onEscape).toHaveBeenCalledTimes(1);
+    expect(win.isVisible()).toBe(false);
+    expect(lines.map((l) => l[0])).toEqual(["panel.escapeFailed"]);
+  });
+
   it("Esc held down (097): its auto-repeats neither stop nor hide, and reach no page", () => {
     const onEscape = vi.fn(() => false);
     const { panel, win } = panelSetup({ onEscape });

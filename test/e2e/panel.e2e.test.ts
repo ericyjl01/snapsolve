@@ -1225,7 +1225,7 @@ describe("panel (e2e)", () => {
         const bar = p.page.locator("#titlebar");
         expect(await bar.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("drag");
 
-        await capture(p.app);
+        const id = await capture(p.app);
         await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
         expect((await bar.boundingBox())?.height).toBe(36);
         const { workArea, bounds } = await windowInfo(p.app);
@@ -1250,7 +1250,9 @@ describe("panel (e2e)", () => {
           }, { timeout: 5_000 })
           .toEqual({ ...target, ...size });
 
-        // Collapse (Esc in the focused window), then the next capture reopens where it was left.
+        // Collapse (Esc in the focused window), then the next capture reopens where it was left. The answer is done
+        // first: an Esc while it is written stops it instead of hiding the window (097).
+        await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
         await p.page.locator("#threads").click();
         await p.app.evaluate(({ BrowserWindow }) => {
           const { webContents } = BrowserWindow.getAllWindows()[0];
@@ -1280,7 +1282,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel();
     const stateFile = path.join(p.dataDir, "window.json");
     try {
-      await capture(p.app);
+      const id = await capture(p.app);
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
       await p.page.locator(".grip").waitFor({ state: "attached", timeout: 5_000 });
       expect(await p.app.evaluate(({ BrowserWindow }) => {
@@ -1321,7 +1323,9 @@ describe("panel (e2e)", () => {
         win.emit("resized");
       }, target);
 
-      // Hide (Esc), then the next capture reopens at the saved size.
+      // Hide (Esc), then the next capture reopens at the saved size. The answer is done first: an Esc while it is
+      // written stops it instead of hiding the window (097).
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       await p.page.locator("#threads").click();
       await p.app.evaluate(({ BrowserWindow }) => {
         const { webContents } = BrowserWindow.getAllWindows()[0];
@@ -1689,7 +1693,7 @@ describe("Esc stops an answer (e2e, 097)", () => {
     });
   }
 
-  it("Esc while it streams: claude stops, the text so far stays marked Stopped with Retry, the window stays; the next question is answered; Esc then hides", async () => {
+  it("Esc while it streams: claude stops, the text so far stays as written (an answer, not faded) marked Stopped with Retry, the window stays; the next question is answered; Esc then hides", async () => {
     const scenarioDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-scenario-"));
     const scenarioFile = path.join(scenarioDir, "scenario");
     // hang: the first piece of the answer ("Answer "), then nothing.
@@ -1704,10 +1708,13 @@ describe("Esc stops an answer (e2e, 097)", () => {
       const stoppedAt = Date.now();
       await escape(p.app);
 
-      const stopped = p.page.locator(`${card(id)} .partial.stopped`);
+      const stopped = p.page.locator(`${card(id)} .answer.stopped`);
       await stopped.waitFor({ state: "visible", timeout: 5_000 });
       expect(Date.now() - stoppedAt).toBeLessThan(3_000);
       expect((await stopped.innerText()).trim()).toBe("Answer");
+      // As it was written: the answer's own look, not an error's faded partial text.
+      expect(Number(await stopped.evaluate((el) => getComputedStyle(el).opacity))).toBe(1);
+      expect(await stopped.evaluate((el) => el.classList.contains("partial"))).toBe(false);
       expect(await p.page.locator(`${card(id)} p.stopped`).innerText()).toBe("Stopped.");
       expect(await p.page.locator(`${card(id)} .retry`).isVisible()).toBe(true);
       expect(await p.page.locator(`${card(id)} .answer.streaming`).count()).toBe(0);
@@ -1721,7 +1728,7 @@ describe("Esc stops an answer (e2e, 097)", () => {
       writeFileSync(scenarioFile, "ok");
       await p.page.locator("#follow-up").fill("why?");
       await p.page.locator("#follow-up").press("Enter");
-      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      await p.page.locator(`${card(id)} .answer:not(.streaming):not(.stopped)`).first().waitFor({ state: "visible", timeout: 20_000 });
 
       await escape(p.app);
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
@@ -1744,12 +1751,12 @@ describe("Esc stops an answer (e2e, 097)", () => {
       await thinking.click();
       await escape(p.app);
       await p.page.locator(`${card(id)} p.stopped`).waitFor({ state: "visible", timeout: 5_000 });
-      expect(await p.page.locator(`${card(id)} .partial`).count()).toBe(0);
+      expect(await p.page.locator(`${card(id)} .answer.stopped, ${card(id)} .partial`).count()).toBe(0);
       expect((await windowInfo(p.app)).visible).toBe(true);
 
       writeFileSync(scenarioFile, "ok");
       await p.page.locator(`${card(id)} .retry`).click();
-      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      await p.page.locator(`${card(id)} .answer:not(.streaming):not(.stopped)`).first().waitFor({ state: "visible", timeout: 20_000 });
     } finally {
       await p.close();
       rmSync(scenarioDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });

@@ -720,7 +720,8 @@ class StreamingChild extends FakeChild {
     super();
     setImmediate(() => {
       this.stdout.write(`${JSON.stringify({ type: "system", subtype: "init", session_id: sid, apiKeySource: "none", model: "claude-opus-5-5" })}\n`);
-      this.stdout.write(`${JSON.stringify(textDelta(text))}\n`);
+      // "" = still thinking: no text yet.
+      if (text) this.stdout.write(`${JSON.stringify(textDelta(text))}\n`);
     });
   }
   override kill(signal?: string): boolean {
@@ -838,6 +839,83 @@ describe("stop (097): Esc stops the chat's running answer", () => {
     expect(Date.now() - stoppedAt).toBeLessThan(2_000);
     expect(children[0].signals).toEqual(["SIGTERM", "SIGKILL"]);
     expect((await ob).ok).toBe(true);
+  });
+
+  it("with the default stop grace, a claude that ignores SIGTERM gets SIGKILL about 1 s after the stop (not the 5 s timeout grace)", async () => {
+    const { runner, events, children } = stoppable((sid) => new StreamingChild(sid, "x = ", (s) => (s === "SIGKILL" ? 0 : null)), {
+      stopGraceMs: undefined,
+    });
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    const stoppedAt = Date.now();
+    runner.stop(t.id);
+    await sleep(800);
+    expect(children[0].signals).toEqual(["SIGTERM"]);
+    expect(await outcome).toMatchObject({ ok: false, kind: "stopped" });
+    const ms = Date.now() - stoppedAt;
+    expect(children[0].signals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect(ms).toBeGreaterThanOrEqual(950);
+    expect(ms).toBeLessThan(2_500);
+  });
+
+  it("a stopped claude that prints an error result on its way out is still stopped, without asking claude auth status", async () => {
+    const checkAuth = vi.fn(async () => ({ kind: "ok" as const, loggedIn: false }) as never);
+    class ErrorOnStop extends StreamingChild {
+      override kill(signal?: string): boolean {
+        this.stdout.write(`${JSON.stringify({ type: "result", subtype: "error_during_execution", is_error: true, errors: ["interrupted"] })}\n`);
+        return super.kill(signal);
+      }
+    }
+    const { runner, events } = stoppable((sid) => new ErrorOnStop(sid, "x = ", () => 10), { checkAuth });
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    expect(await outcome).toEqual({ ok: false, kind: "stopped", message: STOPPED });
+    expect(checkAuth).not.toHaveBeenCalled();
+  });
+
+  it("a resumed turn stopped before any text, whose claude then says No conversation found, is stopped: no fallback session is started", async () => {
+    let n = 0;
+    let resumed: StreamingChild | null = null;
+    class NoConversationOnStop extends StreamingChild {
+      override kill(signal?: string): boolean {
+        this.stderr.write("No conversation found with session ID\n");
+        return super.kill(signal);
+      }
+    }
+    const { runner, events } = makeRunner({
+      stopGraceMs: 100,
+      spawn: ((file: string, args: string[], options: SpawnCall["options"]) => {
+        n++;
+        if (n === 1) {
+          // The first turn answers and its transcript is adopted, so the next one resumes.
+          const child = new FakeChild();
+          const call = { file, args, options, sessionsDirExisted: true, child };
+          calls.push(call);
+          const sid = args[args.indexOf("--session-id") + 1];
+          const dir = path.join(root, "projects", "C--snapsolve-sessions");
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(path.join(dir, `${sid}.jsonl`), `${JSON.stringify({ type: "user", sessionId: sid })}\n`);
+          child.script(okLines(call, "x = 4"));
+          return child;
+        }
+        // Thinking: init only, no text yet.
+        const child = new NoConversationOnStop("resumed", "", () => 0);
+        if (n === 2) resumed = child;
+        calls.push({ file, args, options, sessionsDirExisted: true, child });
+        return child;
+      }) as never,
+    });
+    const { t, shot } = await newThread();
+    expect((await runner.enqueue(t.id, { kind: "new", screenshot: shot.file })).ok).toBe(true);
+    const outcome = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    await until(() => resumed !== null && events.some((e) => e.type === "init" && e.sessionId === "resumed"));
+    expect(calls[1].args).toContain("--resume");
+    runner.stop(t.id);
+    expect(await outcome).toMatchObject({ ok: false, kind: "stopped" });
+    expect(calls).toHaveLength(2);
   });
 
   it("a claude that never closes, even after SIGKILL, is settled at the SIGKILL: stopped", async () => {

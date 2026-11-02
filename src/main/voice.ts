@@ -98,6 +98,18 @@ export function holdModifiers(accelerator: string): string[] {
   return MODIFIER_ORDER.filter((name) => held.has(name));
 }
 
+const ACCELERATOR_MODIFIER: Readonly<Record<string, string>> = { control: "Control", option: "Alt", shift: "Shift", command: "Command" };
+
+/**
+ * Esc as it arrives while the voice keys are still held (096 review 1): a macOS global shortcut fires only on its exact
+ * modifiers, so with ⌃⌥ down the bare Escape never fires and `Control+Alt+Escape` is needed too. Null when nothing is
+ * held.
+ */
+export function holdEscape(holdKeys: readonly string[]): string | null {
+  if (holdKeys.length === 0) return null;
+  return [...holdKeys.map((name) => ACCELERATOR_MODIFIER[name] ?? name), ESCAPE].join("+");
+}
+
 /** Who holds the dictation: the voice hotkey, or a mic button (096). Only its own release ends it. */
 export type VoiceSource = "key" | "button";
 
@@ -189,7 +201,8 @@ interface Run {
   /** The helper printed ready: its SIGINT handler is in place (a SIGINT before that would kill it). */
   ready: boolean;
   exited: boolean;
-  escHeld: boolean;
+  /** The Esc shortcuts this run registered (Escape; during a key hold also the held modifiers + Escape). */
+  escapes: string[];
   stopTimer?: ReturnType<typeof setTimeout>;
   holdTimer?: ReturnType<typeof setTimeout>;
 }
@@ -218,12 +231,11 @@ export function createVoice(deps: VoiceDeps): Voice {
     run = null;
     clearTimeout(r.stopTimer);
     clearTimeout(r.holdTimer);
-    if (r.escHeld) {
-      r.escHeld = false;
+    for (const accelerator of r.escapes.splice(0)) {
       try {
-        deps.globalShortcut.unregister(ESCAPE);
+        deps.globalShortcut.unregister(accelerator);
       } catch (e) {
-        log.warn("voice.escapeUnregisterFailed", { error: e });
+        log.warn("voice.escapeUnregisterFailed", { accelerator, error: e });
       }
     }
     emit(state);
@@ -318,7 +330,7 @@ export function createVoice(deps: VoiceDeps): Voice {
       return;
     }
     const hold = source === "button" || watch.length > 0;
-    const r: Run = { child, source, hold, startedAt: now(), text: "", level: 0, stopping: false, ready: false, exited: false, escHeld: false };
+    const r: Run = { child, source, hold, startedAt: now(), text: "", level: 0, stopping: false, ready: false, exited: false, escapes: [] };
     run = r;
     if (hold) {
       r.holdTimer = setTimeout(() => {
@@ -327,11 +339,14 @@ export function createVoice(deps: VoiceDeps): Voice {
         stop(r);
       }, VOICE_MAX_HOLD_MS);
     }
-    try {
-      r.escHeld = deps.globalShortcut.register(ESCAPE, () => cancel());
-      if (!r.escHeld) log.warn("voice.escapeTaken", {});
-    } catch (e) {
-      log.warn("voice.escapeTaken", { error: e });
+    const heldEscape = watch.length > 0 ? holdEscape(deps.holdKeys) : null;
+    for (const accelerator of heldEscape ? [ESCAPE, heldEscape] : [ESCAPE]) {
+      try {
+        if (deps.globalShortcut.register(accelerator, () => cancel())) r.escapes.push(accelerator);
+        else log.warn("voice.escapeTaken", { accelerator });
+      } catch (e) {
+        log.warn("voice.escapeTaken", { accelerator, error: e });
+      }
     }
     let buffered = "";
     child.stdout?.setEncoding("utf8");
@@ -400,8 +415,11 @@ export function createVoice(deps: VoiceDeps): Voice {
     press(source) {
       const r = run;
       if (!r) start(source);
-      // No modifier to watch: the key works as a toggle (063). Anything else while a dictation runs is ignored.
-      else if (source === "key" && r.source === "key" && !r.hold && !r.stopping) stop(r);
+      // A press while the text is on its way (063); a press while listening is the key's auto-repeat or the other
+      // source, ignored without a log line (a held key repeats many times a second).
+      else if (r.stopping) log.info("voice.pressIgnored", { source });
+      // No modifier to watch: the key works as a toggle (063).
+      else if (source === "key" && r.source === "key" && !r.hold) stop(r);
     },
     release,
     cancel,

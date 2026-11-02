@@ -34,7 +34,7 @@ const PRELOAD_NAMES = [
   "openScreenRecordingSettings",
   "relaunch",
   "onVoice",
-  "toggleVoice",
+  "holdVoice",
   "openVoiceSettings",
   "openThread",
   // Amendment 25 (task 089): the title bar's Solve | Answer toggle.
@@ -122,9 +122,9 @@ function luminance(color: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** What the voice hotkey does (063). */
-function voiceKey(app: ElectronApplication): Promise<void> {
-  return app.evaluate(() => (globalThis as unknown as { snapsolveTest: { voice(): void } }).snapsolveTest.voice());
+/** The voice hotkey held (down) or let go (up), as the key press and the helper's released line reach voice (096). */
+function voiceKey(app: ElectronApplication, down: boolean): Promise<void> {
+  return app.evaluate((_electron, d) => (globalThis as unknown as { snapsolveTest: { voiceKey(down: boolean): void } }).snapsolveTest.voiceKey(d), down);
 }
 
 /** What Esc does while listening (063): the temporary global Escape shortcut's callback. */
@@ -1523,7 +1523,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel();
     try {
       const pill = await p.page.locator("#composer-box").evaluate((el) => getComputedStyle(el).borderTopLeftRadius);
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       const bar = p.page.locator("#listening");
       await bar.waitFor({ state: "visible", timeout: 5_000 });
       expect(await bar.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe(pill);
@@ -1548,7 +1548,7 @@ describe("panel (e2e)", () => {
     }
   }, 60_000);
 
-  it("voice: hotkey → listening bar with the live transcript → hotkey again → the question in the newest card with a mic mark, answered (063)", async () => {
+  it("voice: hold the hotkey → listening bar with the live transcript → let go → the question in the newest card with a mic mark, answered (063, 096)", async () => {
     const p = await launchPanel();
     const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
     try {
@@ -1557,7 +1557,7 @@ describe("panel (e2e)", () => {
       await p.page.locator("#hide").click();
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
 
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       // Shown (it was hidden), without taking focus; the composer is the listening bar.
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
       expect((await windowInfo(p.app)).focused).toBe(false);
@@ -1566,11 +1566,11 @@ describe("panel (e2e)", () => {
       expect(await p.page.locator("#follow-up").isVisible()).toBe(false);
       expect(await bar.locator(".dot").isVisible()).toBe(true);
       expect(await bar.locator(".levels .level").count()).toBeGreaterThan(0);
-      expect(await bar.locator(".hint").innerText()).toBe("⌃⌥V to send · esc to cancel");
+      expect(await bar.locator(".hint").innerText()).toBe("let go to send · esc to cancel");
       await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
       expect(await escapeRegistered(p.app)).toBe(true);
 
-      await voiceKey(p.app);
+      await voiceKey(p.app, false);
       const asked = p.page.locator(`${card(id)} .question.voice`);
       await asked.waitFor({ state: "visible", timeout: 10_000 });
       expect(await asked.innerText()).toContain("why the product rule?");
@@ -1590,7 +1590,7 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("voice: Esc cancels (nothing sent, Esc released); the composer's mic button does what the hotkey does (063)", async () => {
+  it("voice: Esc while held cancels (nothing sent, Esc released, letting go after does nothing); the mic buttons are held to talk (063, 096)", async () => {
     const p = await launchPanel();
     const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
     try {
@@ -1598,21 +1598,31 @@ describe("panel (e2e)", () => {
       await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(1);
       const bar = p.page.locator("#listening");
 
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why");
       await voiceEscape(p.app);
       await expect.poll(() => bar.isVisible(), { timeout: 5_000 }).toBe(false);
       expect(await escapeRegistered(p.app)).toBe(false);
+      await voiceKey(p.app, false);
       await new Promise((r) => setTimeout(r, 1_000));
       expect(await p.page.locator(`${card(id)} .question`).count()).toBe(0);
 
+      // The composer's mic, held: down starts, up (the mic is hidden by then) sends.
       const mic = p.page.locator("#composer-voice");
       expect(await mic.getAttribute("aria-label")).toBe("Dictate");
-      await mic.click();
+      expect(await mic.getAttribute("title")).toBe("Hold to dictate a question");
+      await mic.hover();
+      await p.page.mouse.down();
       await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
-      await p.page.locator("#voice").click();
+      await p.page.mouse.up();
       await p.page.locator(`${card(id)} .question.voice`).waitFor({ state: "visible", timeout: 10_000 });
       await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(2);
+
+      // The title bar's mic: a click is a tap, too short to talk: nothing sent, the hold note.
+      await p.page.locator("#voice").click();
+      await expect.poll(() => p.page.locator("#voice-note").innerText(), { timeout: 5_000 }).toBe("Hold to talk, let go to send.");
+      await new Promise((r) => setTimeout(r, 1_000));
+      expect(await p.page.locator(`${card(id)} .question.voice`).count()).toBe(1);
     } finally {
       await p.close();
     }
@@ -1621,9 +1631,11 @@ describe("panel (e2e)", () => {
   it("voice: an empty transcript sends nothing and says Didn't catch that (063)", async () => {
     const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "empty" });
     try {
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       await p.page.locator("#listening").waitFor({ state: "visible", timeout: 5_000 });
-      await voiceKey(p.app);
+      // Held long enough to count (a tap under 300 ms is cancelled with the hold note instead).
+      await new Promise((r) => setTimeout(r, 600));
+      await voiceKey(p.app, false);
       const note = p.page.locator("#voice-note");
       await expect.poll(() => note.innerText(), { timeout: 5_000 }).toBe("Didn't catch that.");
       expect(await p.page.locator("[data-thread-id]").count()).toBe(0);
@@ -1635,7 +1647,7 @@ describe("panel (e2e)", () => {
   it("voice: mic denied shows a permission card with Open System Settings and no Retry (063)", async () => {
     const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "denied" });
     try {
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       const permission = p.page.locator(".card.permission");
       await permission.waitFor({ state: "visible", timeout: 5_000 });
       expect(await permission.locator(".error").textContent()).toMatch(/Microphone/);
@@ -1652,7 +1664,7 @@ describe("panel (e2e)", () => {
   it("voice: a helper that crashes shows an error card, no buttons, and the composer is back (063)", async () => {
     const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "crash" });
     try {
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       const card = p.page.locator(".card.permission");
       await card.waitFor({ state: "visible", timeout: 10_000 });
       expect(await card.locator(".error").textContent()).toBe("Voice input stopped working. Details are in the snapsolve log.");

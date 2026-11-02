@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IPC, PRELOAD_CHANNELS } from "../../src/shared/ipc";
 
 describe("IPC contract", () => {
-  it("maps exactly the eighteen preload functions (SPEC §4.4 + Amendments 2, 9, 10, 11, 15 and 25)", () => {
+  it("maps exactly the eighteen preload functions (SPEC §4.4 + Amendments 2, 9, 10, 11, 15, 25 and 27)", () => {
     expect(Object.keys(PRELOAD_CHANNELS).sort()).toEqual(
       [
         "onDelta",
@@ -18,7 +18,7 @@ describe("IPC contract", () => {
         "openScreenRecordingSettings",
         "relaunch",
         "onVoice",
-        "toggleVoice",
+        "holdVoice",
         "openVoiceSettings",
         "openThread",
         "getMode",
@@ -46,10 +46,13 @@ describe("IPC contract", () => {
     expect(Object.values(IPC)).toContain("thread:new");
   });
 
-  it("voice is one event and two argument-free calls: voice:state, voice:toggle, settings:openVoice (063)", () => {
+  it("voice is one event and two calls: voice:state, voice:hold (the mic held or let go, 096), settings:openVoice (063)", () => {
     expect(PRELOAD_CHANNELS.onVoice).toBe("voice:state");
-    expect(PRELOAD_CHANNELS.toggleVoice).toBe("voice:toggle");
+    expect(PRELOAD_CHANNELS.holdVoice).toBe("voice:hold");
     expect(PRELOAD_CHANNELS.openVoiceSettings).toBe("settings:openVoice");
+    // The toggle is gone (096): the mic buttons are held, as the voice key is.
+    expect(Object.keys(PRELOAD_CHANNELS)).not.toContain("toggleVoice");
+    expect(Object.values(IPC)).not.toContain("voice:toggle");
   });
 
   it("choosing a chat is one call on thread:open (078)", () => {

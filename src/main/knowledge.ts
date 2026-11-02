@@ -123,6 +123,8 @@ function unreadable(file: string, e: unknown): SnapsolveError {
 
 /** What `## Reference material` says when the knowledge folder has no text file (Amendment 26). */
 const NO_MATERIAL = "None: the user's knowledge folder has no text files.";
+/** Files not read named there, at most; the rest are counted, so a folder of photos cannot swell the argument. */
+const SKIPPED_NAMED = 20;
 
 /**
  * The answer chat's system prompt: the answer prompt, `## Answer format`, then `## Reference material` with each file.
@@ -131,11 +133,12 @@ const NO_MATERIAL = "None: the user's knowledge folder has no text files.";
  */
 export function answerSystemPrompt(parts: { base: string; format: string; knowledge: Knowledge }): string {
   const { files, skipped } = parts.knowledge;
+  const more = skipped.length > SKIPPED_NAMED ? ` and ${skipped.length - SKIPPED_NAMED} more` : "";
   const material =
     files.length > 0
       ? files.map((f) => `<file path="${escapeAttribute(f.path)}">\n${f.text.trimEnd()}\n</file>`).join("\n\n")
       : skipped.length > 0
-        ? `${NO_MATERIAL}\n\nNot read (not text files): ${skipped.join(", ")}`
+        ? `${NO_MATERIAL}\n\nNot read (not text files): ${skipped.slice(0, SKIPPED_NAMED).join(", ")}${more}`
         : NO_MATERIAL;
   return `${[parts.base.trimEnd(), `## Answer format\n\n${parts.format.trim()}`, `## Reference material\n\n${material}`].join("\n\n")}\n`;
 }

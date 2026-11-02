@@ -28,9 +28,10 @@ import { IPC } from "../shared/ipc";
 import { applyTheme, applyTransparency, createApp, recoverBusyThreads, resolveClaudeCommand, type Shot } from "./app";
 import { checkAuth } from "./auth";
 import { createCapturer, ScreenRecordingDeniedError, screenshotOf } from "./capture";
-import { loadConfig, saveTheme, saveTransparency } from "./config";
+import { loadConfig, saveMode, saveTheme, saveTransparency } from "./config";
 import { encodeForModel } from "./encode";
 import { createHotkeys } from "./hotkeys";
+import { answerSystemPrompt, knowledgeFolder, readAnswerFormat, readKnowledge } from "./knowledge";
 import { createLogger, type Logger } from "./log";
 import { createPermissionHandlers, darwinStartup, hotkeyLabel, hotkeySymbols, readDisplaySizes } from "./macos";
 import { createPanel, loadWindowBounds, resolveSnapsolveUrl, saveWindowBounds, SCHEME } from "./panel";
@@ -159,11 +160,21 @@ async function start(): Promise<void> {
     log,
     purge: (sessionsDir) => purge(typeof command === "function" ? command() : command, sessionsDir, buildEnv(env, config.allowApiKey)),
   });
+  // Answer mode (089): the shipped answer prompt and format are read once; the user's format and knowledge folder
+  // again for every answer-mode turn, so edits count from the next question.
+  const answerBase = await readPrompt("answer.md");
+  const answerFormat = await readPrompt("answer-format.md");
   const runner = createRunner({
     command,
     store,
     config,
-    systemPrompt: await readSystemPrompt(),
+    systemPrompt: await readPrompt("system.md"),
+    answerSystemPrompt: async () =>
+      answerSystemPrompt({
+        base: answerBase,
+        format: await readAnswerFormat(paths.answerFormat, answerFormat),
+        knowledge: await readKnowledge(knowledgeFolder(config.knowledgeDir, paths.knowledge, home)),
+      }),
     env,
     spawn,
     sessionsDir: paths.sessions,
@@ -219,6 +230,7 @@ async function start(): Promise<void> {
     },
     onTurnEnded: () => panel.turnEnded(),
     onUsage: (usage) => tray?.setTooltip(usage),
+    saveMode: (mode) => saveMode(paths.config, mode),
   });
   // Voice (task 063): the speech helper beside main.js (test mode: a node script Electron runs as node).
   const fakeSpeech = test ? process.env.SNAPSOLVE_TEST_SPEECH : undefined;
@@ -264,6 +276,9 @@ async function start(): Promise<void> {
     // The mic buttons do what the voice hotkey does (SPEC Amendment 11).
     [IPC.voiceToggle]: async () => voice?.toggle(),
     [IPC.voiceSettingsOpen]: permissionHandlers.openVoiceSettings,
+    // The title bar's Solve | Answer toggle (SPEC Amendment 25).
+    [IPC.modeGet]: core.handlers.getMode,
+    [IPC.modeSet]: core.handlers.setMode,
   });
 
   // SPEC §1.1 "tray notification": a balloon on the Windows tray icon; a system notification on macOS. Test mode
@@ -359,11 +374,11 @@ function trayImage(platform: NodeJS.Platform): Electron.NativeImage {
   return image;
 }
 
-/** prompts/system.md beside main.js (the released app/) or one level up (dev: dist/main.js). */
-async function readSystemPrompt(): Promise<string> {
-  const candidates = [path.join(__dirname, "prompts", "system.md"), path.join(__dirname, "..", "prompts", "system.md")];
+/** prompts/<name> beside main.js (the released app/) or one level up (dev: dist/main.js). */
+async function readPrompt(name: string): Promise<string> {
+  const candidates = [path.join(__dirname, "prompts", name), path.join(__dirname, "..", "prompts", name)];
   const file = candidates.find((f) => existsSync(f));
-  if (!file) throw new SnapsolveError("internal", `prompts/system.md not found next to ${__dirname}`);
+  if (!file) throw new SnapsolveError("internal", `prompts/${name} not found next to ${__dirname}`);
   return readFile(file, "utf8");
 }
 

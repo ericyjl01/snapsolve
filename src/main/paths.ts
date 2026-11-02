@@ -51,6 +51,10 @@ export interface DataPaths {
   app: string;
   /** Where the floating window was left, per display (task 058); not config.json. */
   windowState: string;
+  /** Answer mode's knowledge folder when config.json has no `knowledgeDir` (task 089); never created by the app. */
+  knowledge: string;
+  /** The user's own answer format (task 089), read when it exists; otherwise prompts/answer-format.md. */
+  answerFormat: string;
 }
 
 export function dataPaths(dir: string): DataPaths {
@@ -63,6 +67,8 @@ export function dataPaths(dir: string): DataPaths {
     logFile: path.join(dir, "logs", "snapsolve.log"),
     app: path.join(dir, "app"),
     windowState: path.join(dir, "window.json"),
+    knowledge: path.join(dir, "knowledge"),
+    answerFormat: path.join(dir, "answer-format.md"),
   };
 }
 

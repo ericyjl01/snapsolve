@@ -6,7 +6,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { type ErrorKind, SnapsolveError, userMessage } from "../shared/errors";
-import type { AssistantTurn, Config, Effort, Thread, ThreadStatus, Turn, UserTurn } from "../shared/types";
+import type { AssistantTurn, ChatMode, Config, Effort, Thread, ThreadStatus, Turn, UserTurn } from "../shared/types";
 import { type AuthStatus, formatUsage, isUsageBlocked, type UsageInfo, usageBlockedMessage } from "./auth";
 import type { Logger } from "./log";
 import type { Store } from "./store";
@@ -15,6 +15,9 @@ import { createLineSplitter, parseEvent, type RateWindow, type StreamEvent } fro
 export const NEW_TEXT = "Solve the problem on this screen.";
 // Every capture continues the current thread (065), so the screenshot may be a new problem.
 export const APPEND_TEXT = "Here is another screenshot. If it is unrelated to the earlier problem, treat it as a new question.";
+// Answer mode (089): a screenshot there is a written question about the user (an application form, a chat).
+export const ANSWER_NEW_TEXT = "Draft my answer to the question on this screen.";
+export const ANSWER_APPEND_TEXT = "Here is another screenshot. Draft my answer to the question on it.";
 export const EARLIER_HEADER = "Earlier answers in this thread:";
 export const SEED_HEADER = "The previous thread's last answer:";
 
@@ -92,8 +95,14 @@ export interface RunnerDeps {
   command: Command | (() => Command);
   store: Store;
   config: Pick<Config, "maxConcurrent" | "timeoutSec" | "allowApiKey">;
-  /** Contents of prompts/system.md. */
+  /** Contents of prompts/system.md: a solve chat's system prompt. */
   systemPrompt: string;
+  /**
+   * An answer chat's system prompt (089), built again for every turn (knowledge.ts). It rejects with `knowledgeMissing`
+   * or `knowledgeTooLarge`, whose message the card shows; the turn then fails before claude is started. Not wired →
+   * an answer chat's turns fail as `internal`.
+   */
+  answerSystemPrompt?: () => Promise<string>;
   env: Readonly<Record<string, string | undefined>>;
   spawn: SpawnFn;
   /** `<data>/sessions`, claude's cwd; created before every spawn. */
@@ -215,8 +224,8 @@ export function buildUserMessage(kind: UserRequest["kind"], images: SendImage[],
 }
 
 /** SPEC §2.3: a seeded thread's first question, the previous thread's last answer before the append question. */
-export function seededQuestion(seed: string): string {
-  return `${SEED_HEADER}\n\n${seed}\n\n---\n\n${APPEND_TEXT}`;
+export function seededQuestion(seed: string, appendText: string = APPEND_TEXT): string {
+  return `${SEED_HEADER}\n\n${seed}\n\n---\n\n${appendText}`;
 }
 
 /** The first message of a replacement session (SPEC §3.4): every screenshot, the earlier answers, the question. */
@@ -374,6 +383,17 @@ export function createRunner(deps: RunnerDeps): Runner {
       const blocked = new SnapsolveError("usageLimit", usageBlockedMessage(usage.resetsAt as number, now()));
       return fail(threadId, blocked, null, { startedAt, turn: true });
     }
+    // 089: an answer chat's system prompt carries the knowledge folder as it is now; one that cannot be built fails
+    // the turn here, with its own message on the card, before claude is started.
+    let systemPrompt = deps.systemPrompt;
+    if (thread.mode === "answer") {
+      try {
+        if (!deps.answerSystemPrompt) throw new SnapsolveError("internal", "answer mode is not wired");
+        systemPrompt = await deps.answerSystemPrompt();
+      } catch (e) {
+        return fail(threadId, e, null, { startedAt, turn: true });
+      }
+    }
     const prior = thread.turns.slice(0, target.index);
     const answers = prior.filter(isAnswer).map((t) => t.text);
     // A seeded thread's later turns carry the previous thread's answer as the earliest one (the first turn's own
@@ -389,7 +409,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     let attempt: Attempt | null = null;
     let note: "resumeFallback" | undefined;
     if (mode === "resume") {
-      attempt = await spawnTurn(thread, { resume: thread.transcriptPath as string }, await requestMessage(thread, asked));
+      attempt = await spawnTurn(thread, { resume: thread.transcriptPath as string }, await requestMessage(thread, asked), systemPrompt);
       if (isResumeFailure(attempt)) {
         log.warn("runner.resumeFailed", { threadId, sessionId: thread.sessionId });
         mode = "fallback";
@@ -399,9 +419,10 @@ export function createRunner(deps: RunnerDeps): Runner {
       thread = await store.replaceSession(threadId);
       if (answers.length > 0) note = "resumeFallback";
       const images = await Promise.all(screenshotFiles(thread.turns).map((f) => deps.loadSendImage(screenshotPath(thread, f))));
-      attempt = await spawnTurn(thread, { id: thread.sessionId }, buildFallbackMessage(images, earlier, question(asked)));
+      const message = buildFallbackMessage(images, earlier, question(asked, thread.mode));
+      attempt = await spawnTurn(thread, { id: thread.sessionId }, message, systemPrompt);
     } else if (mode === "first") {
-      attempt = await spawnTurn(thread, { id: thread.sessionId }, await requestMessage(thread, asked));
+      attempt = await spawnTurn(thread, { id: thread.sessionId }, await requestMessage(thread, asked), systemPrompt);
     }
     if (!attempt) throw new SnapsolveError("internal", `no attempt for mode ${mode}`);
 
@@ -440,14 +461,20 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   async function requestMessage(thread: Thread, request: UserRequest): Promise<UserMessage> {
     if (request.kind === "followUp") return buildUserMessage("followUp", [], request.text);
-    return buildUserMessage(request.kind, [await deps.loadSendImage(screenshotPath(thread, request.screenshot))], question(request));
+    const image = await deps.loadSendImage(screenshotPath(thread, request.screenshot));
+    return buildUserMessage(request.kind, [image], question(request, thread.mode));
   }
 
   function screenshotPath(thread: Thread, file: string): string {
     return store.screenshotPath(thread.id, Number((SCREENSHOT.exec(file) as RegExpExecArray)[1]));
   }
 
-  async function spawnTurn(thread: Thread, session: { id: string } | { resume: string }, message: UserMessage): Promise<Attempt> {
+  async function spawnTurn(
+    thread: Thread,
+    session: { id: string } | { resume: string },
+    message: UserMessage,
+    systemPrompt: string,
+  ): Promise<Attempt> {
     const attempt: Attempt = {
       result: null,
       text: "",
@@ -466,7 +493,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     const command = typeof deps.command === "function" ? deps.command() : deps.command;
     const args = [
       ...command.prefixArgs,
-      ...buildArgs({ model: thread.model, effort: thread.effort, systemPrompt: deps.systemPrompt, session }),
+      ...buildArgs({ model: thread.model, effort: thread.effort, systemPrompt, session }),
     ];
     await mkdir(deps.sessionsDir, { recursive: true });
     const startedAt = now();
@@ -623,10 +650,13 @@ function userTurn(request: UserRequest): UserTurn {
   return request.kind === "new" && request.seed !== undefined ? { ...turn, seed: request.seed } : turn;
 }
 
-function question(request: UserRequest): string {
+/** What a turn asks: a follow-up's own text, or a screenshot's question for the chat's mode (089). */
+function question(request: UserRequest, mode: ChatMode | undefined): string {
   if (request.kind === "followUp") return request.text;
-  if (request.kind === "append") return APPEND_TEXT;
-  return request.seed === undefined ? NEW_TEXT : seededQuestion(request.seed);
+  const answer = mode === "answer";
+  if (request.kind === "append") return answer ? ANSWER_APPEND_TEXT : APPEND_TEXT;
+  if (request.seed !== undefined) return seededQuestion(request.seed, answer ? ANSWER_APPEND_TEXT : APPEND_TEXT);
+  return answer ? ANSWER_NEW_TEXT : NEW_TEXT;
 }
 
 /** The seed on the thread's first user turn, if that turn is a seeded screenshot. */
@@ -731,9 +761,12 @@ function spawnFailure(e: NodeJS.ErrnoException): { code: string | null; syscall:
 }
 
 /** The card's error: Claude's own words for a usage limit, the fixed text for the rest (details are logged). */
+/** Kinds whose card shows the error's own message: Claude's words for a usage limit; the folder for answer mode (089). */
+const OWN_MESSAGE: ReadonlySet<ErrorKind> = new Set(["usageLimit", "knowledgeMissing", "knowledgeTooLarge"]);
+
 function classifyError(e: unknown): { kind: ErrorKind; message: string } {
   if (e instanceof SnapsolveError) {
-    return { kind: e.kind, message: e.kind === "usageLimit" ? e.message : userMessage(e.kind) };
+    return { kind: e.kind, message: OWN_MESSAGE.has(e.kind) ? e.message : userMessage(e.kind) };
   }
   return { kind: "internal", message: userMessage("internal") };
 }

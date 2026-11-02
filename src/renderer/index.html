@@ -51,6 +51,11 @@
         </svg>
         <span class="name">snapsolve</span>
         <span id="chat-title" class="chat-title"></span>
+        <!-- Task 089 (Amendment 25): what the chat on screen does; switching with a chat on screen starts a new one. -->
+        <div id="mode" class="mode" role="radiogroup" aria-label="Mode">
+          <button type="button" role="radio" data-mode="solve" aria-checked="true" title="Solve what's on your screen">Solve</button>
+          <button type="button" role="radio" data-mode="answer" aria-checked="false" title="Draft your own answer from your knowledge folder">Answer</button>
+        </div>
         <button id="voice" class="icon voice" type="button" aria-label="Dictate" title="Dictate a question">
           <svg aria-hidden="true" width="12" height="13" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.6">
             <rect x="3.5" y="1" width="5" height="8" rx="2.5"></rect>

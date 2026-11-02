@@ -1,6 +1,6 @@
-// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2, 9, 10, 11 and 15) that maps 1:1
-// onto them.
-import type { AnswerDelta, AnswerDone, Thread, VoiceState } from "./types";
+// IPC contract: channel names (`area:verb`) and the preload API (SPEC §4.4, Amendments 2, 9, 10, 11, 15 and 25) that maps
+// 1:1 onto them.
+import type { AnswerDelta, AnswerDone, ChatMode, Thread, VoiceState } from "./types";
 
 export const IPC = {
   // main → renderer events
@@ -28,6 +28,9 @@ export const IPC = {
   // argument.
   voiceToggle: "voice:toggle",
   voiceSettingsOpen: "settings:openVoice",
+  // SPEC Amendment 25 (task 089): the title bar's Solve | Answer toggle — the mode new chats start in.
+  modeGet: "mode:get",
+  modeSet: "mode:set",
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -50,6 +53,8 @@ export const PRELOAD_CHANNELS = {
   onVoice: IPC.voiceState,
   toggleVoice: IPC.voiceToggle,
   openVoiceSettings: IPC.voiceSettingsOpen,
+  getMode: IPC.modeGet,
+  setMode: IPC.modeSet,
 } as const satisfies Record<keyof SnapsolveApi, IpcChannel>;
 
 /** Payloads of main → renderer events. */
@@ -74,6 +79,8 @@ export interface IpcRequests {
   [IPC.appRelaunch]: { args: []; result: void };
   [IPC.voiceToggle]: { args: []; result: void };
   [IPC.voiceSettingsOpen]: { args: []; result: void };
+  [IPC.modeGet]: { args: []; result: ChatMode };
+  [IPC.modeSet]: { args: [mode: ChatMode]; result: void };
 }
 
 /** The renderer-side API preload exposes via contextBridge (implemented in task 009). */
@@ -103,4 +110,11 @@ export interface SnapsolveApi {
   toggleVoice(): Promise<void>;
   /** macOS: main opens System Settings at the pane voice was refused (a fixed URL); elsewhere nothing. */
   openVoiceSettings(): Promise<void>;
+  /** The mode new chats start in (config.json `mode`, task 089). */
+  getMode(): Promise<ChatMode>;
+  /**
+   * The toggle's choice: new chats start in `mode` from now on, and it is saved. The chat on screen keeps its own mode;
+   * the renderer starts a new chat (`newThread()`) when switching while one is shown.
+   */
+  setMode(mode: ChatMode): Promise<void>;
 }

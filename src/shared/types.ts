@@ -6,6 +6,12 @@ export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 /** The panel's look (task 075): fixed dark or light, or whatever macOS uses. */
 export type Theme = "dark" | "light" | "system";
 
+/**
+ * What a chat does (task 089, SPEC Amendment 25): `solve` explains the problem on screen; `answer` drafts the user's
+ * own answer to a question about them from their knowledge folder, in their answer format.
+ */
+export type ChatMode = "solve" | "answer";
+
 export interface Hotkeys {
   capture: string;
   /** Shows or hides the window (task 060). */
@@ -30,6 +36,10 @@ export interface Config {
   theme: Theme;
   /** How see-through the window's ground is, in percent: 0, 10, … 90 (task 090, Amendments 23, 24). */
   transparency: number;
+  /** The mode new chats start in: the title bar's Solve | Answer toggle (task 089, Amendment 25). */
+  mode: ChatMode;
+  /** Answer mode's knowledge folder: absolute, or under the home folder as `~/…`; null → `<data>/knowledge` (089). */
+  knowledgeDir: string | null;
 }
 
 /** `new`: created, no turn started yet. */
@@ -94,6 +104,8 @@ export interface Thread {
   turns: Turn[];
   /** Set when the first turn's transcript could not be adopted: the next turn takes the resume fallback. */
   transcriptMissing?: boolean;
+  /** `answer`: an answer-mode chat (task 089), for its whole life. Absent (or `solve`): a solve chat, as before 089. */
+  mode?: ChatMode;
   /**
    * Set only on a permission card: a panel-only entry (never saved) whose one errored turn says what to do. The macOS
    * Screen Recording card has `prompted`, which picks its buttons (`screenRecordingCard`); a voice card names the

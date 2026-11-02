@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { screenRecordingCard, SnapsolveError, userMessage, voicePermissionCard } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
-import type { AssistantTurn, Config, Theme, Thread, ThreadStatus, VoiceCardKind, VoiceDenial } from "../shared/types";
+import type { AssistantTurn, ChatMode, Config, Theme, Thread, ThreadStatus, VoiceCardKind, VoiceDenial } from "../shared/types";
 import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
@@ -19,8 +19,11 @@ export interface AppDeps {
   store: Store;
   runner: Pick<Runner, "enqueue" | "on">;
   panel: { open(): void; send<C extends keyof IpcEvents>(channel: C, payload: IpcEvents[C]): void };
-  config: Pick<Config, "model" | "effort" | "maxScreenshotsPerThread">;
+  /** `mode` is the mode new chats start in (089); `setMode` changes it for this run and saves it with `saveMode`. */
+  config: Pick<Config, "model" | "effort" | "maxScreenshotsPerThread" | "mode">;
   log: Logger;
+  /** Saves the Solve | Answer toggle's choice into config.json (`saveMode`, task 089); a failure is logged. */
+  saveMode?: (mode: ChatMode) => Promise<{ ok: true } | { ok: false; error: string }>;
   /** `shell.openExternal`; only ever called with an http(s) URL. */
   openExternal: (url: string) => Promise<void>;
   /** The native confirm dialog before clearing history; true = go ahead. */
@@ -51,6 +54,13 @@ export type AppHandlers = {
   openThread(threadId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   clearHistory(): Promise<boolean>;
+  /** The mode new chats start in (089). */
+  getMode(): Promise<ChatMode>;
+  /**
+   * The Solve | Answer toggle (089): new chats start in `mode` from now on, saved to config.json. The chat a capture or
+   * question joins does not change: the renderer starts a new chat (`newThread()`) when switching with one on screen.
+   */
+  setMode(mode: ChatMode): Promise<void>;
 };
 
 export interface App {
@@ -200,9 +210,14 @@ export function createApp(deps: AppDeps): App {
     }
   }
 
+  /** A new chat, in the mode the toggle says new chats start in (089). */
+  function createThread(): Promise<Thread> {
+    return store.createThread({ model: config.model, effort: config.effort, mode: config.mode });
+  }
+
   /** `seed`: the previous thread's last answer, when an append past the screenshot limit starts this one (SPEC §2.3). */
   async function newThread(shot: Shot, shownMs: number, seed?: string): Promise<string> {
-    const thread = await store.createThread({ model: config.model, effort: config.effort });
+    const thread = await createThread();
     dropPermissionCard();
     current = thread.id;
     remember(thread);
@@ -236,7 +251,7 @@ export function createApp(deps: AppDeps): App {
 
   /** A new thread whose first turn is a question (typed after "+", or dictated with no current thread). */
   async function textThread(request: Extract<TurnRequest, { kind: "followUp" }>): Promise<string> {
-    const thread = await store.createThread({ model: config.model, effort: config.effort });
+    const thread = await createThread();
     current = thread.id;
     fresh = false;
     remember(thread);
@@ -337,6 +352,22 @@ export function createApp(deps: AppDeps): App {
       unstarted.clear();
       broadcast();
       return true;
+    },
+
+    async getMode() {
+      return config.mode;
+    },
+
+    async setMode(mode) {
+      if (mode !== "solve" && mode !== "answer") throw new SnapsolveError("internal", "unknown mode");
+      if (mode === config.mode) return;
+      config.mode = mode;
+      try {
+        const result = await deps.saveMode?.(mode);
+        if (result && !result.ok) log.warn("mode.saveFailed", { mode, error: result.error });
+      } catch (e) {
+        log.warn("mode.saveFailed", { mode, error: e });
+      }
     },
   };
 

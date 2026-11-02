@@ -129,6 +129,8 @@ describe("loadConfig", () => {
       timeoutSec: 300,
       theme: "light",
       transparency: 50,
+      mode: "answer",
+      knowledgeDir: "~/resumes/master",
     };
     await writeConfig(custom);
     const before = await snapshot();

@@ -5,7 +5,7 @@ import type { Stats } from "node:fs";
 import { copyFile, link, mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { SnapsolveError } from "../shared/errors";
-import type { Effort, Thread, ThreadStatus, Turn } from "../shared/types";
+import type { ChatMode, Effort, Thread, ThreadStatus, Turn } from "../shared/types";
 import type { Logger } from "./log";
 import { dataPaths } from "./paths";
 
@@ -17,6 +17,7 @@ const MAX_SCREENSHOT = 999;
 const SCAN_CONCURRENCY = 32;
 const STATUSES: readonly ThreadStatus[] = ["new", "queued", "running", "done", "error"];
 const EFFORTS: readonly Effort[] = ["low", "medium", "high", "xhigh", "max"];
+const MODES: readonly ChatMode[] = ["solve", "answer"];
 /** Codes Windows returns while another process (Defender, the search indexer) briefly holds a rename's file. */
 const TRANSIENT_RENAME = new Set(["EPERM", "EBUSY", "EACCES"]);
 /** Waits between rename tries: 200 ms in total. */
@@ -47,7 +48,8 @@ export type ClearResult = { ok: true } | { ok: false; error: string };
 export type ThreadPatch = Partial<Pick<Thread, "status" | "title">>;
 
 export interface Store {
-  createThread(options: { model: string; effort: Effort }): Promise<Thread>;
+  /** `mode: "answer"` makes an answer-mode chat (089); a solve chat's thread.json has no `mode`, as before. */
+  createThread(options: { model: string; effort: Effort; mode?: ChatMode }): Promise<Thread>;
   saveScreenshot(id: string, png: Uint8Array): Promise<SavedScreenshot>;
   appendTurn(id: string, turn: Turn): Promise<Thread>;
   updateThread(id: string, patch: ThreadPatch): Promise<Thread>;
@@ -181,7 +183,7 @@ export function createStore(deps: StoreDeps): Store {
   return {
     writeJsonAtomic,
 
-    async createThread({ model, effort }) {
+    async createThread({ model, effort, mode }) {
       const thread: Thread = {
         id: randomUUID(),
         sessionId: randomUUID(),
@@ -192,6 +194,7 @@ export function createStore(deps: StoreDeps): Store {
         title: "",
         status: "new",
         turns: [],
+        ...(mode === "answer" ? { mode } : {}),
       };
       const dir = threadDir(thread.id);
       try {
@@ -408,6 +411,7 @@ function threadProblem(raw: unknown, id: string): string | null {
   if (raw.transcriptMissing !== undefined && typeof raw.transcriptMissing !== "boolean") {
     return "has an invalid transcriptMissing";
   }
+  if (raw.mode !== undefined && !MODES.includes(raw.mode as ChatMode)) return "has an invalid mode";
   if (!Array.isArray(raw.turns)) return "has no turns list";
   for (const [i, turn] of raw.turns.entries()) {
     const problem = turnProblem(turn);

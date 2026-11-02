@@ -142,6 +142,52 @@ button[hidden] {
 
 .titlebar .name {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The narrowest windows (280 px) keep the mode toggle and every button; the name gives way (089). */
+@media (max-width: 339px) {
+  .titlebar .name {
+    display: none;
+  }
+}
+
+/* Task 089 (Amendment 25): the Solve | Answer toggle, a small segmented pill; the mode in effect is filled. */
+.mode {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--hover);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.mode button {
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.mode button:hover {
+  color: var(--fg);
+}
+
+.mode button[aria-checked="true"] {
+  background: var(--fg);
+  color: var(--ground-solid);
 }
 
 /* The chat on screen names the chat column when the window is wide (078); narrow, the bar says snapsolve. */

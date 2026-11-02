@@ -775,10 +775,10 @@ describe("IPC handlers", () => {
   });
 
   // The Copy button and `copy` handler are gone with the restyle (061): nothing writes to the clipboard.
-  it("exposes exactly the seven renderer handlers, none of them copy (061), newThread added (065), openThread added (078)", () => {
+  it("exposes exactly the nine renderer handlers, none of them copy (061), newThread added (065), openThread added (078), getMode and setMode added (089)", () => {
     const app = createApp(deps);
     expect(Object.keys(app.handlers).sort()).toEqual(
-      ["listThreads", "followUp", "retry", "openExternal", "clearHistory", "newThread", "openThread"].sort(),
+      ["listThreads", "followUp", "retry", "openExternal", "clearHistory", "newThread", "openThread", "getMode", "setMode"].sort(),
     );
   });
 

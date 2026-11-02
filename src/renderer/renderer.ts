@@ -11,10 +11,12 @@
 // grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings / Relaunch,
 // nothing else; voice's refused Microphone or Speech Recognition does the same with Open System Settings only. While
 // a question is dictated (Amendment 11, task 063) the composer is a listening bar: a red dot, input level bars, the
-// live transcript and how to send or cancel; a dictated question shows with a mic mark.
+// live transcript and how to send or cancel; a dictated question shows with a mic mark. The title bar's Solve | Answer
+// toggle (Amendment 25, task 089) shows the mode of the chat on screen, or with none the mode a new chat starts in;
+// switching while a chat is on screen starts a new chat in the other mode (a chat keeps the mode it started in).
 import { continuedNote, screenRecordingCard, userMessage, voicePermissionCard } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
-import type { AssistantTurn, Thread, UserTurn, VoiceState } from "../shared/types";
+import type { AssistantTurn, ChatMode, Thread, UserTurn, VoiceState } from "../shared/types";
 import { modelName } from "../shared/models";
 import { renderAnswer } from "./render";
 
@@ -45,6 +47,7 @@ const chatList = document.getElementById("chats") as HTMLElement;
 const scrim = document.getElementById("scrim") as HTMLElement;
 const showChats = document.getElementById("sidebar-show") as HTMLButtonElement;
 const chatTitle = document.getElementById("chat-title") as HTMLElement;
+const modeSwitch = document.getElementById("mode") as HTMLElement;
 /** At this width and wider the sidebar is docked beside the chat; narrower it is an overlay (078). */
 const wide = window.matchMedia("(min-width: 600px)");
 /** At most this tall before the composer scrolls (about five lines). */
@@ -79,6 +82,8 @@ let freshAfter: string | null | undefined;
 let sidebarOpen = wide.matches;
 /** The user closed the sidebar (082): it stays closed through resizes until Show chats. */
 let sidebarClosedByUser = false;
+/** The mode a new chat starts in (config.json `mode`, 089): "solve" until main says otherwise. */
+let newChatMode: ChatMode = "solve";
 
 const BUSY = new Set<Thread["status"]>(["new", "queued", "running"]);
 const isBusy = (t: Thread) => BUSY.has(t.status) || pending.has(t.id);
@@ -341,6 +346,36 @@ function startNewChat(): void {
   });
 }
 
+/** The mode of the chat on screen; with none (no chats, or after "+"), the mode a new chat starts in (089). */
+function shownMode(): ChatMode {
+  const onScreen = shown === null ? undefined : threads.get(shown);
+  if (!onScreen) return newChatMode;
+  return onScreen.mode === "answer" ? "answer" : "solve";
+}
+
+function renderModeSwitch(): void {
+  const mode = shownMode();
+  for (const button of modeSwitch.querySelectorAll<HTMLButtonElement>("[data-mode]")) {
+    button.setAttribute("aria-checked", String(button.dataset.mode === mode));
+  }
+}
+
+/**
+ * The toggle (089): new chats start in `mode` from now on (saved by main). A chat keeps the mode it started in, so with
+ * one on screen this also starts a new chat, as "+" does; the next capture or question begins it.
+ */
+function chooseMode(mode: ChatMode): void {
+  if (mode === shownMode()) return;
+  const was = newChatMode;
+  newChatMode = mode;
+  if (shown !== null) startNewChat();
+  else layout();
+  api.setMode(mode).catch(() => {
+    newChatMode = was;
+    layout();
+  });
+}
+
 /** Every thread, newest first (createdAt, then id: main's order). */
 function newestFirst(): Thread[] {
   return [...threads.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.id.localeCompare(b.id));
@@ -378,12 +413,17 @@ function layout(): void {
     update(thread.id);
   }
   empty.textContent =
-    threads.size === 0 ? "Press the snapsolve hotkey to solve what's on your screen." : "New chat. Press the snapsolve hotkey or type a question.";
+    shownMode() === "answer"
+      ? "Answer mode. Ask a question and snapsolve drafts your answer from your knowledge folder."
+      : threads.size === 0
+        ? "Press the snapsolve hotkey to solve what's on your screen."
+        : "New chat. Press the snapsolve hotkey or type a question.";
   // Shown with no threads at all, and after "+" until the new thread arrives.
   empty.hidden = shown !== null || (threads.size > 0 && freshAfter === undefined);
   const onScreen = shown === null ? undefined : threads.get(shown);
   chatTitle.textContent = onScreen ? titleOf(onScreen) : "New chat";
   renderChats(chatsOnly);
+  renderModeSwitch();
   updateComposer();
 }
 
@@ -482,6 +522,10 @@ for (const id of ["voice", "composer-voice"]) {
 api.onVoice(showVoice);
 (document.getElementById("hide") as HTMLButtonElement).addEventListener("click", () => void api.hide().catch(() => undefined));
 (document.getElementById("new-chat") as HTMLButtonElement).addEventListener("click", startNewChat);
+modeSwitch.addEventListener("click", (event) => {
+  const mode = (event.target as Element | null)?.closest<HTMLElement>("[data-mode]")?.dataset.mode;
+  if (mode === "solve" || mode === "answer") chooseMode(mode);
+});
 (document.getElementById("sidebar-new") as HTMLButtonElement).addEventListener("click", startNewChat);
 showChats.addEventListener("click", () => chooseSidebar(true));
 (document.getElementById("sidebar-hide") as HTMLButtonElement).addEventListener("click", () => chooseSidebar(false));
@@ -501,3 +545,10 @@ document.addEventListener("click", (event) => {
 });
 
 void api.listThreads().then(setThreads, () => setThreads([]));
+void api.getMode().then(
+  (mode) => {
+    newChatMode = mode;
+    layout();
+  },
+  () => undefined,
+);

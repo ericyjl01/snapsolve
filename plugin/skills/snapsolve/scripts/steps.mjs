@@ -45,6 +45,8 @@ function defaultConfig() {
     timeoutSec: 180,
     theme: "dark",
     transparency: 20,
+    mode: "solve",
+    knowledgeDir: null,
   };
 }
 

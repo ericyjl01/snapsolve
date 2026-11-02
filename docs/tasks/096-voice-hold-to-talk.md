@@ -19,8 +19,8 @@ Out: toggle mode as an option (a voice key with no modifier keeps press-again, a
 - [x] Holding ⌃⌥V shows the listening bar with the live transcript; releasing sends it to the chat on screen (or a new chat) as a voice-marked question. (unit: voice.test; the real key-up on Eric's Mac is a hand check, below)
 - [x] Holding a mic button does the same; releasing sends. (unit: voice.test, hold.test)
 - [x] Esc while holding cancels; a very short press sends nothing. (unit: voice.test)
-- [x] Unit suite green (`npx vitest run --project unit`: 1155 passed, 7 skipped), build ok (the helper compiles), caps ok; e2e updated but not run (windows pop up; Eric says when).
-- [ ] An Opus review passes.
+- [x] Unit suite green (`npx vitest run --project unit`: 1169 passed, 7 skipped after review 1), build ok (the helper compiles), caps ok; e2e updated but not run (windows pop up; Eric says when).
+- [x] An Opus review passes (review 1 fail, two reasons fixed; review 2 pass).
 
 ## Tests
 Command: `npx vitest run --project unit test/unit/voice.test.ts test/unit/hold.test.ts test/unit/ipc.test.ts test/unit/hotkeys.test.ts`
@@ -36,6 +36,7 @@ Command: `npx vitest run --project unit test/unit/voice.test.ts test/unit/hold.t
 SPEC Amendment 11 (voice), Amendment 27, §4.4 Preload API, §7.1.
 
 ## Notes
-- Hand check on Eric's Mac (add to checklist 032 at merge): hold ⌃⌥V, speak, let go → sends; tap ⌃⌥V → the hold note; no Input Monitoring prompt appears; hold ⌃⌥V and press Esc → cancelled; hold the composer mic, drag off it, let go → sends; first use with the permission prompts (let go to click Allow: no question is sent; answering both prompts in over 15 s ends in "Voice input stopped working", and the next hold works).
+- Hand check on Eric's Mac (add to checklist 032 at merge): hold ⌃⌥V, speak, let go → sends; tap ⌃⌥V → the hold note; no Input Monitoring prompt appears; hold ⌃⌥V and press Esc → cancelled; hold the composer mic, drag off it, let go → sends; first use with the permission prompts (let go to click Allow: no question is sent; answering both prompts in over 15 s ends in "Voice input stopped working", and the next hold works); hold ⌃⌥V for a few seconds with the window hidden: one dictation, no restart (review 2 note: if macOS repeats a held global hotkey, a hold that ends while the keys are still down would start again); a quick tap may say "Didn't catch that." instead of the hold note when the helper starts slowly (its start-up counts as holding).
+- Review 2 notes, not changed: a custom Command+Option voice key would hold ⌥⌘Esc (Force Quit) during a hold; the `voice:hold` boolean check (main.ts) and the renderer hint are covered only by e2e.
 - Review 1 (fail): Esc while ⌃⌥ are held arrives as ⌃⌥Esc, which the bare Escape shortcut never catches → a key hold also registers `holdEscape(holdKeys)` (Control+Alt+Escape); a keyboard hold of the composer mic lost its key-up once the mic was hidden → hold.ts listens for the key-up on window. Tests 7f33687 (red: 12 failed), fixes c84e07c. Open for Eric: the helper now imports CoreGraphics (a system framework AVFoundation already loads), which ARCHITECTURE's approved speech line does not name.
 - Built on branch `worktree-answer-mode` in `.claude/worktrees/answer-mode` by hand like 089 (tests 2204ac9, red: 51 failed; harness fix 9891ef3; code c29b118). No `npm test`, no e2e runs.

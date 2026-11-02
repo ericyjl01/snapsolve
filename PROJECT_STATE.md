@@ -1,13 +1,13 @@
 # PROJECT_STATE
 
 ## Now
-089 answer mode, in worktree .claude/worktrees/answer-mode on branch worktree-answer-mode (from master 70bcce1). Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
-- Built: Solve | Answer toggle, knowledge folder, format (Amendment 25: e5c5059 tests … a6fea15; 2 Opus reviews, pass).
-- Amendment 26 (Eric: "should still be able to function even though if it has no knowledge"): no folder/no text files → answers from the model's own knowledge; gaps for missing personal facts; unreadable → knowledgeUnreadable. d0bf60d tests (red: 12 failed), 4c24185 code, 763a98d docs; review 3 pass with notes → 752683d tests (red: 2), 72ea28b fix, 0629298 docs; review 4 pass. Unit 1120 passed, 7 skipped; build ok; caps ok.
-- Eric's data (~/snapsolve-answer-test, not in git): his General Magic KB + voice copied to knowledge/.source, split into 48 active files (answers/ stories/ me/ projects/ company/, 208 KB) + hidden .archive/; voice rules + never-say rules in answer-format.md, plus "Gaps: keep them few" (Eric chose option 1); config opus/low (fastest measured: first words 3–5 s; Opus fast mode: API says "not enabled" for his account).
-- Next session (Eric: "we will built in new session"): 096 voice hold-to-talk, then 097 Esc stops an answer; both in this worktree's tasks.json (backlog, dep 089; master's tasks.json doesn't have them). Start in this worktree, by hand like 089. First finish the brainstorm with Eric (open questions in each task file); hold on ⌃⌥V needs key-release detection (globalShortcut has no key-up).
-- Pending: e2e (window) tests — Eric: "Later, I'll tell you". Then he tries it and says merge.
-- Merge path: queue 089 on master (memory files to W), keel/089 from master, merge e5c5059 → red → merge the rest → review → close.
+Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089 answer mode, then 096 and 097, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
+- 089 done (Amendments 25–26, 4 Opus reviews, pass). Eric's data in ~/snapsolve-answer-test (not in git); config opus/low.
+- 096 voice hold-to-talk (Eric: "just go" on the open questions; Amendment 27): 2204ac9 tests (red: 51 failed), 9891ef3 harness fix, c29b118 code, docs commit after. Unit 1155 passed, 7 skipped; build ok (Swift helper compiles). Next: Opus review of 096 (by hand: base 56fe4c4).
+- Then 097 Esc stops an answer (my calls: keep the partial text marked Stopped with Retry; Esc only stops the chat on screen's running turn; queued turns still run; no global Esc, no stop button).
+- Hand check for Eric (checklist 032 at merge): hold ⌃⌥V and let go sends, a tap gives the hold note, no Input Monitoring prompt; mic held and dragged off still sends.
+- Pending: e2e (window) tests, updated for 096 but not run — Eric: "Later, I'll tell you". Then he tries it and says merge.
+- Merge path: queue 089/096/097 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.
 - Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
 - master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.
 

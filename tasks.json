@@ -2462,7 +2462,7 @@
       "commit": null,
       "notes": "Eric 2026-11-02 (chat, before his call): build in a new session, on worktree-answer-mode by hand (tasks.py start/red/close need one checkout on master). Brainstorm open.",
       "kind": "task",
-      "test_cmd": "npx vitest run --project unit test/unit/voice.test.ts test/unit/app.test.ts test/unit/hotkeys.test.ts",
+      "test_cmd": "npx vitest run --project unit test/unit/voice.test.ts test/unit/hold.test.ts test/unit/ipc.test.ts test/unit/hotkeys.test.ts",
       "tests_commit": null,
       "no_tests": null,
       "review": null

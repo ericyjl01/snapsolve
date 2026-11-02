@@ -241,9 +241,10 @@ function renderTurns(card: Card, thread: Thread): void {
       }
     } else if (turn.isError) {
       if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));
-      // 097: an answer stopped with Esc keeps its text as written, with a quiet "Stopped." instead of an error.
+      // 097: an answer stopped with Esc keeps its text as written (an answer's look: code blocks, math), with a quiet
+      // "Stopped." instead of an error.
       const stopped = turn.errorKind === "stopped";
-      if (turn.text) nodes.push(answerNode(stopped ? "partial stopped" : "partial", turn.text));
+      if (turn.text) nodes.push(answerNode(stopped ? "answer stopped" : "partial", turn.text));
       nodes.push(el("p", stopped ? "stopped" : "error", turn.errorMessage ?? userMessage(turn.errorKind ?? "internal")));
     } else {
       if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));

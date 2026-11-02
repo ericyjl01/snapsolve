@@ -344,7 +344,8 @@ export function createRunner(deps: RunnerDeps): Runner {
     let { kind, message } = classifyError(e);
     // The error carries the details (stderr tail, exception, stack); never the answer text.
     log.warn("runner.turnFailed", { threadId, kind, code: attempt?.code ?? null, error: e });
-    if (attempt?.result?.isError && kind !== "notLoggedIn" && kind !== "usageLimit" && (await loggedOut())) {
+    // A stop (097) is the user's own doing: no recheck, even when claude printed an error result on its way out.
+    if (attempt?.result?.isError && kind !== "notLoggedIn" && kind !== "usageLimit" && kind !== "stopped" && (await loggedOut())) {
       kind = "notLoggedIn";
       message = userMessage(kind);
     }
@@ -782,7 +783,7 @@ function requestProblem(request: TurnRequest): string | null {
 
 /** "No conversation found" before any answer text: the transcript is missing or unreadable (measured, 005). */
 function isResumeFailure(attempt: Attempt): boolean {
-  if (attempt.sawText || attempt.spawnError || attempt.timedOut || attempt.stopped || (attempt.result && !attempt.result.isError)) return false;
+  if (attempt.sawText || attempt.spawnError || attempt.timedOut || (attempt.result && !attempt.result.isError)) return false;
   const said = [...(attempt.result?.errors ?? []), attempt.result?.result ?? "", attempt.stderr].join("\n");
   return /no conversation found/i.test(said);
 }

@@ -1802,6 +1802,59 @@ describe("Esc stops an answer (e2e, 097)", () => {
   }, 90_000);
 });
 
+// Task 099: a question asked while an answer is written waits for it, and shows at once as queued.
+describe("queued questions (e2e, 099)", () => {
+  it("typed and dictated during an answer: each shows at once, faded and marked Queued, after the answer; then each is asked and answered in order", async () => {
+    const p = await launchPanel();
+    const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
+    try {
+      const id = await capture(p.app);
+      await p.page.locator(`${card(id)} .thinking, ${card(id)} .answer.streaming`).first().waitFor({ state: "visible", timeout: 20_000 });
+
+      await p.page.locator("#follow-up").fill("why?");
+      await p.page.locator("#follow-up").press("Enter");
+      const queued = p.page.locator(`${card(id)} .question.queued`);
+      await queued.first().waitFor({ state: "visible", timeout: 5_000 });
+      expect(await queued.first().locator(".question-text").innerText()).toBe("why?");
+      expect(await queued.first().locator(".queued-label").innerText()).toBe("Queued");
+      expect(Number(await queued.first().evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(1);
+      // After the answer being written.
+      expect(
+        await p.page.evaluate((sel) => {
+          const live = document.querySelector(`${sel} .live`) as Element;
+          const q = document.querySelector(`${sel} .question.queued`) as Element;
+          return Boolean(live.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING);
+        }, card(id)),
+      ).toBe(true);
+      expect(await answers(id)).toBe(0);
+
+      // Held ⌃⌥V while it is still written: no "wait" note, the dictation queues behind it.
+      await voiceKey(p.app, true);
+      const bar = p.page.locator("#listening");
+      await bar.waitFor({ state: "visible", timeout: 5_000 });
+      await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
+      await voiceKey(p.app, false);
+      await expect.poll(() => queued.count(), { timeout: 10_000 }).toBe(2);
+      expect(await queued.nth(1).locator(".mic-mark").count()).toBe(1);
+      expect(await queued.nth(1).locator(".question-text").innerText()).toBe("why the product rule?");
+      expect(await p.page.locator("#voice-note").isVisible()).toBe(false);
+
+      // Each becomes a normal question when its turn starts, never shown twice, and all three are answered.
+      await expect.poll(() => answers(id), { timeout: 60_000 }).toBe(3);
+      expect(await queued.count()).toBe(0);
+      expect(await p.page.locator(`${card(id)} .question`).allInnerTexts()).toEqual(["why?", "why the product rule?"]);
+      const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", id, "thread.json"), "utf8")) as Thread;
+      expect(saved.turns.filter((t) => t.role === "user" && t.kind === "text")).toEqual([
+        { role: "user", kind: "text", text: "why?" },
+        { role: "user", kind: "text", text: "why the product rule?", voice: true },
+      ]);
+      expect("queued" in saved).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 120_000);
+});
+
 // Task 089 (SPEC Amendment 25): the title bar's Solve | Answer toggle and answer mode's knowledge folder.
 describe("answer mode (e2e, 089)", () => {
   const ANSWER_EMPTY = "Answer mode. Ask a question and snapsolve drafts your answer, using your knowledge folder for anything about you.";

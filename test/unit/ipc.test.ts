@@ -55,6 +55,11 @@ describe("IPC contract", () => {
     expect(Object.values(IPC)).not.toContain("voice:toggle");
   });
 
+  it("queued questions (099) add no channel: the list rides on the threads threads:changed and answer:done already carry", () => {
+    expect(Object.keys(PRELOAD_CHANNELS)).toHaveLength(18);
+    expect(Object.values(IPC).filter((c) => c.includes("queue"))).toEqual([]);
+  });
+
   it("choosing a chat is one call on thread:open (078)", () => {
     expect(PRELOAD_CHANNELS.openThread).toBe("thread:open");
     expect(IPC.threadOpen).toBe("thread:open");

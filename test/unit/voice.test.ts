@@ -12,7 +12,6 @@ import {
   holdModifiers,
   parseHelperLine,
   resolveSpeechHelper,
-  VOICE_BUSY_NOTE,
   VOICE_EMPTY_NOTE,
   VOICE_HOLD_NOTE,
   VOICE_MAC_EMPTY_NOTE,
@@ -22,6 +21,7 @@ import {
   VOICE_STOP_TIMEOUT_MS,
   type VoiceDeps,
 } from "../../src/main/voice";
+import * as voiceModule from "../../src/main/voice";
 import { userMessage } from "../../src/shared/errors";
 import type { VoiceState } from "../../src/shared/types";
 
@@ -84,7 +84,7 @@ function recordingLog() {
 }
 
 function setup(
-  options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; answering?: boolean; holdKeys?: string[]; listenHoldKeys?: string[] } = {},
+  options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; holdKeys?: string[]; listenHoldKeys?: string[] } = {},
 ) {
   const children: FakeHelper[] = [];
   const spawn = vi.fn((_file: string, _args: readonly string[], _options: unknown) => {
@@ -98,7 +98,6 @@ function setup(
   const send = vi.fn(async (_text: string, _heard?: true) => undefined);
   const onDenied = vi.fn();
   const onFailed = vi.fn();
-  const isAnswering = vi.fn(() => options.answering ?? false);
   const showWindow = vi.fn();
   const recorded = recordingLog();
   let clock = 0;
@@ -116,7 +115,6 @@ function setup(
     send,
     onDenied,
     onFailed,
-    isAnswering,
     showWindow,
     log: recorded.log,
     now: () => clock,
@@ -131,7 +129,6 @@ function setup(
     send,
     onDenied,
     onFailed,
-    isAnswering,
     showWindow,
     logLines: recorded.lines,
     logText: recorded.text,
@@ -552,19 +549,25 @@ describe("voice (hold to talk, 096)", () => {
     expect(t.onFailed).toHaveBeenCalledTimes(1);
   });
 
-  it("a press while the current thread is thinking or answering is ignored: nothing spawned, a note says to wait", () => {
-    for (const source of ["key", "button"] as const) {
-      const t = setup({ answering: true });
+  it("099: voice asks nothing about the chat: no isAnswering dep, no busy note; a press always listens (the question is queued behind any answer)", async () => {
+    expect("VOICE_BUSY_NOTE" in voiceModule).toBe(false);
+    expect("isAnswering" in setup().deps).toBe(false);
+    for (const source of ["key", "button", "listen"] as const) {
+      const t = setup();
       t.voice.press(source);
-      expect(t.spawn).not.toHaveBeenCalled();
-      expect(t.showWindow).not.toHaveBeenCalled();
-      expect(t.shortcut.register).not.toHaveBeenCalled();
-      expect(VOICE_BUSY_NOTE).toBe("Wait for the answer, then ask.");
-      expect(t.last()).toEqual({ state: "idle", note: VOICE_BUSY_NOTE });
-      expect(t.voice.status()).toBe("idle");
-      // Letting go of that press does nothing.
-      t.voice.release(source);
-      expect(t.states.length).toBe(1);
+      expect(t.spawn).toHaveBeenCalledTimes(1);
+      expect(t.showWindow).toHaveBeenCalledTimes(1);
+      expect(t.voice.status()).toBe("listening");
+      t.child().line({ type: "ready" });
+      await flush();
+      t.tick(HELD_MS);
+      if (source === "button") t.voice.release("button");
+      else t.child().line({ type: "released" });
+      await flush();
+      t.child().line({ type: "final", text: QUESTION });
+      await flush();
+      expect(t.send.mock.calls).toEqual([source === "listen" ? [QUESTION, true] : [QUESTION]]);
+      expect(t.states.some((s) => s.state === "idle" && s.note !== undefined)).toBe(false);
     }
   });
 
@@ -573,7 +576,6 @@ describe("voice (hold to talk, 096)", () => {
     t.voice.press("key");
     t.child().line({ type: "ready" });
     await flush();
-    t.isAnswering.mockReturnValue(true);
     t.tick(HELD_MS);
     t.child().line({ type: "released" });
     await flush();
@@ -924,13 +926,6 @@ describe("listen to the Mac (098): hold ⌃⌥B, the helper hears what the Mac p
     t.child().line({ type: "final", text: QUESTION });
     await vi.advanceTimersByTimeAsync(0);
     expect(t.send.mock.calls).toEqual([[QUESTION, true]]);
-  });
-
-  it("a press while the chat is thinking or answering is ignored with the busy note", () => {
-    const t = setup({ answering: true });
-    t.voice.press("listen");
-    expect(t.spawn).not.toHaveBeenCalled();
-    expect(t.last()).toEqual({ state: "idle", note: VOICE_BUSY_NOTE });
   });
 
   it("a listen key with no modifier to watch (listenHoldKeys []) is pressed again to send; only the bare Escape is held", async () => {

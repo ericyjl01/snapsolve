@@ -332,7 +332,6 @@ describe("onCapture shows the window before the PNG is made and saved (088)", ()
     expect(card.turns.at(-1)).toMatchObject({ role: "assistant", isError: true, errorKind: "captureFailed", errorMessage: userMessage("captureFailed") });
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
     expect(warn.mock.calls.some((c) => (c[1] as { threadId?: string } | undefined)?.threadId === id)).toBe(true);
-    expect(app.isAnswering()).toBe(false);
     // A restart does not find it busy (it would come back as an error card with nothing to retry).
     expect(BUSY).not.toContain((await store.getThread(id)).status);
   });
@@ -348,7 +347,6 @@ describe("onCapture shows the window before the PNG is made and saved (088)", ()
     expect(card.turns.at(-2)).toMatchObject({ role: "assistant", text: "x = 4", isError: false });
     expect(card.turns.at(-1)).toMatchObject({ isError: true, errorKind: "captureFailed" });
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
-    expect(app.isAnswering()).toBe(false);
     // The error is the panel's alone: thread.json is unchanged.
     expect((await store.getThread(id)).turns).toHaveLength(2);
   });
@@ -631,38 +629,72 @@ describe("onVoice (063)", () => {
   });
 });
 
-describe("isAnswering (063): a voice press is ignored while the current thread thinks or answers", () => {
-  it("no thread → false; a capture's thread is busy until its answer is done; after + → false", async () => {
-    const app = createApp(deps);
-    expect(app.isAnswering()).toBe(false);
-    const id = await app.onCapture(shot(PNG));
-    expect(app.isAnswering()).toBe(true);
-    listener?.({ type: "status", threadId: id, status: "running" });
-    await new Promise((r) => setTimeout(r, 10));
-    expect(app.isAnswering()).toBe(true);
-    const done = await store.updateThread(id, { status: "done" });
-    listener?.({ type: "done", threadId: id, thread: done } as RunnerEvent);
-    expect(app.isAnswering()).toBe(false);
-    // An errored turn is not answering either.
-    const errored = await store.updateThread(id, { status: "error" });
-    listener?.({ type: "error", threadId: id, thread: errored } as RunnerEvent);
-    expect(app.isAnswering()).toBe(false);
-    // "+": the next question starts a new thread, so nothing is in the way.
-    listener?.({ type: "status", threadId: id, status: "running" });
-    await new Promise((r) => setTimeout(r, 10));
-    expect(app.isAnswering()).toBe(true);
-    await app.handlers.newThread();
-    expect(app.isAnswering()).toBe(false);
+// 099: a question asked while the chat on screen thinks or answers is queued behind it (Eric: "wait for the first
+// question to finish and then answer the second one."), and the chat shows it at once as queued.
+describe("queued questions (099)", () => {
+  const lastSnapshot = () => sent(IPC.threadsChanged).at(-1) as Thread[];
+  const shownThread = (id: string) => lastSnapshot().find((t) => t.id === id) as Thread;
+
+  it("isAnswering is gone: nothing gates a question any more", () => {
+    const app = createApp(deps) as unknown as Record<string, unknown>;
+    expect(app.isAnswering).toBeUndefined();
   });
 
-  it("a follow-up queued on the current thread makes it busy again", async () => {
+  it("a typed, dictated or heard question while the chat runs is enqueued behind the answer (not refused)", async () => {
+    deps.runner.enqueue.mockImplementation(() => new Promise(() => undefined));
     const app = createApp(deps);
     const id = await app.onCapture(shot(PNG));
-    const done = await store.updateThread(id, { status: "done" });
-    listener?.({ type: "done", threadId: id, thread: done } as RunnerEvent);
-    listener?.({ type: "status", threadId: id, status: "queued" });
+    listener?.({ type: "status", threadId: id, status: "running" });
     await new Promise((r) => setTimeout(r, 10));
-    expect(app.isAnswering()).toBe(true);
+    await app.handlers.followUp(id, "why?");
+    expect(await app.onVoice("and then?")).toBe(id);
+    expect(await app.onVoice("what did he ask?", true)).toBe(id);
+    expect(deps.runner.enqueue.mock.calls.slice(1)).toEqual([
+      [id, { kind: "followUp", text: "why?" }],
+      [id, { kind: "followUp", text: "and then?", voice: true }],
+      [id, { kind: "followUp", text: "what did he ask?", heard: true }],
+    ]);
+  });
+
+  it("the runner's queued list rides on the thread the panel gets (threads:changed), and is never saved", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    const before = sent(IPC.threadsChanged).length;
+    listener?.({ type: "queued", threadId: id, queued: [{ text: "why?" }, { text: "and then?", voice: true }] });
+    expect(sent(IPC.threadsChanged).length).toBe(before + 1);
+    expect(shownThread(id).queued).toEqual([{ text: "why?" }, { text: "and then?", voice: true }]);
+    expect((await app.handlers.listThreads()).find((t) => t.id === id)?.queued).toEqual([{ text: "why?" }, { text: "and then?", voice: true }]);
+    const onDisk = JSON.parse(await readFile(path.join(root, "data", "threads", id, "thread.json"), "utf8")) as Record<string, unknown>;
+    expect("queued" in onDisk).toBe(false);
+  });
+
+  it("later snapshots keep the list (a status, a saved turn, the answer's done), until the runner empties it: then no queued key", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    listener?.({ type: "queued", threadId: id, queued: [{ text: "why?" }] });
+    listener?.({ type: "status", threadId: id, status: "running" });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(shownThread(id).queued).toEqual([{ text: "why?" }]);
+    const withTurn = await store.appendTurn(id, { role: "user", kind: "screenshot", file: "001.png" });
+    listener?.({ type: "turn", threadId: id, thread: withTurn });
+    expect(shownThread(id).queued).toEqual([{ text: "why?" }]);
+    // The answer's own done carries the list too, so the queued question does not blink out when it finishes.
+    const done = await store.updateThread(id, { status: "done" });
+    listener?.({ type: "done", threadId: id, thread: done, turn: answer("x = 4") });
+    expect((sent(IPC.answerDone).at(-1) as { thread: Thread }).thread.queued).toEqual([{ text: "why?" }]);
+    listener?.({ type: "queued", threadId: id, queued: [] });
+    expect("queued" in shownThread(id)).toBe(false);
+  });
+
+  it("each chat's list is its own", async () => {
+    const app = createApp(deps);
+    const a = await app.onCapture(shot(PNG));
+    await app.handlers.newThread();
+    const b = await app.onCapture(shot(PNG2));
+    listener?.({ type: "queued", threadId: a, queued: [{ text: "a?" }] });
+    listener?.({ type: "queued", threadId: b, queued: [{ text: "b?", heard: true }] });
+    expect(shownThread(a).queued).toEqual([{ text: "a?" }]);
+    expect(shownThread(b).queued).toEqual([{ text: "b?", heard: true }]);
   });
 });
 
@@ -1222,18 +1254,6 @@ describe("openThread (078)", () => {
     expect(captured).not.toBe(errored.id);
     await app.handlers.openThread(errored.id);
     expect(await app.onCapture(shot(PNG2))).toBe(errored.id);
-  });
-
-  it("isAnswering follows the chosen thread", async () => {
-    deps.runner.enqueue.mockImplementation(() => new Promise(() => undefined));
-    const app = createApp(deps);
-    const captured = await app.onCapture(shot(PNG));
-    const errored = await erroredThread([{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn]);
-    listener?.({ type: "status", threadId: captured, status: "running" });
-    await new Promise((r) => setTimeout(r, 20));
-    expect(app.isAnswering()).toBe(true);
-    await app.handlers.openThread(errored.id);
-    expect(app.isAnswering()).toBe(false);
   });
 });
 

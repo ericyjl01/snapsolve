@@ -1611,3 +1611,188 @@ describe("withLoginShellPath", () => {
     expect(buildEnv(env, false)).toEqual({ PATH: ["/opt/homebrew/bin", "/usr/bin", ...EXTRAS.slice(1)].join(":"), SHELL: "/bin/zsh" });
   });
 });
+
+// ── queued questions (099): a question asked during an answer waits its turn and is listed until it starts ──────
+
+describe("queued questions (099)", () => {
+  type Queued = Extract<RunnerEvent, { type: "queued" }>;
+  async function until(check: () => boolean, ms = 3_000): Promise<void> {
+    const end = Date.now() + ms;
+    while (!check()) {
+      if (Date.now() > end) throw new Error("timed out waiting");
+      await new Promise<void>((r) => setImmediate(r));
+    }
+  }
+  const queuedFor = (events: RunnerEvent[], threadId: string) =>
+    events.filter((e): e is Queued => e.type === "queued" && e.threadId === threadId).map((e) => e.queued);
+  const shape = (turn: Thread["turns"][number]) =>
+    turn.role === "user"
+      ? `user:${turn.kind === "text" ? turn.text : turn.file}${turn.kind === "text" && turn.voice ? "+voice" : ""}${turn.kind === "text" && turn.heard ? "+heard" : ""}`
+      : turn.isError
+        ? `error:${turn.errorKind}`
+        : `answer:${turn.text}`;
+
+  /**
+   * Every claude waits until the test answers it: `answer(i)` scripts spawn i's answer ("a<i>"), `crash(i)` makes it exit
+   * 1 without a result. `spawned()` is how many have started.
+   */
+  function gated(over: Partial<Parameters<typeof createRunner>[0]> = {}) {
+    const children: { child: FakeChild; call: SpawnCall }[] = [];
+    const made = makeRunner({
+      ...over,
+      spawn: ((file: string, args: string[], options: SpawnCall["options"]) => {
+        const child = new FakeChild();
+        const call = { file, args, options, sessionsDirExisted: true, child };
+        calls.push(call);
+        children.push({ child, call });
+        return child;
+      }) as never,
+    });
+    return {
+      ...made,
+      spawned: () => children.length,
+      answer: (i: number) => children[i].child.script(okLines(children[i].call, `a${i}`)),
+      crash: (i: number) => children[i].child.script([], 1),
+    };
+  }
+
+  it("follow-ups asked while the chat runs are listed for it, in order, with their voice or heard mark", async () => {
+    const { runner, events, spawned } = gated();
+    const { t, shot } = await newThread();
+    void runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => spawned() === 1);
+    void runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    void runner.enqueue(t.id, { kind: "followUp", text: "and then?", voice: true });
+    void runner.enqueue(t.id, { kind: "followUp", text: "what did he ask?", heard: true });
+    expect(queuedFor(events, t.id)).toEqual([
+      [{ text: "why?" }],
+      [{ text: "why?" }, { text: "and then?", voice: true }],
+      [{ text: "why?" }, { text: "and then?", voice: true }, { text: "what did he ask?", heard: true }],
+    ]);
+  });
+
+  it("each leaves the list when its turn starts, before its user turn is saved and announced (never shown twice); all run in order", async () => {
+    const { runner, events, spawned, answer } = gated();
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => spawned() === 1);
+    const second = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    const third = runner.enqueue(t.id, { kind: "followUp", text: "and then?", voice: true });
+    answer(0);
+    expect((await first).ok).toBe(true);
+    await until(() => spawned() === 2);
+    // Gone from the list (an event saying so) before the turn event that carries the saved question.
+    const left = events.findIndex((e) => e.type === "queued" && e.threadId === t.id && e.queued.length === 1);
+    const asked = events.findIndex((e) => e.type === "turn" && e.thread.turns.length === 3 && shape(e.thread.turns[2]) === "user:why?");
+    expect(left).toBeGreaterThan(-1);
+    expect(asked).toBeGreaterThan(left);
+    expect((events[left] as Queued).queued).toEqual([{ text: "and then?", voice: true }]);
+    answer(1);
+    expect((await second).ok).toBe(true);
+    await until(() => spawned() === 3);
+    answer(2);
+    expect((await third).ok).toBe(true);
+    expect(queuedFor(events, t.id)).toEqual([
+      [{ text: "why?" }],
+      [{ text: "why?" }, { text: "and then?", voice: true }],
+      [{ text: "and then?", voice: true }],
+      [],
+    ]);
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual([
+      "user:001.png",
+      "answer:a0",
+      "user:why?",
+      "answer:a1",
+      "user:and then?+voice",
+      "answer:a2",
+    ]);
+  });
+
+  it("a stop (097) of the running answer leaves the queued ones listed; they then run in order", async () => {
+    const { runner, events, spawned, answer } = gated();
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => spawned() === 1);
+    const second = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    const third = runner.enqueue(t.id, { kind: "followUp", text: "and then?" });
+    const before = queuedFor(events, t.id).length;
+    expect(before).toBe(2);
+    expect(runner.stop(t.id)).toBe(true);
+    expect(await first).toMatchObject({ ok: false, kind: "stopped" });
+    // The stop itself changes no list: the next change is the first question starting.
+    await until(() => spawned() === 2);
+    expect(queuedFor(events, t.id).slice(before)).toEqual([[{ text: "and then?" }]]);
+    answer(1);
+    expect((await second).ok).toBe(true);
+    await until(() => spawned() === 3);
+    answer(2);
+    expect((await third).ok).toBe(true);
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "error:stopped", "user:why?", "answer:a1", "user:and then?", "answer:a2"]);
+  });
+
+  it("a failure of the running answer leaves the queued ones to run in order", async () => {
+    const { runner, events, spawned, answer, crash } = gated();
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => spawned() === 1);
+    const second = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    crash(0);
+    expect(await first).toMatchObject({ ok: false, kind: "internal" });
+    await until(() => spawned() === 2);
+    expect(queuedFor(events, t.id)).toEqual([[{ text: "why?" }], []]);
+    answer(1);
+    expect((await second).ok).toBe(true);
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "error:internal", "user:why?", "answer:a1"]);
+  });
+
+  it("each chat has its own list", async () => {
+    const { runner, events, spawned } = gated();
+    const a = await newThread();
+    const b = await newThread();
+    void runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    void runner.enqueue(b.t.id, { kind: "new", screenshot: b.shot.file });
+    await until(() => spawned() === 2);
+    void runner.enqueue(a.t.id, { kind: "followUp", text: "a?" });
+    void runner.enqueue(b.t.id, { kind: "followUp", text: "b?" });
+    void runner.enqueue(a.t.id, { kind: "followUp", text: "a again?" });
+    expect(queuedFor(events, a.t.id)).toEqual([[{ text: "a?" }], [{ text: "a?" }, { text: "a again?" }]]);
+    expect(queuedFor(events, b.t.id)).toEqual([[{ text: "b?" }]]);
+  });
+
+  it("a screenshot or a retry waiting is not a queued question; neither is a follow-up that starts at once, or one refused", async () => {
+    const { runner, events, spawned, answer } = gated();
+    const { t } = await newThread();
+    // An idle chat: the follow-up starts at once and is never listed.
+    const asked = runner.enqueue(t.id, { kind: "followUp", text: "first?" });
+    await until(() => spawned() === 1);
+    const shot2 = await store.saveScreenshot(t.id, Buffer.from("png2"));
+    const appended = runner.enqueue(t.id, { kind: "append", screenshot: shot2.file });
+    const retried = runner.enqueue(t.id, { kind: "retry" });
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "  " })).ok).toBe(false);
+    expect(queuedFor(events, t.id)).toEqual([]);
+    answer(0);
+    expect((await asked).ok).toBe(true);
+    await until(() => spawned() === 2);
+    answer(1);
+    expect((await appended).ok).toBe(true);
+    // Nothing to retry after a successful answer.
+    expect((await retried).ok).toBe(false);
+    expect(queuedFor(events, t.id)).toEqual([]);
+  });
+
+  it("a follow-up waiting for a slot (another chat holds the only one) is listed too, and leaves the list when it starts", async () => {
+    const { runner, events, spawned, answer } = gated({ config: { maxConcurrent: 1, timeoutSec: 30, allowApiKey: false } });
+    const a = await newThread();
+    const b = await newThread();
+    const first = runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    await until(() => spawned() === 1);
+    const waiting = runner.enqueue(b.t.id, { kind: "followUp", text: "b?" });
+    expect(queuedFor(events, b.t.id)).toEqual([[{ text: "b?" }]]);
+    answer(0);
+    expect((await first).ok).toBe(true);
+    await until(() => spawned() === 2);
+    expect(queuedFor(events, b.t.id)).toEqual([[{ text: "b?" }], []]);
+    answer(1);
+    expect((await waiting).ok).toBe(true);
+  });
+});

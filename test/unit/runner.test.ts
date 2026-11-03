@@ -1140,6 +1140,47 @@ describe("retry (050): re-runs the failed turn without adding its user turn agai
     ]);
   });
 
+  it("a question heard from the Mac (098) is saved as a text turn marked heard and sent as plain text", async () => {
+    scripted("ok:x = 4", "ok:because");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect(await runner.enqueue(t.id, { kind: "followUp", text: "tell me about a project you led", heard: true })).toMatchObject({ ok: true });
+    const saved = await store.getThread(t.id);
+    expect(saved.turns[2]).toEqual({ role: "user", kind: "text", text: "tell me about a project you led", heard: true });
+    expect(sentMessage(1)).toEqual(buildFallbackMessage([PNG], ["x = 4"], "tell me about a project you led"));
+  });
+
+  it.each([false, "yes", 1])("a follow-up whose heard mark is %j (not true) is refused without spawning (098)", async (heard) => {
+    const { runner } = makeRunner();
+    const { t } = await newThread();
+    const request = { kind: "followUp", text: "why?", heard } as unknown as Parameters<typeof runner.enqueue>[1];
+    await expect(runner.enqueue(t.id, request)).resolves.toMatchObject({ ok: false });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("a follow-up marked both voice and heard is refused without spawning (098)", async () => {
+    const { runner } = makeRunner();
+    const { t } = await newThread();
+    const request = { kind: "followUp", text: "why?", voice: true, heard: true } as unknown as Parameters<typeof runner.enqueue>[1];
+    await expect(runner.enqueue(t.id, request)).resolves.toMatchObject({ ok: false });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("a failed heard follow-up retried keeps its one user turn and its heard mark (098)", async () => {
+    scripted("ok:x = 4", "fail", "ok:because");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "why?", heard: true })).ok).toBe(false);
+    expect(retryTarget(await store.getThread(t.id))?.request).toEqual({ kind: "followUp", text: "why?", heard: true });
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    const saved = await store.getThread(t.id);
+    expect(saved.turns.filter((turn) => turn.role === "user" && turn.kind === "text")).toEqual([
+      { role: "user", kind: "text", text: "why?", heard: true },
+    ]);
+  });
+
   it("a failed first screenshot retried: one screenshot turn; the message carries the image once", async () => {
     scripted("fail", "ok:x = 4");
     const { runner } = makeRunner();

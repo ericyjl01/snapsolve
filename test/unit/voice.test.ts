@@ -15,6 +15,8 @@ import {
   VOICE_BUSY_NOTE,
   VOICE_EMPTY_NOTE,
   VOICE_HOLD_NOTE,
+  VOICE_MAC_EMPTY_NOTE,
+  VOICE_MAC_SILENT_NOTE,
   VOICE_MAX_HOLD_MS,
   VOICE_MIN_HOLD_MS,
   VOICE_STOP_TIMEOUT_MS,
@@ -81,7 +83,9 @@ function recordingLog() {
   return { log, lines, text: () => JSON.stringify(lines) };
 }
 
-function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; answering?: boolean; holdKeys?: string[] } = {}) {
+function setup(
+  options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; answering?: boolean; holdKeys?: string[]; listenHoldKeys?: string[] } = {},
+) {
   const children: FakeHelper[] = [];
   const spawn = vi.fn((_file: string, _args: readonly string[], _options: unknown) => {
     if (options.spawnThrows) throw options.spawnThrows;
@@ -91,7 +95,7 @@ function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; ans
   });
   const shortcut = fakeShortcut();
   const states: VoiceState[] = [];
-  const send = vi.fn(async (_text: string) => undefined);
+  const send = vi.fn(async (_text: string, _heard?: true) => undefined);
   const onDenied = vi.fn();
   const onFailed = vi.fn();
   const isAnswering = vi.fn(() => options.answering ?? false);
@@ -105,6 +109,9 @@ function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; ans
     globalShortcut: shortcut,
     keyLabel: "⌃⌥V",
     holdKeys: options.holdKeys ?? ["control", "option"],
+    // 098: the listen hotkey (⌃⌥B), held like the voice key.
+    listenKeyLabel: "⌃⌥B",
+    listenHoldKeys: options.listenHoldKeys ?? ["control", "option"],
     onState: (s) => void states.push(s),
     send,
     onDenied,
@@ -140,6 +147,13 @@ function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; ans
       t.child().line({ type: "released" });
       await flush();
     },
+    /** The listen keys (⌃⌥B, 098) held for HELD_MS, then the helper reports them released. */
+    holdListenAndLetGo: async () => {
+      voice.press("listen");
+      t.tick(HELD_MS);
+      t.child().line({ type: "released" });
+      await flush();
+    },
     /** A mic button held for HELD_MS, then let go. */
     holdButtonAndLetGo: () => {
       voice.press("button");
@@ -165,6 +179,8 @@ describe("parseHelperLine (helper output parsing)", () => {
     expect(parseHelperLine('{"type":"final","text":"why"}')).toEqual({ type: "final", text: "why" });
     // 096: the held voice keys came up.
     expect(parseHelperLine('{"type":"released"}')).toEqual({ type: "released" });
+    // 098: listening to the Mac heard only zeros (nothing played, or System Audio Recording refused).
+    expect(parseHelperLine('{"type":"final","text":"","silent":true}')).toEqual({ type: "final", text: "", silent: true });
     expect(parseHelperLine('{"type":"error","kind":"micDenied","message":"no"}')).toEqual({
       type: "error",
       kind: "micDenied",
@@ -190,6 +206,13 @@ describe("parseHelperLine (helper output parsing)", () => {
   ])("ignores a malformed line %j", (line) => {
     expect(parseHelperLine(line)).toBeNull();
   });
+
+  it.each(['{"type":"final","text":"","silent":false}', '{"type":"final","text":"","silent":"yes"}', '{"type":"final","text":"","silent":1}'])(
+    "a silent mark that is not true is dropped (098): %j",
+    (line) => {
+      expect(parseHelperLine(line)).toEqual({ type: "final", text: "" });
+    },
+  );
 });
 
 describe("holdModifiers (096): the voice accelerator's modifiers, as the helper's --hold names them", () => {
@@ -762,6 +785,251 @@ describe("voice (hold to talk, 096)", () => {
     t.child().line({ type: "final", text: "secret final words" });
     t.child().exit(0);
     await flush();
+    await flush();
+    expect(t.logText()).not.toContain("secret");
+  });
+});
+
+const listeningToMac = (text: string, level = 0, hold = true): VoiceState => ({ state: "listening", text, level, key: "⌃⌥B", hold, mac: true });
+
+describe("listen to the Mac (098): hold ⌃⌥B, the helper hears what the Mac plays, let go sends a heard question", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("holding the listen key shows the window and spawns the helper on the Mac's sound (--source system), watching ⌃ and ⌥, with both Escapes held", () => {
+    const t = setup();
+    t.voice.press("listen");
+    expect(t.showWindow).toHaveBeenCalledTimes(1);
+    expect(t.spawn).toHaveBeenCalledTimes(1);
+    const [file, args, options] = t.spawn.mock.calls[0];
+    expect(file).toBe("/app/native/snapsolve-speech");
+    expect(args).toEqual(["--source", "system", "--hold", "control,option"]);
+    expect(options).toMatchObject({ stdio: ["pipe", "pipe", "pipe"], env: { PATH: "/usr/bin" } });
+    expect(t.last()).toEqual(listeningToMac(""));
+    expect(t.voice.status()).toBe("listening");
+    expect([...t.shortcut.registered.keys()]).toEqual([ESCAPE, "Control+Alt+Escape"]);
+  });
+
+  it("the source and the key watch go after the helper's own prefix arguments", () => {
+    const t = setup({ helper: { path: "/electron", prefixArgs: ["/fixtures/fake-speech.mjs"] } });
+    t.voice.press("listen");
+    expect(t.spawn.mock.calls[0]).toEqual([
+      "/electron",
+      ["/fixtures/fake-speech.mjs", "--source", "system", "--hold", "control,option"],
+      expect.anything(),
+    ]);
+  });
+
+  it("partials and levels show as listening to the Mac; letting go → SIGINT, stopping, then send(text, true) once; Escapes released", async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.child().line({ type: "ready" });
+    t.child().line({ type: "level", level: 0.3 });
+    t.child().line({ type: "partial", text: "tell me about" });
+    await flush();
+    expect(t.last()).toEqual(listeningToMac("tell me about", 0.3));
+    t.tick(HELD_MS);
+    t.child().line({ type: "released" });
+    await flush();
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    expect(t.last()).toEqual({ state: "stopping", text: "tell me about", key: "⌃⌥B", mac: true });
+    t.child().line({ type: "final", text: "  tell me about a project you led  " });
+    t.child().exit(0);
+    await flush();
+    expect(t.send.mock.calls).toEqual([["tell me about a project you led", true]]);
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.shortcut.registered.size).toBe(0);
+    expect(t.onFailed).not.toHaveBeenCalled();
+  });
+
+  it("a dictation from the voice key still sends with no heard mark (send(text) alone)", async () => {
+    const t = setup();
+    await t.holdKeyAndLetGo();
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send.mock.calls).toEqual([[QUESTION]]);
+  });
+
+  it("one dictation at a time: the voice key or a mic button pressed while listening to the Mac is ignored, and ⌃⌥B while dictating", async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.voice.press("key");
+    t.voice.press("button");
+    t.voice.press("listen");
+    expect(t.spawn).toHaveBeenCalledTimes(1);
+    expect(t.child().signals).toEqual([]);
+    t.voice.cancel();
+    t.voice.press("key");
+    t.voice.press("listen");
+    expect(t.spawn).toHaveBeenCalledTimes(2);
+    expect(t.spawn.mock.calls[1][1]).toEqual(["--hold", "control,option"]);
+    expect(t.last()).toEqual(listening(""));
+  });
+
+  it("only its own release ends it: the voice key's or a button's release does nothing; a listen release does not end a voice dictation", async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.tick(HELD_MS);
+    t.voice.release("key");
+    t.voice.release("button");
+    expect(t.child().signals).toEqual([]);
+    expect(t.voice.status()).toBe("listening");
+    t.voice.release("listen");
+    expect(t.voice.status()).toBe("stopping");
+    t.voice.cancel();
+    t.voice.press("key");
+    t.tick(HELD_MS);
+    t.voice.release("listen");
+    expect(t.voice.status()).toBe("listening");
+    expect(t.child().signals).toEqual([]);
+  });
+
+  it(`a tap (under ${VOICE_MIN_HOLD_MS} ms) is cancelled with the hold note; nothing sent`, async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.tick(VOICE_MIN_HOLD_MS - 1);
+    t.child().line({ type: "released" });
+    await flush();
+    expect(t.child().signals).toEqual(["SIGTERM"]);
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_HOLD_NOTE });
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("Esc or ⌃⌥Esc while held cancels: nothing sent, a later released line does nothing", async () => {
+    for (const key of [ESCAPE, "Control+Alt+Escape"]) {
+      const t = setup();
+      t.voice.press("listen");
+      t.tick(HELD_MS);
+      t.shortcut.press(key);
+      expect(t.child().signals).toEqual(["SIGTERM"]);
+      expect(t.last()).toEqual({ state: "idle" });
+      expect(t.shortcut.registered.size).toBe(0);
+      t.child().line({ type: "released" });
+      t.child().line({ type: "final", text: QUESTION });
+      await flush();
+      expect(t.send).not.toHaveBeenCalled();
+    }
+  });
+
+  it(`a release that never comes stops and sends at ${VOICE_MAX_HOLD_MS / 1000} s, still marked heard`, async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.voice.press("listen");
+    t.child().line({ type: "ready" });
+    await vi.advanceTimersByTimeAsync(0);
+    vi.advanceTimersByTime(VOICE_MAX_HOLD_MS);
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    expect(t.logLines.some((l) => l[0] === "voice.holdCapped" && (l[1] as { source?: string }).source === "listen")).toBe(true);
+    t.child().line({ type: "final", text: QUESTION });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.send.mock.calls).toEqual([[QUESTION, true]]);
+  });
+
+  it("a press while the chat is thinking or answering is ignored with the busy note", () => {
+    const t = setup({ answering: true });
+    t.voice.press("listen");
+    expect(t.spawn).not.toHaveBeenCalled();
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_BUSY_NOTE });
+  });
+
+  it("a listen key with no modifier to watch (listenHoldKeys []) is pressed again to send; only the bare Escape is held", async () => {
+    const t = setup({ listenHoldKeys: [] });
+    t.voice.press("listen");
+    expect(t.spawn.mock.calls[0][1]).toEqual(["--source", "system"]);
+    expect(t.last()).toEqual(listeningToMac("", 0, false));
+    expect([...t.shortcut.registered.keys()]).toEqual([ESCAPE]);
+    t.child().line({ type: "ready" });
+    await flush();
+    t.tick(HELD_MS);
+    t.voice.release("listen");
+    expect(t.child().signals).toEqual([]);
+    t.voice.press("listen");
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send.mock.calls).toEqual([[QUESTION, true]]);
+  });
+
+  it("no words heard: the Mac's own note; nothing sent", async () => {
+    const t = setup();
+    await t.holdListenAndLetGo();
+    t.child().line({ type: "final", text: " " });
+    t.child().exit(0);
+    await flush();
+    expect(VOICE_MAC_EMPTY_NOTE).toBe("Didn't catch any words from your Mac.");
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_MAC_EMPTY_NOTE });
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("only silence heard (nothing played, or System Audio Recording refused): the note says where to turn it on", async () => {
+    const t = setup();
+    await t.holdListenAndLetGo();
+    t.child().line({ type: "final", text: "", silent: true });
+    t.child().exit(0);
+    await flush();
+    expect(VOICE_MAC_SILENT_NOTE).toBe(
+      "Heard nothing from your Mac. If something was playing, turn on System Audio Recording for snapsolve in System Settings › Privacy & Security.",
+    );
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_MAC_SILENT_NOTE });
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("words heard but marked silent cannot happen; if it did, the words are sent (the text wins)", async () => {
+    const t = setup();
+    await t.holdListenAndLetGo();
+    t.child().line({ type: "final", text: QUESTION, silent: true });
+    await flush();
+    expect(t.send.mock.calls).toEqual([[QUESTION, true]]);
+  });
+
+  it("the voice key's empty transcript keeps its own note, even with a silent mark", async () => {
+    const t = setup();
+    await t.holdKeyAndLetGo();
+    t.child().line({ type: "final", text: "", silent: true });
+    await flush();
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_EMPTY_NOTE });
+  });
+
+  it("refused Speech Recognition → the permission card; unavailable → the voice note; failed → the error card", async () => {
+    const denied = setup();
+    denied.voice.press("listen");
+    denied.child().line({ type: "error", kind: "speechDenied", message: "denied" });
+    await flush();
+    expect(denied.onDenied).toHaveBeenCalledWith("speechRecognition");
+    const unavailable = setup();
+    unavailable.voice.press("listen");
+    unavailable.child().line({ type: "error", kind: "unavailable", message: "no tap" });
+    await flush();
+    expect(unavailable.last()).toEqual({ state: "idle", note: userMessage("voiceUnavailable") });
+    const failed = setup();
+    failed.voice.press("listen");
+    failed.child().line({ type: "error", kind: "failed", message: "OSStatus 560947818" });
+    await flush();
+    expect(failed.onFailed).toHaveBeenCalledTimes(1);
+    for (const t of [denied, unavailable, failed]) {
+      expect(t.send).not.toHaveBeenCalled();
+      expect(t.shortcut.registered.size).toBe(0);
+    }
+  });
+
+  it("no helper → the unavailable note, nothing spawned", () => {
+    const t = setup({ helper: null });
+    t.voice.press("listen");
+    expect(t.spawn).not.toHaveBeenCalled();
+    expect(t.last()).toEqual({ state: "idle", note: userMessage("voiceUnavailable") });
+  });
+
+  it("what the Mac said is never logged", async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.child().line({ type: "partial", text: "secret partial words" });
+    await flush();
+    t.tick(HELD_MS);
+    t.child().line({ type: "released" });
+    await flush();
+    t.child().line({ type: "final", text: "secret final words" });
+    t.child().exit(0);
     await flush();
     expect(t.logText()).not.toContain("secret");
   });

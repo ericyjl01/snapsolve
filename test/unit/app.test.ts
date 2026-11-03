@@ -606,6 +606,29 @@ describe("onVoice (063)", () => {
     await expect(app.onVoice(text)).rejects.toThrow();
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
   });
+
+  // 098: what the Mac played (⌃⌥B) goes the same way, marked heard instead of dictated.
+  it("heard from the Mac → the chat on screen, marked heard (no voice mark)", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    deps.panel.open.mockClear();
+    expect(await app.onVoice(SAID, true)).toBe(id);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(id, { kind: "followUp", text: SAID, heard: true });
+    expect(deps.panel.open).toHaveBeenCalled();
+  });
+
+  it("heard from the Mac with no chat → a new text chat whose first question is marked heard", async () => {
+    const app = createApp(deps);
+    const id = await app.onVoice(SAID, true);
+    expect(await store.listThreads()).toHaveLength(1);
+    expect(deps.runner.enqueue).toHaveBeenCalledWith(id, { kind: "followUp", text: SAID, heard: true });
+  });
+
+  it("an empty heard transcript queues nothing", async () => {
+    const app = createApp(deps);
+    await expect(app.onVoice("  ", true)).rejects.toThrow();
+    expect(deps.runner.enqueue).not.toHaveBeenCalled();
+  });
 });
 
 describe("isAnswering (063): a voice press is ignored while the current thread thinks or answers", () => {

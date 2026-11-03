@@ -122,6 +122,11 @@ function luminance(color: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/** The listen hotkey (⌃⌥B, 098) held (down) or let go (up), as voice's listen source gets them. */
+function listenKey(app: ElectronApplication, down: boolean): Promise<void> {
+  return app.evaluate((_electron, d) => (globalThis as unknown as { snapsolveTest: { listenKey(down: boolean): void } }).snapsolveTest.listenKey(d), down);
+}
+
 /** The voice hotkey held (down) or let go (up), as the key press and the helper's released line reach voice (096). */
 function voiceKey(app: ElectronApplication, down: boolean): Promise<void> {
   return app.evaluate((_electron, d) => (globalThis as unknown as { snapsolveTest: { voiceKey(down: boolean): void } }).snapsolveTest.voiceKey(d), down);
@@ -1588,6 +1593,39 @@ describe("panel (e2e)", () => {
       const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", id, "thread.json"), "utf8"));
       expect(saved.turns.filter((t: { kind?: string }) => t.kind === "text")).toEqual([
         { role: "user", kind: "text", text: "why the product rule?", voice: true },
+      ]);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("listen: hold ⌃⌥B → the bar listens to the Mac → let go → the question with a speaker mark, saved heard, answered (098)", async () => {
+    const p = await launchPanel();
+    const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
+    try {
+      const id = await capture(p.app);
+      await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(1);
+
+      await listenKey(p.app, true);
+      const bar = p.page.locator("#listening");
+      await bar.waitFor({ state: "visible", timeout: 5_000 });
+      expect(await bar.getAttribute("class")).toContain("mac");
+      expect(await bar.locator(".hint").innerText()).toBe("let go to send · esc to cancel");
+      await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
+      expect(await escapeRegistered(p.app)).toBe(true);
+
+      await listenKey(p.app, false);
+      const asked = p.page.locator(`${card(id)} .question.heard`);
+      await asked.waitFor({ state: "visible", timeout: 10_000 });
+      expect(await asked.innerText()).toContain("why the product rule?");
+      expect(await asked.getAttribute("title")).toBe("Heard from your Mac");
+      expect(await asked.locator(".speaker-mark").count()).toBe(1);
+      expect(await asked.locator(".mic-mark").count()).toBe(0);
+      await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(2);
+      await expect.poll(() => bar.isVisible(), { timeout: 5_000 }).toBe(false);
+      const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", id, "thread.json"), "utf8"));
+      expect(saved.turns.filter((t: { kind?: string }) => t.kind === "text")).toEqual([
+        { role: "user", kind: "text", text: "why the product rule?", heard: true },
       ]);
     } finally {
       await p.close();

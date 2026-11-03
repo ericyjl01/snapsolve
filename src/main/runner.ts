@@ -1,12 +1,13 @@
 // Runs Claude turns (SPEC §3.1–3.5): builds argv, env and the stdin message, spawns `claude -p` once per turn,
 // streams its events, serializes turns per thread under a global cap, kills on timeout or on a stop (Esc, task 097),
 // adopts a new session's transcript once its first turn exits (failed or not) and falls back to a fresh session
-// carrying the thread's history when resume fails.
+// carrying the thread's history when resume fails. A question that waits (099) is listed for its thread (`queued`)
+// until its turn starts.
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { type ErrorKind, SnapsolveError, userMessage } from "../shared/errors";
-import type { AssistantTurn, ChatMode, Config, Effort, Thread, ThreadStatus, Turn, UserTurn } from "../shared/types";
+import type { AssistantTurn, ChatMode, Config, Effort, QueuedQuestion, Thread, ThreadStatus, Turn, UserTurn } from "../shared/types";
 import { type AuthStatus, formatUsage, isUsageBlocked, type UsageInfo, usageBlockedMessage } from "./auth";
 import type { Logger } from "./log";
 import type { Store } from "./store";
@@ -88,6 +89,11 @@ export type RunnerEvent =
       sevenDay: RateWindow | null;
     }
   | { type: "done"; threadId: string; thread: Thread; turn: AssistantTurn; note?: "resumeFallback" }
+  /**
+   * The thread's waiting questions changed (099): every follow-up enqueued that could not start at once, in order. Sent
+   * when one is added and when one starts, before its user turn is saved, so a question never shows twice.
+   */
+  | { type: "queued"; threadId: string; queued: QueuedQuestion[] }
   | { type: "error"; threadId: string; kind: ErrorKind; message: string; retry: boolean; thread: Thread | null };
 
 export type TurnOutcome = { ok: true; thread: Thread } | { ok: false; kind: ErrorKind; message: string };
@@ -252,6 +258,8 @@ interface Job {
   threadId: string;
   request: TurnRequest;
   resolve: (outcome: TurnOutcome) => void;
+  /** A follow-up that had to wait: it is in its thread's `queued` list (099). */
+  listed?: boolean;
 }
 
 /** A thread's running turn, for `stop` (097). */
@@ -312,6 +320,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       const i = waiting.findIndex((job) => !busy.has(job.threadId));
       if (i < 0) return;
       const [job] = waiting.splice(i, 1);
+      if (job.listed) emitQueued(job.threadId);
       running++;
       busy.add(job.threadId);
       active.set(job.threadId, { stopped: false });
@@ -325,6 +334,14 @@ export function createRunner(deps: RunnerDeps): Runner {
           pump();
         });
     }
+  }
+
+  /** The thread's waiting follow-ups, in order (099). */
+  function emitQueued(threadId: string): void {
+    const queued = waiting.flatMap((job) =>
+      job.threadId === threadId && job.listed && job.request.kind === "followUp" ? [{ text: job.request.text, ...marks(job.request) }] : [],
+    );
+    emit({ type: "queued", threadId, queued });
   }
 
   async function setStatus(threadId: string, status: ThreadStatus): Promise<Thread> {
@@ -676,8 +693,14 @@ export function createRunner(deps: RunnerDeps): Runner {
           void fail(threadId, new SnapsolveError("internal", problem), null, { record: false }).then(resolve);
           return;
         }
-        waiting.push({ threadId, request, resolve });
+        const job: Job = { threadId, request, resolve };
+        waiting.push(job);
         pump();
+        // Still waiting (its chat is answering, or every slot is taken): a question is listed until it starts (099).
+        if (request.kind === "followUp" && waiting.includes(job)) {
+          job.listed = true;
+          emitQueued(threadId);
+        }
         if (waiting.some((job) => job.threadId === threadId) && !busy.has(threadId)) {
           setStatus(threadId, "queued").catch((e: unknown) => log.warn("runner.statusFailed", { threadId, error: e }));
         }

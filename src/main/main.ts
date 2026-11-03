@@ -256,7 +256,6 @@ async function start(): Promise<void> {
       void core.onVoiceDenied(denial);
     },
     onFailed: () => void core.onVoiceFailed(),
-    isAnswering: () => core.isAnswering(),
     showWindow: () => panel.open(),
     log,
   });

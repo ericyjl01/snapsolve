@@ -116,6 +116,18 @@ export interface Thread {
    * permission voice was refused, or that the speech helper failed (`voicePermissionCard`, task 063).
    */
   permission?: { prompted: boolean } | { voice: VoiceCardKind };
+  /**
+   * Panel-only, never saved (099): the questions asked while this chat was answering, waiting their turn in the order
+   * asked. Each leaves the list when its turn starts (its saved user turn then shows it). Absent when none wait.
+   */
+  queued?: QueuedQuestion[];
+}
+
+/** A question waiting behind a chat's running answer (099), with its dictated or heard mark. */
+export interface QueuedQuestion {
+  text: string;
+  voice?: true;
+  heard?: true;
 }
 
 /** The permission a dictation was refused (task 063). */

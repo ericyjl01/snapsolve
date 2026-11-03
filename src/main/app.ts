@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { screenRecordingCard, SnapsolveError, userMessage, voicePermissionCard } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
-import type { AssistantTurn, ChatMode, Config, Theme, Thread, ThreadStatus, VoiceCardKind, VoiceDenial } from "../shared/types";
+import type { AssistantTurn, ChatMode, Config, QueuedQuestion, Theme, Thread, ThreadStatus, VoiceCardKind, VoiceDenial } from "../shared/types";
 import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
@@ -85,8 +85,6 @@ export interface App {
   onVoiceDenied(denial: VoiceDenial): Promise<void>;
   /** The speech helper failed: the same card slot, saying so. */
   onVoiceFailed(): Promise<void>;
-  /** The thread a capture or question would join is new, queued or running (a voice press is then ignored, 063). */
-  isAnswering(): boolean;
   /**
    * Esc with the window focused (097): stops the running answer of the chat on screen (`runner.stop`) — the current
    * thread, or before one is known the newest chat (permission cards aside); nothing after "+". False when nothing is
@@ -113,6 +111,8 @@ export function createApp(deps: AppDeps): App {
   let voiceCardId: string | null = null;
   /** New chats whose first screenshot could not be saved (088): the next capture into one is its first turn. */
   const unstarted = new Set<string>();
+  /** Each chat's questions waiting behind its answer (the runner's `queued` events, 099); kept apart, never saved. */
+  const queuedBy = new Map<string, QueuedQuestion[]>();
 
   function remember(thread: Thread): void {
     known.set(thread.id, thread);
@@ -123,7 +123,13 @@ export function createApp(deps: AppDeps): App {
   }
 
   function snapshot(): Thread[] {
-    return byNewest([...known.values()]);
+    return byNewest([...known.values()].map(withQueued));
+  }
+
+  /** The thread as the panel shows it: with its waiting questions, if any (099). */
+  function withQueued(thread: Thread): Thread {
+    const queued = queuedBy.get(thread.id);
+    return queued ? { ...thread, queued } : thread;
   }
 
   /** Applies `patch` to a thread this app has seen; one it has not is read from disk first. */
@@ -153,15 +159,20 @@ export function createApp(deps: AppDeps): App {
         remember(event.thread);
         broadcast();
         return;
+      case "queued":
+        if (event.queued.length > 0) queuedBy.set(event.threadId, event.queued);
+        else queuedBy.delete(event.threadId);
+        broadcast();
+        return;
       case "done":
         remember(event.thread);
-        panel.send(IPC.answerDone, { threadId: event.threadId, thread: event.thread });
+        panel.send(IPC.answerDone, { threadId: event.threadId, thread: withQueued(event.thread) });
         deps.onTurnEnded?.();
         return;
       case "error":
         if (event.thread) {
           remember(event.thread);
-          panel.send(IPC.answerDone, { threadId: event.threadId, thread: event.thread });
+          panel.send(IPC.answerDone, { threadId: event.threadId, thread: withQueued(event.thread) });
         } else {
           void patchThread(event.threadId, { status: "error" });
         }
@@ -427,12 +438,6 @@ export function createApp(deps: AppDeps): App {
 
     onVoiceDenied: (denial) => voiceCard(denial),
     onVoiceFailed: () => voiceCard("failed"),
-
-    isAnswering() {
-      if (fresh || !current) return false;
-      const thread = known.get(current);
-      return thread !== undefined && BUSY.has(thread.status);
-    },
 
     stopAnswer() {
       if (fresh || current === null) return false;

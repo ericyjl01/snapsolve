@@ -28,8 +28,6 @@ export const VOICE_MAC_EMPTY_NOTE = "Didn't catch any words from your Mac.";
  */
 export const VOICE_MAC_SILENT_NOTE =
   "Heard nothing from your Mac. If something was playing, turn on System Audio Recording for snapsolve in System Settings › Privacy & Security.";
-/** A press while the current thread is still thinking or answering is ignored (063). */
-export const VOICE_BUSY_NOTE = "Wait for the answer, then ask.";
 /** A hold shorter than this is a tap: cancelled, nothing sent (096). */
 export const VOICE_MIN_HOLD_MS = 300;
 /** A tap's note. */
@@ -185,8 +183,6 @@ export interface VoiceDeps {
   onDenied: (denial: VoiceDenial) => void;
   /** The helper crashed, could not start, failed or never finished: the panel's voice error card. */
   onFailed: () => void;
-  /** The thread a question would join is thinking or answering (app.isAnswering): a press then is ignored. */
-  isAnswering: () => boolean;
   /** Shows the window without focus (panel.open). */
   showWindow: () => void;
   log: Pick<Logger, "info" | "warn" | "error">;
@@ -197,9 +193,9 @@ export interface VoiceDeps {
 
 export interface Voice {
   /**
-   * The voice hotkey or a mic button went down: idle → listening (ignored while the current thread is thinking or
-   * answering). While a dictation runs a press is ignored (the key's auto-repeat, the other source), except the key
-   * with no modifier to watch, which then stops and sends as before 096.
+   * The voice hotkey or a mic button went down: idle → listening, whatever the chat is doing (a question sent while it
+   * answers waits behind the answer, 099). While a dictation runs a press is ignored (the key's auto-repeat, the other
+   * source), except the key with no modifier to watch, which then stops and sends as before 096.
    */
   press(source: VoiceSource): void;
   /**
@@ -338,11 +334,6 @@ export function createVoice(deps: VoiceDeps): Voice {
     const helper = deps.helper;
     if (!helper) {
       emit({ state: "idle", note: userMessage("voiceUnavailable") });
-      return;
-    }
-    if (deps.isAnswering()) {
-      log.info("voice.pressIgnored", { reason: "answering" });
-      emit({ state: "idle", note: VOICE_BUSY_NOTE });
       return;
     }
     deps.showWindow();

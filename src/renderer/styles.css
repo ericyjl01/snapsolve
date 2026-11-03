@@ -685,3 +685,24 @@ p.stopped {
   vertical-align: -1px;
   color: var(--muted);
 }
+
+/* Questions waiting behind the answer being written (099): after it, on the right, faded, each marked Queued. */
+.queue {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue:empty {
+  display: none;
+}
+
+.question.queued {
+  opacity: 0.55;
+}
+
+.question .queued-label {
+  margin-left: 8px;
+  font: 11px/1 -apple-system, system-ui, sans-serif;
+  color: var(--muted);
+}

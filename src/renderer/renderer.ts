@@ -33,6 +33,8 @@ interface Card {
   root: HTMLElement;
   turns: HTMLElement;
   live: HTMLElement;
+  /** The questions waiting behind the answer being written (099), after it. */
+  queue: HTMLElement;
   retry: HTMLButtonElement;
 }
 
@@ -116,12 +118,13 @@ function createCard(thread: Thread): Card {
   root.dataset.threadId = thread.id;
   const turns = el("div", "turns");
   const live = el("div", "live");
+  const queue = el("div", "queue");
   const actions = el("div", "actions");
   const retry = el("button", "retry", "Retry");
   retry.type = "button";
   actions.append(retry);
-  root.append(turns, live, actions);
-  const card: Card = { kind: "thread", root, turns, live, retry };
+  root.append(turns, live, queue, actions);
+  const card: Card = { kind: "thread", root, turns, live, queue, retry };
   retry.addEventListener("click", () => {
     pending.add(thread.id);
     update(thread.id);
@@ -282,6 +285,23 @@ function renderTurns(card: Card, thread: Thread): void {
   card.turns.replaceChildren(...nodes);
 }
 
+/**
+ * The questions asked while the chat answers (099), in order: faded, with their mic or speaker mark and "Queued". Each
+ * becomes a normal question when its turn starts (main drops it from `queued` before its saved turn arrives).
+ */
+function renderQueue(card: Card, thread: Thread): void {
+  card.queue.replaceChildren(
+    ...(thread.queued ?? []).map((q) => {
+      const asked = el("p", `question queued${q.voice ? " voice" : q.heard ? " heard" : ""}`);
+      asked.title = q.voice ? "Dictated · queued" : q.heard ? "Heard from your Mac · queued" : "Queued";
+      if (q.voice) asked.append(micMark());
+      else if (q.heard) asked.append(speakerMark());
+      asked.append(el("span", "question-text", q.text), el("span", "queued-label", "Queued"));
+      return asked;
+    }),
+  );
+}
+
 function renderLive(card: Card, thread: Thread): void {
   const streamed = streams.get(thread.id);
   if (!isBusy(thread)) card.live.replaceChildren();
@@ -307,6 +327,7 @@ function update(threadId: string): void {
   }
   renderTurns(card, thread);
   renderLive(card, thread);
+  renderQueue(card, thread);
   const busy = isBusy(thread);
   const last = thread.turns.at(-1);
   card.retry.hidden = busy || thread.status !== "error";

@@ -1031,9 +1031,12 @@ describe("panel (e2e)", () => {
       const plus = p.page.locator("#titlebar").getByRole("button", { name: "New chat" });
       expect(await plus.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("no-drag");
       // Before the ×, at the top right.
-      // 063 put the mic (Dictate) first; 078 put the sidebar toggle before everything.
-      expect(await p.page.locator("#titlebar button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).toEqual([
+      // 063 put the mic (Dictate) first; 078 put the sidebar toggle before everything; 089's Solve / Answer
+      // mode radios (named by their text) sit before the mic.
+      expect(await p.page.locator("#titlebar button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? e.textContent?.trim()))).toEqual([
         "Show chats",
+        "Solve",
+        "Answer",
         "Dictate",
         "New chat",
         "Hide window",

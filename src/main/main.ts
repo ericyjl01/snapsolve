@@ -246,8 +246,11 @@ async function start(): Promise<void> {
     keyLabel: hotkeySymbols(config.hotkeys.voice, process.platform),
     // Hold to talk (096): the helper watches these while the voice hotkey is held (globalShortcut has no key-up).
     holdKeys: holdModifiers(config.hotkeys.voice),
+    // Listen to the Mac (098): the listen hotkey is held the same way; the helper hears the Mac's sound instead.
+    listenKeyLabel: hotkeySymbols(config.hotkeys.listen, process.platform),
+    listenHoldKeys: holdModifiers(config.hotkeys.listen),
     onState: (state) => panel.send(IPC.voiceState, state),
-    send: (text) => core.onVoice(text),
+    send: (text, heard) => (heard ? core.onVoice(text, true) : core.onVoice(text)),
     onDenied: (denial) => {
       voiceDenial = denial;
       void core.onVoiceDenied(denial);
@@ -325,6 +328,8 @@ async function start(): Promise<void> {
     onToggle: () => panel.toggle(),
     // Key down only; the release comes from the speech helper's watch (096).
     onVoice: () => voice?.press("key"),
+    // Listen to the Mac (098): key down only, as for voice.
+    onListen: () => voice?.press("listen"),
     notify,
     label: (accelerator) => hotkeyLabel(accelerator, process.platform),
     log,
@@ -362,6 +367,8 @@ async function start(): Promise<void> {
       setTransparency: (transparency: number) => setTransparency(transparency),
       /** The voice hotkey held (true) or let go (false, as the helper's released line reports it) (096). */
       voiceKey: (down: boolean) => (down ? voice?.press("key") : voice?.release("key")),
+      /** The listen hotkey held (true) or let go (false) (098). */
+      listenKey: (down: boolean) => (down ? voice?.press("listen") : voice?.release("listen")),
       /** What the temporary Esc shortcut does while listening. */
       voiceEscape: () => voice?.cancel(),
     };

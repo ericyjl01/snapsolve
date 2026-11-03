@@ -24,16 +24,17 @@ const RENAME_DELAYS_MS = [20, 50, 100, 200, 400, 800, 1000, 1000];
 
 const pathFor = (platform) => (platform === "win32" ? path.win32 : path.posix);
 
-/** Info.plist usage strings for voice (task 063); the same as native/speech/Info.plist. */
+/** Info.plist usage strings for voice (task 063) and listening to the Mac (098); the same as native/speech/Info.plist. */
 const VOICE_USAGE = {
   NSMicrophoneUsageDescription: "snapsolve listens while you dictate a question with the voice hotkey.",
   NSSpeechRecognitionUsageDescription: "snapsolve turns your dictated question into text on this Mac.",
+  NSAudioCaptureUsageDescription: "snapsolve listens to what your Mac plays while you hold the listen hotkey, to turn it into a question.",
 };
 
 /** The app's config.json defaults; mirrors DEFAULTS in src/main/config.ts (test/unit/installer-steps.test.ts). */
 function defaultConfig() {
   return {
-    hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V" },
+    hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V", listen: "Control+Alt+B" },
     model: "opus",
     effort: "high",
     panelWidth: 420,

@@ -77,9 +77,10 @@ export interface App {
   onCaptureDenied(prompted: boolean): Promise<void>;
   /**
    * A dictated question (task 063): where a typed one would go — a follow-up to the current thread, or a new text
-   * thread when there is none or after "+". Marked as dictated. Resolves with the thread's id once it is queued.
+   * thread when there is none or after "+". Marked as dictated, or with `heard` as heard from what the Mac played (the
+   * listen hotkey, task 098). Resolves with the thread's id once it is queued.
    */
-  onVoice(text: string): Promise<string>;
+  onVoice(text: string, heard?: true): Promise<string>;
   /** Voice was refused a permission: one unsaved card that says which to turn on; a dictation that works removes it. */
   onVoiceDenied(denial: VoiceDenial): Promise<void>;
   /** The speech helper failed: the same card slot, saying so. */
@@ -409,11 +410,11 @@ export function createApp(deps: AppDeps): App {
       broadcast();
     },
 
-    async onVoice(text) {
+    async onVoice(text, heard) {
       if (typeof text !== "string" || text.trim() === "") throw new SnapsolveError("internal", "empty dictation");
       if (voiceCardId) known.delete(voiceCardId);
       voiceCardId = null;
-      const request = { kind: "followUp" as const, text, voice: true as const };
+      const request = heard === true ? { kind: "followUp" as const, text, heard: true as const } : { kind: "followUp" as const, text, voice: true as const };
       const target = await currentThread();
       if (!target) return textThread(request);
       fresh = false;

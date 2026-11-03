@@ -47,7 +47,8 @@ export interface SendImage {
 export type TurnRequest =
   | { kind: "new"; screenshot: string; seed?: string }
   | { kind: "append"; screenshot: string }
-  | { kind: "followUp"; text: string; voice?: true }
+  /** `voice`: dictated (063); `heard`: heard from what the Mac played (098); never both. */
+  | { kind: "followUp"; text: string; voice?: true; heard?: true }
   | { kind: "retry" };
 
 /** A request that adds a user turn; a retry re-runs one of these. */
@@ -707,7 +708,7 @@ function imageBlock(image: SendImage): ContentBlock {
 }
 
 function userTurn(request: UserRequest): UserTurn {
-  if (request.kind === "followUp") return { role: "user", kind: "text", text: request.text, ...(request.voice ? { voice: true as const } : {}) };
+  if (request.kind === "followUp") return { role: "user", kind: "text", text: request.text, ...marks(request) };
   const turn: UserTurn = { role: "user", kind: "screenshot", file: request.screenshot };
   return request.kind === "new" && request.seed !== undefined ? { ...turn, seed: request.seed } : turn;
 }
@@ -754,10 +755,16 @@ export function retryTarget(thread: Thread): { request: UserRequest; index: numb
   }
   if (index < 0) return null;
   const turn = thread.turns[index] as UserTurn;
-  if (turn.kind === "text") return { request: { kind: "followUp", text: turn.text, ...(turn.voice ? { voice: true as const } : {}) }, index };
+  if (turn.kind === "text") return { request: { kind: "followUp", text: turn.text, ...marks(turn) }, index };
   const first = !thread.turns.slice(0, index).some((t) => t.role === "user");
   if (!first) return { request: { kind: "append", screenshot: turn.file }, index };
   return { request: { kind: "new", screenshot: turn.file, ...(turn.seed !== undefined ? { seed: turn.seed } : {}) }, index };
+}
+
+/** A question's voice (063) or heard (098) mark, carried from a request to its turn and back for a retry. */
+function marks(from: { voice?: true; heard?: true }): { voice?: true; heard?: true } {
+  if (from.voice) return { voice: true };
+  return from.heard ? { heard: true } : {};
 }
 
 function isAnswer(turn: Turn): turn is AssistantTurn {
@@ -769,6 +776,9 @@ function requestProblem(request: TurnRequest): string | null {
   if (request.kind === "followUp") {
     const voice: unknown = (request as { voice?: unknown }).voice;
     if (voice !== undefined && voice !== true) return "invalid voice mark";
+    const heard: unknown = (request as { heard?: unknown }).heard;
+    if (heard !== undefined && heard !== true) return "invalid heard mark";
+    if (voice === true && heard === true) return "a question is dictated or heard, not both";
     return typeof request.text === "string" && request.text.trim() !== "" ? null : "empty follow-up";
   }
   if (request.kind === "new" || request.kind === "append") {

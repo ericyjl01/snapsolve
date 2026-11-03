@@ -11,5 +11,8 @@
   <string>snapsolve listens while you dictate a question with the voice hotkey.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
   <string>snapsolve turns your dictated question into text on this Mac.</string>
+  <!-- Task 098: holding the listen hotkey transcribes what the Mac plays (System Audio Recording Only). -->
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>snapsolve listens to what your Mac plays while you hold the listen hotkey, to turn it into a question.</string>
 </dict>
 </plist>

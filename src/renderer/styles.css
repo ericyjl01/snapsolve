@@ -678,3 +678,10 @@ p.stopped {
   vertical-align: -1px;
   color: var(--muted);
 }
+
+/* A question heard from the Mac (098): its bubble starts with a small speaker, as a dictated one starts with the mic. */
+.question .speaker-mark {
+  margin-right: 5px;
+  vertical-align: -1px;
+  color: var(--muted);
+}

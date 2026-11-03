@@ -16,8 +16,10 @@ export interface Hotkeys {
   capture: string;
   /** Shows or hides the window (task 060). */
   toggle: string;
-  /** Starts a dictated follow-up; pressed again, stops and sends it (task 063). */
+  /** Held, dictates a follow-up from the microphone; let go, sends it (tasks 063, 096). */
   voice: string;
+  /** Held, transcribes what the Mac plays (its sound output); let go, sends it as a heard question (task 098). */
+  listen: string;
 }
 
 /** `<data>/config.json` (SPEC §6.1). Loaded and validated by `src/main/config.ts`. */
@@ -63,6 +65,8 @@ export type UserTurn =
       text: string;
       /** Dictated with the voice hotkey or a mic button, not typed (task 063); the card shows a mic mark. */
       voice?: true;
+      /** Heard from what the Mac played, with the listen hotkey (task 098); the card shows a speaker mark. Never with `voice`. */
+      heard?: true;
     };
 
 export interface AssistantTurn {
@@ -127,8 +131,9 @@ export type VoiceCardKind = VoiceDenial | "failed";
 export type VoiceState =
   | { state: "idle"; note?: string }
   /** `hold`: letting go sends (096); false only for a voice key with no modifier to watch, pressed again to send. */
-  | { state: "listening"; text: string; level: number; key: string; hold: boolean }
-  | { state: "stopping"; text: string; key: string };
+  /** `mac`: listening to what the Mac plays (the listen hotkey, 098), not the microphone. */
+  | { state: "listening"; text: string; level: number; key: string; hold: boolean; mac?: true }
+  | { state: "stopping"; text: string; key: string; mac?: true };
 
 /** main → renderer: a streamed chunk of answer text. */
 export interface AnswerDelta {

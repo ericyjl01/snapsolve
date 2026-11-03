@@ -8,7 +8,7 @@ import type { ChatMode, Config, Effort, Hotkeys, Theme } from "../shared/types";
 import type { Logger } from "./log";
 
 export const DEFAULTS: Readonly<Config> = Object.freeze({
-  hotkeys: Object.freeze({ capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V" }),
+  hotkeys: Object.freeze({ capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V", listen: "Control+Alt+B" }),
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -200,7 +200,7 @@ function validate(raw: unknown): { config: Config; warnings: string[] } {
 function validateHotkeys(raw: unknown, warnings: string[]): Hotkeys {
   const hotkeys = { ...DEFAULTS.hotkeys };
   if (!isObject(raw)) {
-    warnings.push(invalid("hotkeys", "an object with capture, toggle and voice", raw, DEFAULTS.hotkeys));
+    warnings.push(invalid("hotkeys", "an object with capture, toggle, voice and listen", raw, DEFAULTS.hotkeys));
     return hotkeys;
   }
   for (const [key, value] of Object.entries(raw)) {
@@ -226,7 +226,7 @@ function validateHotkeys(raw: unknown, warnings: string[]): Hotkeys {
   return hotkeys;
 }
 
-const HOTKEY_NAMES: readonly (keyof Hotkeys)[] = ["capture", "toggle", "voice"];
+const HOTKEY_NAMES: readonly (keyof Hotkeys)[] = ["capture", "toggle", "voice", "listen"];
 
 // Electron accelerator grammar (https://www.electronjs.org/docs/latest/api/accelerator), case-insensitive.
 const MODIFIERS: Record<string, string> = {

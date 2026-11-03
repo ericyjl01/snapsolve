@@ -184,6 +184,28 @@ function micMark(): SVGSVGElement {
   return svg;
 }
 
+/** The small speaker shown before a question heard from the Mac (task 098), drawn like the mic. */
+function speakerMark(): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "speaker-mark");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("width", "12");
+  svg.setAttribute("height", "11");
+  svg.setAttribute("viewBox", "0 0 15 14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.6");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("stroke-linecap", "round");
+  const cone = document.createElementNS(ns, "path");
+  cone.setAttribute("d", "M1.5 5h2.5l3.5-3v10l-3.5-3h-2.5z");
+  const waves = document.createElementNS(ns, "path");
+  waves.setAttribute("d", "M10 4.5a3.5 3.5 0 0 1 0 5M12 2.5a6.5 6.5 0 0 1 0 9");
+  svg.append(cone, waves);
+  return svg;
+}
+
 function flash(button: HTMLButtonElement, text: string): void {
   const label = button.textContent;
   button.textContent = text;
@@ -235,6 +257,11 @@ function renderTurns(card: Card, thread: Thread): void {
         const asked = el("p", "question voice");
         asked.title = "Dictated";
         asked.append(micMark(), document.createTextNode(turn.text));
+        nodes.push(asked);
+      } else if (turn.heard) {
+        const asked = el("p", "question heard");
+        asked.title = "Heard from your Mac";
+        asked.append(speakerMark(), document.createTextNode(turn.text));
         nodes.push(asked);
       } else {
         nodes.push(el("p", "question", turn.text));
@@ -492,16 +519,19 @@ function showVoice(state: VoiceState): void {
   composerBox.hidden = active;
   listening.hidden = !active;
   listening.classList.toggle("stopping", state.state === "stopping");
+  // 098: listening to what the Mac plays rather than the microphone.
+  listening.classList.toggle("mac", state.state !== "idle" && state.mac === true);
   voiceNote.hidden = true;
   if (state.state === "idle") {
     if (state.note) {
       voiceNote.textContent = state.note;
       voiceNote.hidden = false;
-      noteTimer = setTimeout(() => (voiceNote.hidden = true), VOICE_NOTE_MS);
+      // A long note (098's silent note names a settings pane) stays twice as long, to be read.
+      noteTimer = setTimeout(() => (voiceNote.hidden = true), state.note.length > 60 ? 2 * VOICE_NOTE_MS : VOICE_NOTE_MS);
     }
     return;
   }
-  (listening.querySelector(".transcript") as HTMLElement).textContent = state.text || "Listening…";
+  (listening.querySelector(".transcript") as HTMLElement).textContent = state.text || (state.mac ? "Listening to your Mac…" : "Listening…");
   (listening.querySelector(".hint") as HTMLElement).textContent =
     state.state === "listening" ? `${state.hold ? "let go" : state.key} to send · esc to cancel` : "Sending…";
   const level = state.state === "listening" ? state.level : 0;

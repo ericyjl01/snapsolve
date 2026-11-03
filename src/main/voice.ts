@@ -1,8 +1,13 @@
-// Voice follow-up (task 063, SPEC Amendment 11): the voice hotkey (or a mic button) starts the speech helper
-// (native/speech, macOS on-device recognition), its live transcript shows in the listening bar, the same key again
-// stops it and sends the final text as a follow-up; Esc (a global shortcut held only while listening) or hiding the
-// window cancels. The helper talks JSON lines on stdout; SIGINT means stop and send (sent only after its "ready"
-// line), SIGTERM means gone. The transcript is never logged.
+// Voice follow-up (task 063, SPEC Amendment 11; hold to talk, task 096, Amendment 27): holding the voice hotkey (or a
+// mic button) starts the speech helper (native/speech, macOS on-device recognition), its live transcript shows in the
+// listening bar, and letting go stops it and sends the final text as a follow-up. Electron's globalShortcut has no
+// key-up, so for the hotkey the helper itself watches the hotkey's modifiers (`--hold control,option`) and prints
+// "released" once one is up; a mic button's release comes from the renderer. A hold under VOICE_MIN_HOLD_MS is a tap:
+// cancelled with a note. Esc (a global shortcut held only while listening) or hiding the window cancels. The helper
+// talks JSON lines on stdout; SIGINT means stop and send (sent only after its "ready" line), SIGTERM means gone. The
+// transcript is never logged.
+// Listen to the Mac (task 098, Amendment 29): the listen hotkey (⌃⌥B) is a third source held the same way; its helper
+// runs with `--source system` (what the Mac plays, not the microphone) and what it hears is sent marked heard.
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { chmod, stat } from "node:fs/promises";
 import path from "node:path";
@@ -15,8 +20,20 @@ export const ESCAPE = "Escape";
 /** How long the helper may take to finish the transcript after the stop. */
 export const VOICE_STOP_TIMEOUT_MS = 15_000;
 export const VOICE_EMPTY_NOTE = "Didn't catch that.";
-/** A press while the current thread is still thinking or answering is ignored (063). */
-export const VOICE_BUSY_NOTE = "Wait for the answer, then ask.";
+/** Listening to the Mac heard sound but no words (098). */
+export const VOICE_MAC_EMPTY_NOTE = "Didn't catch any words from your Mac.";
+/**
+ * Listening to the Mac heard only zeros (098): nothing played, or System Audio Recording is refused (macOS then gives
+ * silence, not an error).
+ */
+export const VOICE_MAC_SILENT_NOTE =
+  "Heard nothing from your Mac. If something was playing, turn on System Audio Recording for snapsolve in System Settings › Privacy & Security.";
+/** A hold shorter than this is a tap: cancelled, nothing sent (096). */
+export const VOICE_MIN_HOLD_MS = 300;
+/** A tap's note. */
+export const VOICE_HOLD_NOTE = "Hold to talk, let go to send.";
+/** A hold whose release never arrives (a lost key-up or pointer-up) stops and sends here (096). */
+export const VOICE_MAX_HOLD_MS = 120_000;
 /** The helper beside main.js (dist/ in dev, app/ when released). */
 export const SPEECH_HELPER = path.join("native", "snapsolve-speech");
 
@@ -24,7 +41,10 @@ export type HelperMessage =
   | { type: "ready" }
   | { type: "level"; level: number }
   | { type: "partial"; text: string }
-  | { type: "final"; text: string }
+  /** `silent` (098, `--source system` only): every sample was zero. */
+  | { type: "final"; text: string; silent?: true }
+  /** The hotkey's watched modifiers came up (096): the hold is over. */
+  | { type: "released" }
   | { type: "error"; kind: "micDenied" | "speechDenied" | "unavailable" | "failed"; message: string };
 
 const ERROR_KINDS = new Set(["micDenied", "speechDenied", "unavailable", "failed"]);
@@ -42,11 +62,15 @@ export function parseHelperLine(line: string): HelperMessage | null {
   switch (m.type) {
     case "ready":
       return { type: "ready" };
+    case "released":
+      return { type: "released" };
     case "level":
       return typeof m.level === "number" && Number.isFinite(m.level) ? { type: "level", level: Math.min(Math.max(m.level, 0), 1) } : null;
     case "partial":
+      return typeof m.text === "string" ? { type: "partial", text: m.text } : null;
     case "final":
-      return typeof m.text === "string" ? { type: m.type, text: m.text } : null;
+      if (typeof m.text !== "string") return null;
+      return m.silent === true ? { type: "final", text: m.text, silent: true } : { type: "final", text: m.text };
     case "error":
       return typeof m.kind === "string" && ERROR_KINDS.has(m.kind) && typeof m.message === "string"
         ? { type: "error", kind: m.kind as Extract<HelperMessage, { type: "error" }>["kind"], message: m.message }
@@ -55,6 +79,53 @@ export function parseHelperLine(line: string): HelperMessage | null {
       return null;
   }
 }
+
+const MODIFIERS: Readonly<Record<string, string>> = {
+  control: "control",
+  ctrl: "control",
+  alt: "option",
+  option: "option",
+  shift: "shift",
+  command: "command",
+  cmd: "command",
+  commandorcontrol: "command",
+  cmdorctrl: "command",
+  super: "command",
+  meta: "command",
+};
+const MODIFIER_ORDER = ["control", "option", "shift", "command"];
+
+/**
+ * The modifiers of the voice accelerator (macOS: CommandOrControl is Command) as the helper's `--hold` names them, in a
+ * fixed order (096). None ("F13") → []: nothing to watch, so that key is pressed again to send, as before 096.
+ */
+export function holdModifiers(accelerator: string): string[] {
+  const held = new Set(
+    accelerator
+      .split("+")
+      .map((token) => MODIFIERS[token.trim().toLowerCase()])
+      .filter((name): name is string => name !== undefined),
+  );
+  return MODIFIER_ORDER.filter((name) => held.has(name));
+}
+
+const ACCELERATOR_MODIFIER: Readonly<Record<string, string>> = { control: "Control", option: "Alt", shift: "Shift", command: "Command" };
+
+/**
+ * Esc as it arrives while the voice keys are still held (096 review 1): a macOS global shortcut fires only on its exact
+ * modifiers, so with ⌃⌥ down the bare Escape never fires and `Control+Alt+Escape` is needed too. Null when nothing is
+ * held.
+ */
+export function holdEscape(holdKeys: readonly string[]): string | null {
+  if (holdKeys.length === 0) return null;
+  return [...holdKeys.map((name) => ACCELERATOR_MODIFIER[name] ?? name), ESCAPE].join("+");
+}
+
+/**
+ * Who holds the dictation: the voice hotkey, or a mic button (096), or the listen hotkey, which hears the Mac instead of
+ * the microphone (098). Only its own release ends it.
+ */
+export type VoiceSource = "key" | "button" | "listen";
 
 export interface SpeechHelper {
   path: string;
@@ -95,28 +166,43 @@ export interface VoiceDeps {
   globalShortcut: { register(accelerator: string, callback: () => void): boolean; unregister(accelerator: string): void };
   /** The voice key as the listening bar names it ("⌃⌥V"). */
   keyLabel: string;
+  /** `holdModifiers(config.hotkeys.voice)`: what the helper watches while the hotkey is held (096). */
+  holdKeys: readonly string[];
+  /** The listen key as the listening bar names it ("⌃⌥B", 098). */
+  listenKeyLabel: string;
+  /** `holdModifiers(config.hotkeys.listen)`: what the helper watches while the listen hotkey is held (098). */
+  listenHoldKeys: readonly string[];
   /** Every state change, for the renderer. */
   onState: (state: VoiceState) => void;
-  /** The final transcript (trimmed, non-empty): where a typed question would go (app.onVoice). */
-  send: (text: string) => Promise<unknown>;
+  /**
+   * The final transcript (trimmed, non-empty): where a typed question would go (app.onVoice). `heard` (098): it came
+   * from what the Mac played; a dictation is sent with the text alone.
+   */
+  send: (text: string, heard?: true) => Promise<unknown>;
   /** The helper reported a refused permission: the panel's permission card. */
   onDenied: (denial: VoiceDenial) => void;
   /** The helper crashed, could not start, failed or never finished: the panel's voice error card. */
   onFailed: () => void;
-  /** The thread a question would join is thinking or answering (app.isAnswering): a press then is ignored. */
-  isAnswering: () => boolean;
   /** Shows the window without focus (panel.open). */
   showWindow: () => void;
   log: Pick<Logger, "info" | "warn" | "error">;
   stopTimeoutMs?: number;
+  /** For a hold's length; default Date.now. */
+  now?: () => number;
 }
 
 export interface Voice {
   /**
-   * The voice hotkey and the mic buttons: idle → listening → (send) → idle; ignored while the helper finishes, and a
-   * start is ignored while the current thread is thinking or answering.
+   * The voice hotkey or a mic button went down: idle → listening, whatever the chat is doing (a question sent while it
+   * answers waits behind the answer, 099). While a dictation runs a press is ignored (the key's auto-repeat, the other
+   * source), except the key with no modifier to watch, which then stops and sends as before 096.
    */
-  toggle(): void;
+  press(source: VoiceSource): void;
+  /**
+   * That source came up (the helper's "released" line for the key): stop and send; a tap (under VOICE_MIN_HOLD_MS)
+   * cancels with VOICE_HOLD_NOTE. Ignored when idle, finishing, or held by the other source.
+   */
+  release(source: VoiceSource): void;
   /** Esc, or the window hidden: stop without sending. Idle: nothing. */
   cancel(): void;
   status(): VoiceState["state"];
@@ -124,19 +210,28 @@ export interface Voice {
 
 interface Run {
   child: ChildProcess;
+  source: VoiceSource;
+  /** Listening to the Mac (the listen source, 098). */
+  mac: boolean;
+  /** Its source's release ends it (false: the key with no modifier to watch, pressed again instead). */
+  hold: boolean;
+  startedAt: number;
   text: string;
   level: number;
   stopping: boolean;
   /** The helper printed ready: its SIGINT handler is in place (a SIGINT before that would kill it). */
   ready: boolean;
   exited: boolean;
-  escHeld: boolean;
+  /** The Esc shortcuts this run registered (Escape; during a key hold also the held modifiers + Escape). */
+  escapes: string[];
   stopTimer?: ReturnType<typeof setTimeout>;
+  holdTimer?: ReturnType<typeof setTimeout>;
 }
 
 export function createVoice(deps: VoiceDeps): Voice {
   const { log } = deps;
   const stopTimeoutMs = deps.stopTimeoutMs ?? VOICE_STOP_TIMEOUT_MS;
+  const now = deps.now ?? Date.now;
   let run: Run | null = null;
 
   function emit(state: VoiceState): void {
@@ -144,7 +239,13 @@ export function createVoice(deps: VoiceDeps): Voice {
   }
 
   function show(r: Run): void {
-    emit(r.stopping ? { state: "stopping", text: r.text, key: deps.keyLabel } : { state: "listening", text: r.text, level: r.level, key: deps.keyLabel });
+    const key = r.mac ? deps.listenKeyLabel : deps.keyLabel;
+    const mac = r.mac ? { mac: true as const } : {};
+    emit(
+      r.stopping
+        ? { state: "stopping", text: r.text, key, ...mac }
+        : { state: "listening", text: r.text, level: r.level, key, hold: r.hold, ...mac },
+    );
   }
 
   /** Leaves `r` for good: timers and Esc released; later output from its child is ignored. */
@@ -152,12 +253,12 @@ export function createVoice(deps: VoiceDeps): Voice {
     if (run !== r) return;
     run = null;
     clearTimeout(r.stopTimer);
-    if (r.escHeld) {
-      r.escHeld = false;
+    clearTimeout(r.holdTimer);
+    for (const accelerator of r.escapes.splice(0)) {
       try {
-        deps.globalShortcut.unregister(ESCAPE);
+        deps.globalShortcut.unregister(accelerator);
       } catch (e) {
-        log.warn("voice.escapeUnregisterFailed", { error: e });
+        log.warn("voice.escapeUnregisterFailed", { accelerator, error: e });
       }
     }
     emit(state);
@@ -186,8 +287,12 @@ export function createVoice(deps: VoiceDeps): Voice {
       case "ready":
         r.ready = true;
         log.info("voice.listening", {});
-        // The key was pressed again before the helper was ready: the stop it was waiting for.
+        // Let go before the helper was ready: the stop it was waiting for.
         if (r.stopping) kill(r, "SIGINT");
+        return;
+      case "released":
+        // Only a hotkey's watch prints it; a mic button's dictation ends on the button's own release.
+        if (r.source !== "button") release(r.source);
         return;
       case "level":
         if (r.stopping) return;
@@ -202,12 +307,12 @@ export function createVoice(deps: VoiceDeps): Voice {
         const text = message.text.trim();
         kill(r, "SIGTERM");
         if (!text) {
-          end(r, { state: "idle", note: VOICE_EMPTY_NOTE });
+          end(r, { state: "idle", note: !r.mac ? VOICE_EMPTY_NOTE : message.silent ? VOICE_MAC_SILENT_NOTE : VOICE_MAC_EMPTY_NOTE });
           return;
         }
         end(r, { state: "idle" });
-        log.info("voice.sent", { chars: text.length });
-        void deps.send(text).catch((e: unknown) => log.warn("voice.sendFailed", { error: e }));
+        log.info("voice.sent", { chars: text.length, ...(r.mac ? { heard: true } : {}) });
+        void (r.mac ? deps.send(text, true) : deps.send(text)).catch((e: unknown) => log.warn("voice.sendFailed", { error: e }));
         return;
       }
       case "error":
@@ -225,34 +330,47 @@ export function createVoice(deps: VoiceDeps): Voice {
     }
   }
 
-  function start(): void {
+  function start(source: VoiceSource): void {
     const helper = deps.helper;
     if (!helper) {
       emit({ state: "idle", note: userMessage("voiceUnavailable") });
       return;
     }
-    if (deps.isAnswering()) {
-      log.info("voice.pressIgnored", { reason: "answering" });
-      emit({ state: "idle", note: VOICE_BUSY_NOTE });
-      return;
-    }
     deps.showWindow();
+    const mac = source === "listen";
+    // The keys this hotkey's helper watches (none for a mic button, whose release comes from the renderer).
+    const holdKeys = source === "key" ? deps.holdKeys : mac ? deps.listenHoldKeys : [];
+    const watch = holdKeys.length > 0 ? ["--hold", holdKeys.join(",")] : [];
     let child: ChildProcess;
     try {
-      child = deps.spawn(helper.path, helper.prefixArgs, { env: { ...deps.env }, stdio: ["pipe", "pipe", "pipe"] });
+      child = deps.spawn(helper.path, [...helper.prefixArgs, ...(mac ? ["--source", "system"] : []), ...watch], {
+        env: { ...deps.env },
+        stdio: ["pipe", "pipe", "pipe"],
+      });
     } catch (e) {
       log.warn("voice.spawnFailed", { error: e });
       emit({ state: "idle" });
       deps.onFailed();
       return;
     }
-    const r: Run = { child, text: "", level: 0, stopping: false, ready: false, exited: false, escHeld: false };
+    const hold = source === "button" || watch.length > 0;
+    const r: Run = { child, source, mac, hold, startedAt: now(), text: "", level: 0, stopping: false, ready: false, exited: false, escapes: [] };
     run = r;
-    try {
-      r.escHeld = deps.globalShortcut.register(ESCAPE, () => cancel());
-      if (!r.escHeld) log.warn("voice.escapeTaken", {});
-    } catch (e) {
-      log.warn("voice.escapeTaken", { error: e });
+    if (hold) {
+      r.holdTimer = setTimeout(() => {
+        if (run !== r || r.stopping) return;
+        log.warn("voice.holdCapped", { ms: VOICE_MAX_HOLD_MS, source });
+        stop(r);
+      }, VOICE_MAX_HOLD_MS);
+    }
+    const heldEscape = holdEscape(watch.length > 0 ? holdKeys : []);
+    for (const accelerator of heldEscape ? [ESCAPE, heldEscape] : [ESCAPE]) {
+      try {
+        if (deps.globalShortcut.register(accelerator, () => cancel())) r.escapes.push(accelerator);
+        else log.warn("voice.escapeTaken", { accelerator });
+      } catch (e) {
+        log.warn("voice.escapeTaken", { accelerator, error: e });
+      }
     }
     let buffered = "";
     child.stdout?.setEncoding("utf8");
@@ -281,9 +399,10 @@ export function createVoice(deps: VoiceDeps): Voice {
     show(r);
   }
 
-  /** Stop and send: SIGINT once the helper is ready (else when it says so); the stop timeout runs from the press. */
+  /** Stop and send: SIGINT once the helper is ready (else when it says so); the stop timeout runs from the stop. */
   function stop(r: Run): void {
     r.stopping = true;
+    clearTimeout(r.holdTimer);
     if (r.ready) kill(r, "SIGINT");
     r.stopTimer = setTimeout(() => {
       if (run !== r) return;
@@ -303,12 +422,30 @@ export function createVoice(deps: VoiceDeps): Voice {
     end(r, { state: "idle" });
   }
 
+  function release(source: VoiceSource): void {
+    const r = run;
+    if (!r || r.stopping || !r.hold || r.source !== source) return;
+    const heldMs = now() - r.startedAt;
+    if (heldMs < VOICE_MIN_HOLD_MS) {
+      log.info("voice.tooShort", { ms: heldMs, source });
+      kill(r, "SIGTERM");
+      end(r, { state: "idle", note: VOICE_HOLD_NOTE });
+      return;
+    }
+    stop(r);
+  }
+
   return {
-    toggle() {
-      if (!run) start();
-      else if (!run.stopping) stop(run);
-      else log.info("voice.pressIgnored", {});
+    press(source) {
+      const r = run;
+      if (!r) start(source);
+      // A press while the text is on its way (063); a press while listening is the key's auto-repeat or the other
+      // source, ignored without a log line (a held key repeats many times a second).
+      else if (r.stopping) log.info("voice.pressIgnored", { source });
+      // No modifier to watch: the key works as a toggle (063); so does such a listen key (098).
+      else if (source !== "button" && r.source === source && !r.hold) stop(r);
     },
+    release,
     cancel,
     status: () => (run ? (run.stopping ? "stopping" : "listening") : "idle"),
   };

@@ -1,16 +1,16 @@
 # PROJECT_STATE
 
 ## Now
-Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS only; `npm test` is green on the Mac.
-- Installed on Eric's Mac: 0.2.8 (2026-10-23, f9efb11; running, app.ready 0.2.8, no display-size warnings).
-  It has 088, 086, 090, 087, 091. Saved window bounds stay: tray › Reset window position shows 091's default.
-- Goal run ended (2026-10-23): `tasks.py next` → none — all blocked; only 032 left. master pushed to origin.
-- Blocked: 032 — Eric runs master's docs/checklists/macos.md (29 rows; rows 3, 16, 29 cover 087, 091, 090).
-- Backlog 033, 067, 069, 074, 089, 092, 093, 094, 095. Dropped by Eric 2026-10-23: 042, 053, 054, 056, 066, 068, 070, 080, 081.
+Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089, 096–099, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
+- 089 answer mode, 096 hold-to-talk, 097 Esc stop, 098 listen to the Mac (⌃⌥B): DONE, Opus reviews pass; Eric hand-tested all four 2026-11-03: "they all work".
+- 099 queue a question asked during an answer: DONE (code e22d605, SPEC Amendment 30, Opus review 1 pass); unit 1249 green, build ok. Needs a rebuild + hand check by Eric (type and hold ⌃⌥V while an answer streams → faded "Queued", then answered in order). Backlog 100 (from the review).
+- Ask Eric: the speech helper imports CoreGraphics (096); ARCHITECTURE names Speech + AVFoundation + CoreAudio only.
+- Pending before merge: e2e (window) tests for 096–099, written, not run (Eric says when; ~3–5 min).
+- Merge path: queue 089/096/097/098/099 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.
+- Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
+- master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.
 
 ## Log
-2026-10-20 · 063 · closed · voice follow-up: hotkeys.voice Control+Alt+V shows the window and runs the on-device speech helper (native/speech Swift, SpeechAnalyzer/SFSpeechRecognizer, built by npm run build, released as app/native); listening bar with live transcript; the key again sends via the follow-up path to the current thread (or a text thread) as a voice-marked turn; Esc/hide cancel, ignored while the thread answers, empty → note, denied → settings card, failure → error card; preload 15 (Amendment 11); hand check → 032 row 22 (315f4c6)
-2026-10-21 · adhoc · released snapsolve 0.2.0 into ~/dev/snapsolve-local (redesign 058–061, ⌃⌥C 064, one chat + 065, voice 063 with app/native/snapsolve-speech); Eric: restart Claude Code, then /snapsolve update (b5a6c08)
 2026-10-22 · adhoc · backlog 074: update must re-package snapsolve.app when Info.plist keys change (0.2.0 voice helper SIGABRTs without NSSpeechRecognitionUsageDescription) (-)
 2026-10-22 · adhoc · queued 075: theme setting (dark default) and a more translucent window, Eric's choices (priority 0) (-)
 2026-10-22 · 075 · closed · config.json theme dark|light|system (default dark) sets nativeTheme.themeSource before the window, so the panel and its blur are dark on a Light Mac; window ground more see-through (0.56 light, 0.50 dark); SPEC Amendment 12; e2e launches without Playwright's light emulation (8388539)
@@ -49,3 +49,5 @@ Origin https://github.com/ericyjl01/snapsolve.git (default branch master). macOS
 2026-10-23 · 087 · closed · the crop-corners symbol drawn about 15% smaller: tray bitmap in a centred square of size − 2·round(0.075·size) (14/16, 28/32 px, same proportions), title-bar mark 12 × 12; checklist row 3 (26a493b)
 2026-10-23 · 091 · closed · the default window is about 9 in × 6 in real size (CGDisplayScreenSize via osascript, 110 pt/in when unknown), centred in the work area, on first open and Reset; e2e sidebar tests narrow the window themselves; checklist row 16; found 095 (17f8751)
 2026-10-23 · adhoc · released snapsolve 0.2.8 into ~/dev/snapsolve-local (090 see-through + Transparency menu, 087 icon ~15% smaller, 091 9 × 6 in centred default, 088 faster show, 086 per-answer footer); updated on Eric's Mac (f9efb11)
+2026-11-02 · keel · queued · 096 voice hold-to-talk (p1) and 097 Esc stops an answer (p2), backlog after 089: Eric's request, to build in a new session on worktree-answer-mode (-)
+2026-11-03 · keel · queued · 099 queue a question asked during an answer (voice and ⌃⌥B no longer say wait; queued questions show at once); hand checks of 089/096/097/098 pass (Eric) (-)

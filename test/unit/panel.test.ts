@@ -479,6 +479,8 @@ function panelSetup(
     cursorOn?: typeof DISPLAY_A;
     platform?: NodeJS.Platform;
     onClose?: () => void;
+    /** 097: Esc's question to main — true when it stopped an answer. */
+    onEscape?: () => boolean;
     theme?: Theme;
     transparency?: number;
     /** Each display's physical size in mm (091); none by default. */
@@ -523,6 +525,7 @@ function panelSetup(
     saveBounds: vi.fn(async (b: WindowBounds) => void saves.push(structuredClone(b))),
     ...(options.physicalSize ? { physicalSize: options.physicalSize } : {}),
     ...(options.onClose ? { onClose: options.onClose } : {}),
+    ...(options.onEscape ? { onEscape: options.onEscape } : {}),
   } satisfies PanelDeps;
   const panel = createPanel(deps);
   const win = FakeWindow.last;
@@ -705,6 +708,60 @@ describe("createPanel: shown or hidden, no tab (060)", () => {
     win.webContents.emit("before-input-event", { preventDefault: prevent }, { type: "keyDown", key: "Escape" });
     expect(prevent).toHaveBeenCalled();
     expect(win.isVisible()).toBe(false);
+  });
+
+  it("Esc with an answer being written (097): onEscape stops it and the window stays; Esc again with none hides", () => {
+    const onEscape = vi.fn(() => true);
+    const onClose = vi.fn();
+    const { panel, win } = panelSetup({ onEscape, onClose });
+    panel.open();
+    const prevent = vi.fn();
+    win.webContents.emit("before-input-event", { preventDefault: prevent }, { type: "keyDown", key: "Escape" });
+    expect(onEscape).toHaveBeenCalledTimes(1);
+    expect(prevent).toHaveBeenCalledTimes(1);
+    expect(win.isVisible()).toBe(true);
+    expect(onClose).not.toHaveBeenCalled();
+    onEscape.mockReturnValue(false);
+    win.webContents.emit("before-input-event", { preventDefault: prevent }, { type: "keyDown", key: "Escape" });
+    expect(onEscape).toHaveBeenCalledTimes(2);
+    expect(win.isVisible()).toBe(false);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("an onEscape that throws (097) is logged and the window hides, as Esc always did", () => {
+    const lines: unknown[][] = [];
+    const log: Logger = { ...quietLog, error: (...a: unknown[]) => void lines.push(a) };
+    const onEscape = vi.fn((): boolean => {
+      throw new Error("boom");
+    });
+    const { panel, win } = panelSetup({ onEscape, log });
+    panel.open();
+    win.webContents.emit("before-input-event", { preventDefault: vi.fn() }, { type: "keyDown", key: "Escape" });
+    expect(onEscape).toHaveBeenCalledTimes(1);
+    expect(win.isVisible()).toBe(false);
+    expect(lines.map((l) => l[0])).toEqual(["panel.escapeFailed"]);
+  });
+
+  it("Esc held down (097): its auto-repeats neither stop nor hide, and reach no page", () => {
+    const onEscape = vi.fn(() => false);
+    const { panel, win } = panelSetup({ onEscape });
+    panel.open();
+    const prevent = vi.fn();
+    win.webContents.emit("before-input-event", { preventDefault: prevent }, { type: "keyDown", key: "Escape", isAutoRepeat: true });
+    expect(onEscape).not.toHaveBeenCalled();
+    expect(prevent).toHaveBeenCalledTimes(1);
+    expect(win.isVisible()).toBe(true);
+  });
+
+  it("Esc key-up, other keys, or Esc while hidden never ask onEscape (097)", () => {
+    const onEscape = vi.fn(() => true);
+    const { panel, win } = panelSetup({ onEscape });
+    panel.open();
+    win.webContents.emit("before-input-event", { preventDefault: vi.fn() }, { type: "keyUp", key: "Escape" });
+    win.webContents.emit("before-input-event", { preventDefault: vi.fn() }, { type: "keyDown", key: "Enter" });
+    panel.close();
+    win.webContents.emit("before-input-event", { preventDefault: vi.fn() }, { type: "keyDown", key: "Escape" });
+    expect(onEscape).not.toHaveBeenCalled();
   });
 
   it("the capture hide path keeps a hidden window hidden: show() after a capture does not reveal it", () => {

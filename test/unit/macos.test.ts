@@ -265,10 +265,11 @@ describe("hotkey label", () => {
     const keys = createHotkeys({
       globalShortcut: { register: () => false, unregister() {}, isRegistered: () => false },
       // Shift is labelled too (the append key that showed it is gone, 065).
-      config: { hotkeys: { capture: "Control+Alt+Q", toggle: "Control+Alt+Shift+X", voice: "Control+Alt+V" } },
+      config: { hotkeys: { capture: "Control+Alt+Q", toggle: "Control+Alt+Shift+X", voice: "Control+Alt+V", listen: "Control+Alt+B" } },
       onCapture() {},
       onToggle() {},
       onVoice() {},
+      onListen() {},
       notify,
       label: (accelerator) => hotkeyLabel(accelerator, "darwin"),
     });
@@ -276,7 +277,8 @@ describe("hotkey label", () => {
     expect(notify).toHaveBeenCalledWith("Ctrl+Option+Q is taken by another app. Change hotkeys.capture in config.json.");
     expect(notify).toHaveBeenCalledWith("Ctrl+Option+Shift+X is taken by another app. Change hotkeys.toggle in config.json.");
     expect(notify).toHaveBeenCalledWith("Ctrl+Option+V is taken by another app. Change hotkeys.voice in config.json.");
-    expect(notify).toHaveBeenCalledTimes(3);
+    expect(notify).toHaveBeenCalledWith("Ctrl+Option+B is taken by another app. Change hotkeys.listen in config.json.");
+    expect(notify).toHaveBeenCalledTimes(4);
   });
 });
 

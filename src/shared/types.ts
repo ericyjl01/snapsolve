@@ -6,12 +6,20 @@ export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 /** The panel's look (task 075): fixed dark or light, or whatever macOS uses. */
 export type Theme = "dark" | "light" | "system";
 
+/**
+ * What a chat does (task 089, SPEC Amendment 25): `solve` explains the problem on screen; `answer` drafts the user's
+ * own answer to a question about them from their knowledge folder, in their answer format.
+ */
+export type ChatMode = "solve" | "answer";
+
 export interface Hotkeys {
   capture: string;
   /** Shows or hides the window (task 060). */
   toggle: string;
-  /** Starts a dictated follow-up; pressed again, stops and sends it (task 063). */
+  /** Held, dictates a follow-up from the microphone; let go, sends it (tasks 063, 096). */
   voice: string;
+  /** Held, transcribes what the Mac plays (its sound output); let go, sends it as a heard question (task 098). */
+  listen: string;
 }
 
 /** `<data>/config.json` (SPEC §6.1). Loaded and validated by `src/main/config.ts`. */
@@ -30,6 +38,10 @@ export interface Config {
   theme: Theme;
   /** How see-through the window's ground is, in percent: 0, 10, … 90 (task 090, Amendments 23, 24). */
   transparency: number;
+  /** The mode new chats start in: the title bar's Solve | Answer toggle (task 089, Amendment 25). */
+  mode: ChatMode;
+  /** Answer mode's knowledge folder: absolute, or under the home folder as `~/…`; null → `<data>/knowledge` (089). */
+  knowledgeDir: string | null;
 }
 
 /** `new`: created, no turn started yet. */
@@ -53,6 +65,8 @@ export type UserTurn =
       text: string;
       /** Dictated with the voice hotkey or a mic button, not typed (task 063); the card shows a mic mark. */
       voice?: true;
+      /** Heard from what the Mac played, with the listen hotkey (task 098); the card shows a speaker mark. Never with `voice`. */
+      heard?: true;
     };
 
 export interface AssistantTurn {
@@ -94,12 +108,26 @@ export interface Thread {
   turns: Turn[];
   /** Set when the first turn's transcript could not be adopted: the next turn takes the resume fallback. */
   transcriptMissing?: boolean;
+  /** `answer`: an answer-mode chat (task 089), for its whole life. Absent (or `solve`): a solve chat, as before 089. */
+  mode?: ChatMode;
   /**
    * Set only on a permission card: a panel-only entry (never saved) whose one errored turn says what to do. The macOS
    * Screen Recording card has `prompted`, which picks its buttons (`screenRecordingCard`); a voice card names the
    * permission voice was refused, or that the speech helper failed (`voicePermissionCard`, task 063).
    */
   permission?: { prompted: boolean } | { voice: VoiceCardKind };
+  /**
+   * Panel-only, never saved (099): the questions asked while this chat was answering, waiting their turn in the order
+   * asked. Each leaves the list when its turn starts (its saved user turn then shows it). Absent when none wait.
+   */
+  queued?: QueuedQuestion[];
+}
+
+/** A question waiting behind a chat's running answer (099), with its dictated or heard mark. */
+export interface QueuedQuestion {
+  text: string;
+  voice?: true;
+  heard?: true;
 }
 
 /** The permission a dictation was refused (task 063). */
@@ -114,8 +142,10 @@ export type VoiceCardKind = VoiceDenial | "failed";
  */
 export type VoiceState =
   | { state: "idle"; note?: string }
-  | { state: "listening"; text: string; level: number; key: string }
-  | { state: "stopping"; text: string; key: string };
+  /** `hold`: letting go sends (096); false only for a voice key with no modifier to watch, pressed again to send. */
+  /** `mac`: listening to what the Mac plays (the listen hotkey, 098), not the microphone. */
+  | { state: "listening"; text: string; level: number; key: string; hold: boolean; mac?: true }
+  | { state: "stopping"; text: string; key: string; mac?: true };
 
 /** main → renderer: a streamed chunk of answer text. */
 export interface AnswerDelta {

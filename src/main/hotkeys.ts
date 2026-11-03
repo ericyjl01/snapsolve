@@ -1,14 +1,13 @@
-// Global hotkeys (SPEC §1.1, Amendments 10–11): capture, show/hide (task 060) and voice (task 063) from config, capture
-// debounced at 400 ms, a
-// notification naming the key and its config field when registration fails, pause/resume, and re-registration after
-// system resume.
+// Global hotkeys (SPEC §1.1, Amendments 10–11, 29): capture, show/hide (task 060), voice (task 063) and listen (task
+// 098) from config, capture debounced at 400 ms, a notification naming the key and its config field when registration
+// fails, pause/resume, and re-registration after system resume.
 import type { Hotkeys } from "../shared/types";
 import type { Logger } from "./log";
 
 export const CAPTURE_DEBOUNCE_MS = 400;
 
 type Name = keyof Hotkeys;
-const NAMES: readonly Name[] = ["capture", "toggle", "voice"];
+const NAMES: readonly Name[] = ["capture", "toggle", "voice", "listen"];
 
 export interface HotkeysDeps {
   /** Electron's `globalShortcut`. */
@@ -21,8 +20,10 @@ export interface HotkeysDeps {
   onCapture: () => void;
   /** Shows or hides the window. */
   onToggle: () => void;
-  /** Starts a dictation; pressed again, stops and sends it (voice.ts decides). */
+  /** The voice key went down (no key-up exists here): voice.ts starts a dictation; the speech helper reports the release (096). */
   onVoice: () => void;
+  /** The listen key went down (098): voice.ts starts listening to the Mac; the helper reports the release, as for voice. */
+  onListen: () => void;
   /** Shows a tray notification. */
   notify: (message: string) => void;
   /** How an accelerator is named to the user (macos.ts `hotkeyLabel`); default: as configured. */
@@ -35,6 +36,7 @@ export interface HotkeyStatus {
   capture: boolean;
   toggle: boolean;
   voice: boolean;
+  listen: boolean;
   paused: boolean;
 }
 
@@ -64,6 +66,7 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
     },
     toggle: () => run("toggle", deps.onToggle),
     voice: () => run("voice", deps.onVoice),
+    listen: () => run("listen", deps.onListen),
   };
 
   function run(name: Name, fn: () => void): void {
@@ -127,6 +130,7 @@ export function createHotkeys(deps: HotkeysDeps): HotkeysControl {
       capture: !paused && isRegistered("capture"),
       toggle: !paused && isRegistered("toggle"),
       voice: !paused && isRegistered("voice"),
+      listen: !paused && isRegistered("listen"),
       paused,
     }),
   };

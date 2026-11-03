@@ -2,11 +2,11 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULTS, loadConfig, saveTheme, saveTransparency } from "../../src/main/config";
+import { DEFAULTS, loadConfig, saveMode, saveTheme, saveTransparency } from "../../src/main/config";
 
 const SPEC_DEFAULTS = {
   // No append key (065): a capture continues the current thread. Voice (063): dictate a follow-up.
-  hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V" },
+  hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V", listen: "Control+Alt+B" },
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -20,6 +20,10 @@ const SPEC_DEFAULTS = {
   theme: "dark",
   // 090 (Amendments 23, 24): how see-through the window's ground is, in percent.
   transparency: 20,
+  // 089 (Amendment 25): the mode new chats start in (the title bar toggle), and answer mode's knowledge folder
+  // (null → <data>/knowledge).
+  mode: "solve",
+  knowledgeDir: null,
 };
 
 let dir: string;
@@ -64,7 +68,7 @@ describe("loadConfig", () => {
     const before = await snapshot();
     const r = await loadConfig(file);
     expect(r.warnings).toEqual([]);
-    expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+Q", toggle: "Control+Alt+X", voice: "Control+Alt+V" });
+    expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+Q", toggle: "Control+Alt+X", voice: "Control+Alt+V", listen: "Control+Alt+B" });
     expect(await snapshot()).toEqual(before);
   });
 
@@ -113,7 +117,7 @@ describe("loadConfig", () => {
 
   it("a valid file is honored and left untouched", async () => {
     const custom = {
-      hotkeys: { capture: "CommandOrControl+Shift+Space", toggle: "Alt+F8", voice: "Alt+F9" },
+      hotkeys: { capture: "CommandOrControl+Shift+Space", toggle: "Alt+F8", voice: "Alt+F9", listen: "Alt+F10" },
       model: "claude-opus-5-5[1m]",
       effort: "max",
       panelWidth: 500,
@@ -125,6 +129,8 @@ describe("loadConfig", () => {
       timeoutSec: 300,
       theme: "light",
       transparency: 50,
+      mode: "answer",
+      knowledgeDir: "~/resumes/master",
     };
     await writeConfig(custom);
     const before = await snapshot();
@@ -141,7 +147,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       model: "sonnet",
-      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T", voice: "Control+Alt+V" },
+      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T", voice: "Control+Alt+V", listen: "Control+Alt+B" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -197,7 +203,7 @@ describe("loadConfig", () => {
     expect(r.config).toEqual({
       ...SPEC_DEFAULTS,
       panelWidth: 500,
-      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T", voice: "Control+Alt+V" },
+      hotkeys: { capture: "Control+Alt+C", toggle: "Control+Alt+T", voice: "Control+Alt+V", listen: "Control+Alt+B" },
     });
     expect(await snapshot()).toEqual(before);
   });
@@ -243,7 +249,7 @@ describe("loadConfig", () => {
       await writeConfig({ hotkeys: { capture: "Control+Alt+W", append } });
       const before = await snapshot();
       const r = await loadConfig(file);
-      expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+W", toggle: "Control+Alt+X", voice: "Control+Alt+V" });
+      expect(r.config.hotkeys).toEqual({ capture: "Control+Alt+W", toggle: "Control+Alt+X", voice: "Control+Alt+V", listen: "Control+Alt+B" });
       expect(r.config.hotkeys).not.toHaveProperty("append");
       expect(r.warnings).toEqual([expect.stringMatching(/hotkeys\.append.*no longer used/)]);
       expect(await snapshot()).toEqual(before);
@@ -286,10 +292,42 @@ describe("loadConfig", () => {
     expect(await snapshot()).toEqual(before);
   });
 
+  it("listen hotkey default and validation: hotkeys.listen defaults to Control+Alt+B; a good value is honored (098)", async () => {
+    expect(DEFAULTS.hotkeys.listen).toBe("Control+Alt+B");
+    await writeConfig({ hotkeys: { listen: "Control+Shift+L" } });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.hotkeys).toEqual({ ...SPEC_DEFAULTS.hotkeys, listen: "Control+Shift+L" });
+  });
+
+  it.each(["", "B", "Shift+B", "Control+Alt+Nope", null, 3])(
+    "bad hotkeys.listen %j → its default + one warning naming hotkeys.listen, file untouched (098)",
+    async (listen) => {
+      await writeConfig({ hotkeys: { listen } });
+      const before = await snapshot();
+      const r = await loadConfig(file);
+      expect(r.config.hotkeys).toEqual(SPEC_DEFAULTS.hotkeys);
+      expect(r.warnings).toHaveLength(1);
+      expect(r.warnings[0]).toContain("hotkeys.listen");
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
+  it("a hotkeys value that is not an object names all four keys in its warning (098)", async () => {
+    await writeConfig({ hotkeys: "Control+Alt+B" });
+    const r = await loadConfig(file);
+    expect(r.config.hotkeys).toEqual(SPEC_DEFAULTS.hotkeys);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain("an object with capture, toggle, voice and listen");
+  });
+
   it.each([
     [{ capture: "Control+Alt+W", toggle: "alt+ctrl+w" }, "hotkeys.capture", "hotkeys.toggle"],
     [{ capture: "Control+Alt+V" }, "hotkeys.capture", "hotkeys.voice"],
     [{ toggle: "Control+Alt+W", voice: "Alt+Control+W" }, "hotkeys.toggle", "hotkeys.voice"],
+    // 098: the listen key clashes like the others.
+    [{ voice: "Control+Alt+B" }, "hotkeys.voice", "hotkeys.listen"],
+    [{ capture: "Control+Alt+K", listen: "ctrl+alt+k" }, "hotkeys.capture", "hotkeys.listen"],
   ])("toggle the same key as another hotkey %j → defaults for all + one warning naming both", async (hotkeys, a, b) => {
     await writeConfig({ hotkeys });
     const r = await loadConfig(file);
@@ -512,5 +550,92 @@ describe("saveTheme (077)", () => {
     await writeConfig({ theme: "dark" });
     await saveTheme(file, "light");
     expect((await loadConfig(file)).config.theme).toBe("light");
+  });
+});
+
+// 089 (Amendment 25): the title bar's Solve | Answer toggle sets the mode new chats start in.
+describe("mode (089)", () => {
+  it("defaults to solve", () => {
+    expect(DEFAULTS.mode).toBe("solve");
+  });
+
+  it.each(["solve", "answer"])("%s is accepted without a warning", async (mode) => {
+    await writeConfig({ mode });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config).toEqual({ ...SPEC_DEFAULTS, mode });
+  });
+
+  it.each([["interview"], [""], [1], [null]])("%j falls back to solve with one warning naming both modes", async (mode) => {
+    await writeConfig({ mode });
+    const r = await loadConfig(file);
+    expect(r.config.mode).toBe("solve");
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toBe(`"mode" must be one of solve, answer (got ${JSON.stringify(mode)}); using "solve"`);
+  });
+
+  it("an existing file without mode gets solve, no warning, and is not rewritten", async () => {
+    await writeConfig({ model: "opus", theme: "light" });
+    const before = await snapshot();
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.mode).toBe("solve");
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
+// 089 (Amendment 25): answer mode's knowledge folder; null → <data>/knowledge (resolved in knowledge.ts).
+describe("knowledgeDir (089)", () => {
+  it("defaults to null", () => {
+    expect(DEFAULTS.knowledgeDir).toBeNull();
+  });
+
+  it.each([[path.join(os.tmpdir(), "my-knowledge")], ["~/resumes/master"], ["~"]])("%s is kept as written, without a warning", async (knowledgeDir) => {
+    await writeConfig({ knowledgeDir });
+    const r = await loadConfig(file);
+    expect(r.warnings).toEqual([]);
+    expect(r.config.knowledgeDir).toBe(knowledgeDir);
+  });
+
+  it.each([["resumes/master"], ["~resumes"], [""], [42]])("%j falls back to null with one warning", async (knowledgeDir) => {
+    await writeConfig({ knowledgeDir });
+    const r = await loadConfig(file);
+    expect(r.config.knowledgeDir).toBeNull();
+    expect(r.warnings).toEqual([
+      `"knowledgeDir" must be null, an absolute path or a path starting with ~/ (got ${JSON.stringify(knowledgeDir)}); using null`,
+    ]);
+  });
+});
+
+describe("saveMode (089)", () => {
+  it("rewrites only mode: other keys and values (unknown keys too) stay as they are", async () => {
+    const original = { model: "sonnet", theme: "light", knowledgeDir: "~/resumes/master", myNote: "keep me", mode: "solve" };
+    await writeConfig(original);
+    expect(await saveMode(file, "answer")).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ ...original, mode: "answer" });
+    expect(Object.keys(JSON.parse(await readFile(file, "utf8")))).toEqual(Object.keys(original));
+    expect(await readdir(dir)).toEqual(["config.json"]);
+  });
+
+  it("adds mode to a config.json that has none; a missing file gets the defaults plus it", async () => {
+    await writeConfig({ model: "opus" });
+    expect(await saveMode(file, "answer")).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ model: "opus", mode: "answer" });
+    await rm(file);
+    expect(await saveMode(file, "answer")).toEqual({ ok: true });
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ ...SPEC_DEFAULTS, mode: "answer" });
+  });
+
+  it("malformed JSON is left untouched and an error is returned (no throw)", async () => {
+    await writeConfig("{ not json");
+    const before = await snapshot();
+    const result = await saveMode(file, "answer");
+    expect(result.ok).toBe(false);
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("the saved mode is what loadConfig then reads", async () => {
+    await saveMode(file, "answer");
+    expect((await loadConfig(file)).config.mode).toBe("answer");
   });
 });

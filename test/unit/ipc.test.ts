@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { IPC, PRELOAD_CHANNELS } from "../../src/shared/ipc";
 
 describe("IPC contract", () => {
-  it("maps exactly the sixteen preload functions (SPEC §4.4 + Amendments 2, 9, 10, 11 and 15)", () => {
+  it("maps exactly the eighteen preload functions (SPEC §4.4 + Amendments 2, 9, 10, 11, 15, 25 and 27)", () => {
     expect(Object.keys(PRELOAD_CHANNELS).sort()).toEqual(
       [
         "onDelta",
@@ -18,11 +18,20 @@ describe("IPC contract", () => {
         "openScreenRecordingSettings",
         "relaunch",
         "onVoice",
-        "toggleVoice",
+        "holdVoice",
         "openVoiceSettings",
         "openThread",
+        "getMode",
+        "setMode",
       ].sort(),
     );
+  });
+
+  it("the Solve | Answer toggle is two calls: mode:get and mode:set (089)", () => {
+    expect(PRELOAD_CHANNELS.getMode).toBe("mode:get");
+    expect(PRELOAD_CHANNELS.setMode).toBe("mode:set");
+    expect(IPC.modeGet).toBe("mode:get");
+    expect(IPC.modeSet).toBe("mode:set");
   });
 
   it("Copy is gone and the × hides the window instead (061)", () => {
@@ -37,10 +46,18 @@ describe("IPC contract", () => {
     expect(Object.values(IPC)).toContain("thread:new");
   });
 
-  it("voice is one event and two argument-free calls: voice:state, voice:toggle, settings:openVoice (063)", () => {
+  it("voice is one event and two calls: voice:state, voice:hold (the mic held or let go, 096), settings:openVoice (063)", () => {
     expect(PRELOAD_CHANNELS.onVoice).toBe("voice:state");
-    expect(PRELOAD_CHANNELS.toggleVoice).toBe("voice:toggle");
+    expect(PRELOAD_CHANNELS.holdVoice).toBe("voice:hold");
     expect(PRELOAD_CHANNELS.openVoiceSettings).toBe("settings:openVoice");
+    // The toggle is gone (096): the mic buttons are held, as the voice key is.
+    expect(Object.keys(PRELOAD_CHANNELS)).not.toContain("toggleVoice");
+    expect(Object.values(IPC)).not.toContain("voice:toggle");
+  });
+
+  it("queued questions (099) add no channel: the list rides on the threads threads:changed and answer:done already carry", () => {
+    expect(Object.keys(PRELOAD_CHANNELS)).toHaveLength(18);
+    expect(Object.values(IPC).filter((c) => c.includes("queue"))).toEqual([]);
   });
 
   it("choosing a chat is one call on thread:open (078)", () => {

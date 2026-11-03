@@ -12,6 +12,8 @@ import {
   buildFallbackMessage,
   buildUserMessage,
   createRunner,
+  ANSWER_APPEND_TEXT,
+  ANSWER_NEW_TEXT,
   APPEND_TEXT,
   NEW_TEXT,
   type RunnerEvent,
@@ -23,8 +25,8 @@ import {
   withLoginShellPath,
 } from "../../src/main/runner";
 import { createStore, type Store } from "../../src/main/store";
-import { userMessage } from "../../src/shared/errors";
-import type { Thread } from "../../src/shared/types";
+import { SnapsolveError, userMessage } from "../../src/shared/errors";
+import type { AssistantTurn, Thread } from "../../src/shared/types";
 
 const SID = "0b8f6a3c-1d2e-4f50-9a6b-7c8d9e0f1a2b";
 const PROMPT = 'You are snapsolve.\nUse "Markdown" & $math$; never <html>.';
@@ -701,6 +703,368 @@ describe("timeout escalation: a timed-out claude never outlives its turn", () =>
   });
 });
 
+// ── stop (097): Esc stops the chat's running answer ──────────────────────────────────────────────────
+
+/**
+ * Prints init and one text delta (`text`), then waits. Records every kill; on a kill it first prints `after` (text that
+ * arrives too late) when given, then closes `exitAfter(signal)` ms later, or never when null.
+ */
+class StreamingChild extends FakeChild {
+  signals: string[] = [];
+  constructor(
+    sid: string,
+    text: string,
+    private readonly exitAfter: (signal: string) => number | null,
+    private readonly after?: string,
+  ) {
+    super();
+    setImmediate(() => {
+      this.stdout.write(`${JSON.stringify({ type: "system", subtype: "init", session_id: sid, apiKeySource: "none", model: "claude-opus-5-5" })}\n`);
+      // "" = still thinking: no text yet.
+      if (text) this.stdout.write(`${JSON.stringify(textDelta(text))}\n`);
+    });
+  }
+  override kill(signal?: string): boolean {
+    const s = signal ?? "SIGTERM";
+    this.signals.push(s);
+    if (this.after !== undefined) this.stdout.write(`${JSON.stringify(textDelta(this.after))}\n`);
+    const delay = this.exitAfter(s);
+    if (delay !== null) {
+      setTimeout(() => {
+        this.stdout.end();
+        this.stderr.end();
+        this.emit("close", null, s);
+      }, delay);
+    }
+    return true;
+  }
+}
+
+function textDelta(text: string) {
+  return { type: "stream_event", event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text } } };
+}
+
+describe("stop (097): Esc stops the chat's running answer", () => {
+  const STOPPED = "Stopped.";
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  async function until(check: () => boolean, ms = 3_000): Promise<void> {
+    const end = Date.now() + ms;
+    while (!check()) {
+      if (Date.now() > end) throw new Error("timed out waiting");
+      await new Promise<void>((r) => setImmediate(r));
+    }
+  }
+  const deltasFor = (events: RunnerEvent[], threadId: string) =>
+    events.filter((e): e is Extract<RunnerEvent, { type: "delta" }> => e.type === "delta" && e.threadId === threadId).map((e) => e.text);
+  const errorsFor = (events: RunnerEvent[], threadId: string) =>
+    events.filter((e): e is Extract<RunnerEvent, { type: "error" }> => e.type === "error" && e.threadId === threadId);
+
+  /** The first `streaming` spawns stream and wait (`make(sid)`); every later spawn answers normally. */
+  function stoppable(make: (sid: string) => StreamingChild, over: Partial<Parameters<typeof createRunner>[0]> = {}, streaming = 1) {
+    let n = 0;
+    const children: StreamingChild[] = [];
+    const made = makeRunner({
+      stopGraceMs: 100,
+      ...over,
+      spawn: ((file: string, args: string[], options: SpawnCall["options"]) => {
+        const sid = args[args.indexOf("--session-id") + 1];
+        if (n++ < streaming) {
+          const child = make(sid);
+          children.push(child);
+          calls.push({ file, args, options, sessionsDirExisted: true, child });
+          return child;
+        }
+        const child = new FakeChild();
+        const call = { file, args, options, sessionsDirExisted: true, child };
+        calls.push(call);
+        child.script(okLines(call, "because"));
+        return child;
+      }) as never,
+    });
+    return { ...made, children };
+  }
+
+  it("stop on a running turn: SIGTERM, the turn saved as errored `stopped` with the text streamed so far, status error, an error event with retry", async () => {
+    const { runner, events, children } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0));
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    expect(runner.stop(t.id)).toBe(true);
+    expect(await outcome).toEqual({ ok: false, kind: "stopped", message: STOPPED });
+    expect(children[0].signals).toEqual(["SIGTERM"]);
+    const saved = await store.getThread(t.id);
+    expect(saved.status).toBe("error");
+    expect(saved.turns).toEqual([
+      { role: "user", kind: "screenshot", file: "001.png" },
+      {
+        role: "assistant",
+        text: "x = ",
+        durationMs: expect.any(Number),
+        ttftMs: expect.any(Number),
+        costUsd: null,
+        isError: true,
+        errorKind: "stopped",
+        errorMessage: STOPPED,
+        model: "claude-opus-5-5",
+      },
+    ]);
+    expect(errorsFor(events, t.id)).toEqual([{ type: "error", threadId: t.id, kind: "stopped", message: STOPPED, retry: true, thread: saved }]);
+  });
+
+  it("text that arrives after the stop is neither streamed nor kept", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 20, "4 (too late)"));
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    await outcome;
+    expect(deltasFor(events, t.id)).toEqual(["x = "]);
+    const last = (await store.getThread(t.id)).turns.at(-1) as AssistantTurn;
+    expect(last.text).toBe("x = ");
+  });
+
+  it("a claude that ignores SIGTERM gets SIGKILL after the stop grace (not the 5 s timeout grace); still stopped; the queue moves on", async () => {
+    const { runner, events, children } = stoppable(
+      (sid) => new StreamingChild(sid, "x = ", (s) => (s === "SIGKILL" ? 0 : null)),
+      { config: { maxConcurrent: 1, timeoutSec: 30, allowApiKey: false }, stopGraceMs: 50 },
+    );
+    const a = await newThread();
+    const b = await newThread();
+    const oa = runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    const ob = runner.enqueue(b.t.id, { kind: "new", screenshot: b.shot.file });
+    await until(() => deltasFor(events, a.t.id).length === 1);
+    const stoppedAt = Date.now();
+    runner.stop(a.t.id);
+    expect(await oa).toMatchObject({ ok: false, kind: "stopped" });
+    expect(Date.now() - stoppedAt).toBeLessThan(2_000);
+    expect(children[0].signals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect((await ob).ok).toBe(true);
+  });
+
+  it("with the default stop grace, a claude that ignores SIGTERM gets SIGKILL about 1 s after the stop (not the 5 s timeout grace)", async () => {
+    const { runner, events, children } = stoppable((sid) => new StreamingChild(sid, "x = ", (s) => (s === "SIGKILL" ? 0 : null)), {
+      stopGraceMs: undefined,
+    });
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    const stoppedAt = Date.now();
+    runner.stop(t.id);
+    await sleep(800);
+    expect(children[0].signals).toEqual(["SIGTERM"]);
+    expect(await outcome).toMatchObject({ ok: false, kind: "stopped" });
+    const ms = Date.now() - stoppedAt;
+    expect(children[0].signals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect(ms).toBeGreaterThanOrEqual(950);
+    expect(ms).toBeLessThan(2_500);
+  });
+
+  it("a stopped claude that prints an error result on its way out is still stopped, without asking claude auth status", async () => {
+    const checkAuth = vi.fn(async () => ({ kind: "ok" as const, loggedIn: false }) as never);
+    class ErrorOnStop extends StreamingChild {
+      override kill(signal?: string): boolean {
+        this.stdout.write(`${JSON.stringify({ type: "result", subtype: "error_during_execution", is_error: true, errors: ["interrupted"] })}\n`);
+        return super.kill(signal);
+      }
+    }
+    const { runner, events } = stoppable((sid) => new ErrorOnStop(sid, "x = ", () => 10), { checkAuth });
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    expect(await outcome).toEqual({ ok: false, kind: "stopped", message: STOPPED });
+    expect(checkAuth).not.toHaveBeenCalled();
+  });
+
+  it("a resumed turn stopped before any text, whose claude then says No conversation found, is stopped: no fallback session is started", async () => {
+    let n = 0;
+    let resumed: StreamingChild | null = null;
+    class NoConversationOnStop extends StreamingChild {
+      override kill(signal?: string): boolean {
+        this.stderr.write("No conversation found with session ID\n");
+        return super.kill(signal);
+      }
+    }
+    const { runner, events } = makeRunner({
+      stopGraceMs: 100,
+      spawn: ((file: string, args: string[], options: SpawnCall["options"]) => {
+        n++;
+        if (n === 1) {
+          // The first turn answers and its transcript is adopted, so the next one resumes.
+          const child = new FakeChild();
+          const call = { file, args, options, sessionsDirExisted: true, child };
+          calls.push(call);
+          const sid = args[args.indexOf("--session-id") + 1];
+          const dir = path.join(root, "projects", "C--snapsolve-sessions");
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(path.join(dir, `${sid}.jsonl`), `${JSON.stringify({ type: "user", sessionId: sid })}\n`);
+          child.script(okLines(call, "x = 4"));
+          return child;
+        }
+        // Thinking: init only, no text yet.
+        const child = new NoConversationOnStop("resumed", "", () => 0);
+        if (n === 2) resumed = child;
+        calls.push({ file, args, options, sessionsDirExisted: true, child });
+        return child;
+      }) as never,
+    });
+    const { t, shot } = await newThread();
+    expect((await runner.enqueue(t.id, { kind: "new", screenshot: shot.file })).ok).toBe(true);
+    const outcome = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    await until(() => resumed !== null && events.some((e) => e.type === "init" && e.sessionId === "resumed"));
+    expect(calls[1].args).toContain("--resume");
+    runner.stop(t.id);
+    expect(await outcome).toMatchObject({ ok: false, kind: "stopped" });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("a claude that never closes, even after SIGKILL, is settled at the SIGKILL: stopped", async () => {
+    const { runner, events, children } = stoppable((sid) => new StreamingChild(sid, "x = ", () => null), { stopGraceMs: 50 });
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    expect(await outcome).toMatchObject({ ok: false, kind: "stopped" });
+    expect(children[0].signals).toEqual(["SIGTERM", "SIGKILL"]);
+  });
+
+  it("stop again while it is stopping: still true, one SIGTERM, one error", async () => {
+    const { runner, events, children } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 30));
+    const { t, shot } = await newThread();
+    const outcome = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    expect(runner.stop(t.id)).toBe(true);
+    expect(runner.stop(t.id)).toBe(true);
+    await outcome;
+    expect(children[0].signals).toEqual(["SIGTERM"]);
+    expect(errorsFor(events, t.id)).toHaveLength(1);
+  });
+
+  it("stop with nothing running: false, no event; stop on another chat leaves the running one alone", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0));
+    const idle = await newThread();
+    expect(runner.stop(idle.t.id)).toBe(false);
+    expect(runner.stop("00000000-0000-4000-8000-000000000000")).toBe(false);
+    expect(events).toEqual([]);
+
+    const a = await newThread();
+    const outcome = runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    await until(() => deltasFor(events, a.t.id).length === 1);
+    expect(runner.stop(idle.t.id)).toBe(false);
+    await sleep(50);
+    expect(errorsFor(events, a.t.id)).toEqual([]);
+    runner.stop(a.t.id);
+    await outcome;
+  });
+
+  it("a stop after the answer finished is false and changes nothing", async () => {
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    expect((await runner.enqueue(t.id, { kind: "new", screenshot: shot.file })).ok).toBe(true);
+    expect(runner.stop(t.id)).toBe(false);
+    expect((await store.getThread(t.id)).status).toBe("done");
+  });
+
+  it("a chat only waiting in the queue (another chat holds the one slot) is not stopped: false, it still runs after", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0), {
+      config: { maxConcurrent: 1, timeoutSec: 30, allowApiKey: false },
+    });
+    const a = await newThread();
+    const b = await newThread();
+    const oa = runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    const ob = runner.enqueue(b.t.id, { kind: "new", screenshot: b.shot.file });
+    await until(() => deltasFor(events, a.t.id).length === 1);
+    expect(runner.stop(b.t.id)).toBe(false);
+    runner.stop(a.t.id);
+    expect(await oa).toMatchObject({ ok: false, kind: "stopped" });
+    expect((await ob).ok).toBe(true);
+  });
+
+  it("a question waiting behind the stopped turn in the same chat still runs after it (a stop drops nothing queued)", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0));
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    const second = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    expect(await first).toMatchObject({ ok: false, kind: "stopped" });
+    expect((await second).ok).toBe(true);
+    const shape = (turn: Thread["turns"][number]) =>
+      turn.role === "user" ? `user:${turn.kind === "text" ? turn.text : turn.file}` : turn.isError ? `error:${turn.errorKind}` : `answer:${turn.text}`;
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "error:stopped", "user:why?", "answer:because"]);
+  });
+
+  it("a stop while the turn is being prepared (before claude starts) stops it there: no claude, stopped with no text", async () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    const answerSystemPrompt = vi.fn(async () => {
+      await gate;
+      return "ANSWER PROMPT";
+    });
+    const { runner, events } = makeRunner({ answerSystemPrompt });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const outcome = runner.enqueue(t.id, { kind: "followUp", text: "Walk me through a project." });
+    await until(() => answerSystemPrompt.mock.calls.length === 1);
+    expect(runner.stop(t.id)).toBe(true);
+    open();
+    expect(await outcome).toEqual({ ok: false, kind: "stopped", message: STOPPED });
+    expect(calls).toHaveLength(0);
+    const last = (await store.getThread(t.id)).turns.at(-1) as AssistantTurn;
+    expect(last).toMatchObject({ role: "assistant", text: "", isError: true, errorKind: "stopped", errorMessage: STOPPED });
+    expect(errorsFor(events, t.id)).toEqual([expect.objectContaining({ kind: "stopped", retry: true })]);
+  });
+
+  it("the stopped turn's retry target re-runs the same question in place; Retry answers it", async () => {
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "x = ", () => 0));
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    await first;
+    expect(retryTarget(await store.getThread(t.id))?.request).toEqual({ kind: "new", screenshot: "001.png" });
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    const saved = await store.getThread(t.id);
+    expect(saved.status).toBe("done");
+    expect(saved.turns.map((turn) => (turn.role === "user" ? "user" : turn.isError ? turn.errorKind : turn.text))).toEqual(["user", "stopped", "because"]);
+  });
+
+  it("a follow-up after a stopped answer continues the chat: the session is resumed when its transcript was adopted", async () => {
+    const { runner, events } = stoppable((sid) => {
+      // claude had written the session's transcript before it was stopped.
+      const dir = path.join(root, "projects", "C--snapsolve-sessions");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, `${sid}.jsonl`), `${JSON.stringify({ type: "user", sessionId: sid })}\n`);
+      return new StreamingChild(sid, "x = ", () => 0);
+    });
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    await first;
+    const stopped = await store.getThread(t.id);
+    expect(stopped.transcriptPath).not.toBeNull();
+    expect(await runner.enqueue(t.id, { kind: "followUp", text: "why?" })).toMatchObject({ ok: true });
+    expect(calls[1].args.slice(-2)).toEqual(["--resume", stopped.transcriptPath]);
+    expect(JSON.parse(calls[1].child.written)).toEqual(buildUserMessage("followUp", [], "why?"));
+  });
+
+  it("no answer text, question or prompt in the log lines of a stop; runner.stop is logged", async () => {
+    const file = path.join(root, "data", "logs", "snapsolve.log");
+    const log = createLogger(file);
+    const { runner, events } = stoppable((sid) => new StreamingChild(sid, "SECRET-PARTIAL", () => 0), { log });
+    const t = await store.createThread({ model: "opus", effort: "high" });
+    const outcome = runner.enqueue(t.id, { kind: "followUp", text: "SECRET-QUESTION" });
+    await until(() => deltasFor(events, t.id).length === 1);
+    runner.stop(t.id);
+    await outcome;
+    await log.flush();
+    const text = await readFile(file, "utf8");
+    expect(text).not.toContain("SECRET");
+    expect(text).not.toContain(PROMPT);
+    expect(text.split("\n").filter(Boolean).map((l) => JSON.parse(l).event)).toContain("runner.stop");
+  });
+});
+
 // ── macOS login-shell PATH (028) ─────────────────────────────────────────────────────────────────────
 
 describe("retry (050): re-runs the failed turn without adding its user turn again", () => {
@@ -773,6 +1137,47 @@ describe("retry (050): re-runs the failed turn without adding its user turn agai
     const saved = await store.getThread(t.id);
     expect(saved.turns.filter((turn) => turn.role === "user" && turn.kind === "text")).toEqual([
       { role: "user", kind: "text", text: "why?", voice: true },
+    ]);
+  });
+
+  it("a question heard from the Mac (098) is saved as a text turn marked heard and sent as plain text", async () => {
+    scripted("ok:x = 4", "ok:because");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect(await runner.enqueue(t.id, { kind: "followUp", text: "tell me about a project you led", heard: true })).toMatchObject({ ok: true });
+    const saved = await store.getThread(t.id);
+    expect(saved.turns[2]).toEqual({ role: "user", kind: "text", text: "tell me about a project you led", heard: true });
+    expect(sentMessage(1)).toEqual(buildFallbackMessage([PNG], ["x = 4"], "tell me about a project you led"));
+  });
+
+  it.each([false, "yes", 1])("a follow-up whose heard mark is %j (not true) is refused without spawning (098)", async (heard) => {
+    const { runner } = makeRunner();
+    const { t } = await newThread();
+    const request = { kind: "followUp", text: "why?", heard } as unknown as Parameters<typeof runner.enqueue>[1];
+    await expect(runner.enqueue(t.id, request)).resolves.toMatchObject({ ok: false });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("a follow-up marked both voice and heard is refused without spawning (098)", async () => {
+    const { runner } = makeRunner();
+    const { t } = await newThread();
+    const request = { kind: "followUp", text: "why?", voice: true, heard: true } as unknown as Parameters<typeof runner.enqueue>[1];
+    await expect(runner.enqueue(t.id, request)).resolves.toMatchObject({ ok: false });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("a failed heard follow-up retried keeps its one user turn and its heard mark (098)", async () => {
+    scripted("ok:x = 4", "fail", "ok:because");
+    const { runner } = makeRunner();
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "why?", heard: true })).ok).toBe(false);
+    expect(retryTarget(await store.getThread(t.id))?.request).toEqual({ kind: "followUp", text: "why?", heard: true });
+    expect(await runner.enqueue(t.id, { kind: "retry" })).toMatchObject({ ok: true });
+    const saved = await store.getThread(t.id);
+    expect(saved.turns.filter((turn) => turn.role === "user" && turn.kind === "text")).toEqual([
+      { role: "user", kind: "text", text: "why?", heard: true },
     ]);
   });
 
@@ -986,6 +1391,129 @@ describe("seeded new thread (051): the 7th append carries the previous thread's 
   });
 });
 
+// 089 (SPEC Amendment 25): an answer-mode chat drafts the user's own answer from their knowledge folder.
+describe("answer mode (089)", () => {
+  const argOf = (call: SpawnCall, flag: string) => call.args[call.args.indexOf(flag) + 1];
+  const texts = (call: SpawnCall) =>
+    (JSON.parse(call.child.written) as { message: { content: { type: string; text?: string }[] } }).message.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text as string);
+
+  it("an answer chat's claude gets answerSystemPrompt() as its system prompt, built again for every turn; a solve chat keeps systemPrompt", async () => {
+    let built = 0;
+    const answerSystemPrompt = vi.fn(async () => `ANSWER PROMPT ${++built}`);
+    const { runner } = makeRunner({ answerSystemPrompt });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    await runner.enqueue(t.id, { kind: "followUp", text: "Walk me through a project." });
+    await runner.enqueue(t.id, { kind: "followUp", text: "Shorter." });
+    const solve = await store.createThread({ model: "opus", effort: "high" });
+    await runner.enqueue(solve.id, { kind: "followUp", text: "What is 2 + 2?" });
+    expect(calls).toHaveLength(3);
+    expect(argOf(calls[0], "--system-prompt")).toBe("ANSWER PROMPT 1");
+    expect(argOf(calls[1], "--system-prompt")).toBe("ANSWER PROMPT 2");
+    expect(argOf(calls[2], "--system-prompt")).toBe(PROMPT);
+    expect(answerSystemPrompt).toHaveBeenCalledTimes(2);
+    // The rest of the SPEC §3.1 flag set is unchanged.
+    expect(calls[0].args.slice(1)).toEqual(
+      buildArgs({ model: "opus", effort: "high", systemPrompt: "ANSWER PROMPT 1", session: { id: t.sessionId } }),
+    );
+  });
+
+  it("a follow-up that resumes an answer chat's owned transcript gets a freshly built answer prompt, not the solve prompt (review 1)", async () => {
+    let n = 0;
+    script = (child, call) => {
+      n++;
+      if (n === 1) {
+        // The first turn's transcript lands in claude's projects dir; the store adopts it into the thread dir.
+        const sid = call.args[call.args.indexOf("--session-id") + 1];
+        const dir = path.join(root, "projects", "C--snapsolve-sessions");
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(path.join(dir, `${sid}.jsonl`), `${JSON.stringify({ type: "user", sessionId: sid })}\n`);
+      }
+      child.script(okLines(call, `answer ${n}`));
+    };
+    let built = 0;
+    const answerSystemPrompt = vi.fn(async () => `ANSWER PROMPT ${++built}`);
+    const { runner } = makeRunner({ answerSystemPrompt });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    await runner.enqueue(t.id, { kind: "followUp", text: "Walk me through a project." });
+    const owned = (await store.getThread(t.id)).transcriptPath;
+    expect(owned).not.toBeNull();
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "Shorter." })).ok).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].args.slice(1)).toEqual(
+      buildArgs({ model: "opus", effort: "high", systemPrompt: "ANSWER PROMPT 2", session: { resume: owned as string } }),
+    );
+    expect(JSON.parse(calls[1].child.written)).toEqual(buildUserMessage("followUp", [], "Shorter."));
+    expect(answerSystemPrompt).toHaveBeenCalledTimes(2);
+  });
+
+  it("a screenshot in an answer chat asks for the user's answer: ANSWER_NEW_TEXT first, ANSWER_APPEND_TEXT after", async () => {
+    const { runner } = makeRunner({ answerSystemPrompt: async () => "A" });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const first = await store.saveScreenshot(t.id, Buffer.from("png1"));
+    await runner.enqueue(t.id, { kind: "new", screenshot: first.file });
+    expect(JSON.parse(calls[0].child.written)).toEqual(buildUserMessage("new", [PNG], ANSWER_NEW_TEXT));
+    const second = await store.saveScreenshot(t.id, Buffer.from("png2"));
+    await runner.enqueue(t.id, { kind: "append", screenshot: second.file });
+    expect(texts(calls[1]).at(-1)?.endsWith(ANSWER_APPEND_TEXT)).toBe(true);
+    expect(texts(calls[1]).join("\n")).not.toContain(APPEND_TEXT);
+    expect(ANSWER_NEW_TEXT).toBe("Draft my answer to the question on this screen.");
+    expect(ANSWER_APPEND_TEXT).toBe("Here is another screenshot. Draft my answer to the question on it.");
+  });
+
+  it("a seeded answer chat (past the screenshot limit) sends the previous answer, then ANSWER_APPEND_TEXT (review 1)", async () => {
+    const { runner } = makeRunner({ answerSystemPrompt: async () => "A" });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const s = await store.saveScreenshot(t.id, Buffer.from("png"));
+    await runner.enqueue(t.id, { kind: "new", screenshot: s.file, seed: "My earlier answer." });
+    expect(JSON.parse(calls[0].child.written)).toEqual(
+      buildUserMessage("new", [PNG], seededQuestion("My earlier answer.", ANSWER_APPEND_TEXT)),
+    );
+    expect(seededQuestion("My earlier answer.", ANSWER_APPEND_TEXT).endsWith(`---\n\n${ANSWER_APPEND_TEXT}`)).toBe(true);
+  });
+
+  it("a solve chat's screenshots are asked as before (NEW_TEXT), even with answer mode wired", async () => {
+    const answerSystemPrompt = vi.fn(async () => "A");
+    const { runner } = makeRunner({ answerSystemPrompt });
+    const { t, shot } = await newThread();
+    await runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    expect(texts(calls[0])).toEqual([NEW_TEXT]);
+    expect(answerSystemPrompt).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["knowledgeUnreadable", "Answer mode can't read the knowledge folder /k (EACCES). Check its permissions, or point knowledgeDir in config.json at another folder."],
+    ["knowledgeTooLarge", "The knowledge folder /k has more than 256 KB of text, answer mode's limit. Remove some files, or point knowledgeDir in config.json at a smaller folder."],
+  ] as const)("%s: the turn fails before claude is started, with the error's own message on the card and Retry", async (kind, message) => {
+    const { runner, events } = makeRunner({
+      answerSystemPrompt: async () => {
+        throw new SnapsolveError(kind, message);
+      },
+    });
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const outcome = await runner.enqueue(t.id, { kind: "followUp", text: "Tell me about a time you learned something fast." });
+    expect(calls).toHaveLength(0);
+    expect(outcome).toEqual({ ok: false, kind, message });
+    const saved = await store.getThread(t.id);
+    expect(saved.status).toBe("error");
+    expect(saved.turns.map((turn) => turn.role)).toEqual(["user", "assistant"]);
+    expect(saved.turns[1]).toMatchObject({ role: "assistant", text: "", isError: true, errorKind: kind, errorMessage: message });
+    expect(events.filter((e) => e.type === "error")).toEqual([
+      { type: "error", threadId: t.id, kind, message, retry: true, thread: saved },
+    ]);
+    expect(retryTarget(saved)).toEqual({ request: { kind: "followUp", text: "Tell me about a time you learned something fast." }, index: 0 });
+  });
+
+  it("an answer chat with answer mode not wired fails as internal, nothing started", async () => {
+    const { runner } = makeRunner();
+    const t = await store.createThread({ model: "opus", effort: "high", mode: "answer" });
+    const outcome = await runner.enqueue(t.id, { kind: "followUp", text: "Why this role?" });
+    expect(calls).toHaveLength(0);
+    expect(outcome).toEqual({ ok: false, kind: "internal", message: userMessage("internal") });
+  });
+});
+
 describe("withLoginShellPath", () => {
   const HOME = "/Users/eric";
   const EXTRAS = ["/opt/homebrew/bin", "/usr/local/bin", "/Users/eric/.local/bin"];
@@ -1081,5 +1609,190 @@ describe("withLoginShellPath", () => {
       { platform: "darwin", home: HOME, execFileSync: shellPrinting("/opt/homebrew/bin") },
     );
     expect(buildEnv(env, false)).toEqual({ PATH: ["/opt/homebrew/bin", "/usr/bin", ...EXTRAS.slice(1)].join(":"), SHELL: "/bin/zsh" });
+  });
+});
+
+// ── queued questions (099): a question asked during an answer waits its turn and is listed until it starts ──────
+
+describe("queued questions (099)", () => {
+  type Queued = Extract<RunnerEvent, { type: "queued" }>;
+  async function until(check: () => boolean, ms = 3_000): Promise<void> {
+    const end = Date.now() + ms;
+    while (!check()) {
+      if (Date.now() > end) throw new Error("timed out waiting");
+      await new Promise<void>((r) => setImmediate(r));
+    }
+  }
+  const queuedFor = (events: RunnerEvent[], threadId: string) =>
+    events.filter((e): e is Queued => e.type === "queued" && e.threadId === threadId).map((e) => e.queued);
+  const shape = (turn: Thread["turns"][number]) =>
+    turn.role === "user"
+      ? `user:${turn.kind === "text" ? turn.text : turn.file}${turn.kind === "text" && turn.voice ? "+voice" : ""}${turn.kind === "text" && turn.heard ? "+heard" : ""}`
+      : turn.isError
+        ? `error:${turn.errorKind}`
+        : `answer:${turn.text}`;
+
+  /**
+   * Every claude waits until the test answers it: `answer(i)` scripts spawn i's answer ("a<i>"), `crash(i)` makes it exit
+   * 1 without a result. `spawned()` is how many have started.
+   */
+  function gated(over: Partial<Parameters<typeof createRunner>[0]> = {}) {
+    const children: { child: FakeChild; call: SpawnCall }[] = [];
+    const made = makeRunner({
+      ...over,
+      spawn: ((file: string, args: string[], options: SpawnCall["options"]) => {
+        const child = new FakeChild();
+        const call = { file, args, options, sessionsDirExisted: true, child };
+        calls.push(call);
+        children.push({ child, call });
+        return child;
+      }) as never,
+    });
+    return {
+      ...made,
+      spawned: () => children.length,
+      answer: (i: number) => children[i].child.script(okLines(children[i].call, `a${i}`)),
+      crash: (i: number) => children[i].child.script([], 1),
+    };
+  }
+
+  it("follow-ups asked while the chat runs are listed for it, in order, with their voice or heard mark", async () => {
+    const { runner, events, spawned } = gated();
+    const { t, shot } = await newThread();
+    void runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => spawned() === 1);
+    void runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    void runner.enqueue(t.id, { kind: "followUp", text: "and then?", voice: true });
+    void runner.enqueue(t.id, { kind: "followUp", text: "what did he ask?", heard: true });
+    expect(queuedFor(events, t.id)).toEqual([
+      [{ text: "why?" }],
+      [{ text: "why?" }, { text: "and then?", voice: true }],
+      [{ text: "why?" }, { text: "and then?", voice: true }, { text: "what did he ask?", heard: true }],
+    ]);
+  });
+
+  it("each leaves the list when its turn starts, before its user turn is saved and announced (never shown twice); all run in order", async () => {
+    const { runner, events, spawned, answer } = gated();
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => spawned() === 1);
+    const second = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    const third = runner.enqueue(t.id, { kind: "followUp", text: "and then?", voice: true });
+    answer(0);
+    expect((await first).ok).toBe(true);
+    await until(() => spawned() === 2);
+    // Gone from the list (an event saying so) before the turn event that carries the saved question.
+    const left = events.findIndex((e) => e.type === "queued" && e.threadId === t.id && e.queued.length === 1 && e.queued[0].text === "and then?");
+    const asked = events.findIndex((e) => e.type === "turn" && e.thread.turns.length === 3 && shape(e.thread.turns[2]) === "user:why?");
+    expect(left).toBeGreaterThan(-1);
+    expect(asked).toBeGreaterThan(left);
+    expect((events[left] as Queued).queued).toEqual([{ text: "and then?", voice: true }]);
+    answer(1);
+    expect((await second).ok).toBe(true);
+    await until(() => spawned() === 3);
+    answer(2);
+    expect((await third).ok).toBe(true);
+    expect(queuedFor(events, t.id)).toEqual([
+      [{ text: "why?" }],
+      [{ text: "why?" }, { text: "and then?", voice: true }],
+      [{ text: "and then?", voice: true }],
+      [],
+    ]);
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual([
+      "user:001.png",
+      "answer:a0",
+      "user:why?",
+      "answer:a1",
+      "user:and then?+voice",
+      "answer:a2",
+    ]);
+  });
+
+  it("a stop (097) of the running answer leaves the queued ones listed; they then run in order", async () => {
+    const { runner, events, spawned, answer } = gated();
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => spawned() === 1);
+    const second = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    const third = runner.enqueue(t.id, { kind: "followUp", text: "and then?" });
+    const before = queuedFor(events, t.id).length;
+    expect(before).toBe(2);
+    expect(runner.stop(t.id)).toBe(true);
+    expect(await first).toMatchObject({ ok: false, kind: "stopped" });
+    // The stop itself changes no list: the next change is the first question starting.
+    await until(() => spawned() === 2);
+    expect(queuedFor(events, t.id).slice(before)).toEqual([[{ text: "and then?" }]]);
+    answer(1);
+    expect((await second).ok).toBe(true);
+    await until(() => spawned() === 3);
+    answer(2);
+    expect((await third).ok).toBe(true);
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "error:stopped", "user:why?", "answer:a1", "user:and then?", "answer:a2"]);
+  });
+
+  it("a failure of the running answer leaves the queued ones to run in order", async () => {
+    const { runner, events, spawned, answer, crash } = gated();
+    const { t, shot } = await newThread();
+    const first = runner.enqueue(t.id, { kind: "new", screenshot: shot.file });
+    await until(() => spawned() === 1);
+    const second = runner.enqueue(t.id, { kind: "followUp", text: "why?" });
+    crash(0);
+    expect(await first).toMatchObject({ ok: false, kind: "internal" });
+    await until(() => spawned() === 2);
+    expect(queuedFor(events, t.id)).toEqual([[{ text: "why?" }], []]);
+    answer(1);
+    expect((await second).ok).toBe(true);
+    expect((await store.getThread(t.id)).turns.map(shape)).toEqual(["user:001.png", "error:internal", "user:why?", "answer:a1"]);
+  });
+
+  it("each chat has its own list", async () => {
+    const { runner, events, spawned } = gated();
+    const a = await newThread();
+    const b = await newThread();
+    void runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    void runner.enqueue(b.t.id, { kind: "new", screenshot: b.shot.file });
+    await until(() => spawned() === 2);
+    void runner.enqueue(a.t.id, { kind: "followUp", text: "a?" });
+    void runner.enqueue(b.t.id, { kind: "followUp", text: "b?" });
+    void runner.enqueue(a.t.id, { kind: "followUp", text: "a again?" });
+    expect(queuedFor(events, a.t.id)).toEqual([[{ text: "a?" }], [{ text: "a?" }, { text: "a again?" }]]);
+    expect(queuedFor(events, b.t.id)).toEqual([[{ text: "b?" }]]);
+  });
+
+  it("a screenshot or a retry waiting is not a queued question; neither is a follow-up that starts at once, or one refused", async () => {
+    const { runner, events, spawned, answer } = gated();
+    const { t } = await newThread();
+    // An idle chat: the follow-up starts at once and is never listed.
+    const asked = runner.enqueue(t.id, { kind: "followUp", text: "first?" });
+    await until(() => spawned() === 1);
+    const shot2 = await store.saveScreenshot(t.id, Buffer.from("png2"));
+    const appended = runner.enqueue(t.id, { kind: "append", screenshot: shot2.file });
+    const retried = runner.enqueue(t.id, { kind: "retry" });
+    expect((await runner.enqueue(t.id, { kind: "followUp", text: "  " })).ok).toBe(false);
+    expect(queuedFor(events, t.id)).toEqual([]);
+    answer(0);
+    expect((await asked).ok).toBe(true);
+    await until(() => spawned() === 2);
+    answer(1);
+    expect((await appended).ok).toBe(true);
+    // Nothing to retry after a successful answer.
+    expect((await retried).ok).toBe(false);
+    expect(queuedFor(events, t.id)).toEqual([]);
+  });
+
+  it("a follow-up waiting for a slot (another chat holds the only one) is listed too, and leaves the list when it starts", async () => {
+    const { runner, events, spawned, answer } = gated({ config: { maxConcurrent: 1, timeoutSec: 30, allowApiKey: false } });
+    const a = await newThread();
+    const b = await newThread();
+    const first = runner.enqueue(a.t.id, { kind: "new", screenshot: a.shot.file });
+    await until(() => spawned() === 1);
+    const waiting = runner.enqueue(b.t.id, { kind: "followUp", text: "b?" });
+    expect(queuedFor(events, b.t.id)).toEqual([[{ text: "b?" }]]);
+    answer(0);
+    expect((await first).ok).toBe(true);
+    await until(() => spawned() === 2);
+    expect(queuedFor(events, b.t.id)).toEqual([[{ text: "b?" }], []]);
+    answer(1);
+    expect((await waiting).ok).toBe(true);
   });
 });

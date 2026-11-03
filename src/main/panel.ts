@@ -3,7 +3,8 @@
 // resizes from its edges, not below 280 × 300 (059). It is either shown (`showInactive`, so focus stays in the user's app) or hidden (`win.hide()`:
 // nothing on screen, no tab; 060). Where the user leaves it, and at what size, is saved per display in
 // `<data>/window.json`. It loads the renderer from `snapsolve://app/…` (never file://), serves thumbnails from
-// `snapsolve://thread/<uuid>/<n>.png`, denies window.open and navigation, and hides on Esc.
+// `snapsolve://thread/<uuid>/<n>.png`, denies window.open and navigation, and hides on Esc — unless that Esc stopped an
+// answer being written (task 097, `onEscape`).
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { BrowserWindow, BrowserWindowConstructorOptions, Input, IpcMainInvokeEvent } from "electron";
@@ -247,6 +248,8 @@ export interface PanelDeps {
   physicalSize?: (displayId: number) => PhysicalSize | undefined;
   /** A shown window was hidden (×, Esc, toggle, auto-hide), not the capture hide path: voice stops (task 063). */
   onClose?: () => void;
+  /** Esc with the window focused (097): true when it stopped an answer (the window stays); false → the window hides. */
+  onEscape?: () => boolean;
 }
 
 export interface Panel {
@@ -352,12 +355,20 @@ export function createPanel(deps: PanelDeps): Panel {
     log.warn("panel.navigationPrevented", { scheme: schemeOf(url) });
   });
   wc.on("will-redirect", (event) => event.preventDefault());
-  // Esc while the window has focus (only a focused window gets key input): handled here, no IPC (SPEC Amendment 3).
+  // Esc while the window has focus (only a focused window gets key input): handled here, no IPC (SPEC Amendment 3). It
+  // first stops an answer being written in the chat on screen (097, Amendment 28); with none, it hides the window.
   wc.on("before-input-event", (event, input: Input) => {
-    if (input.type === "keyDown" && input.key === "Escape" && state === "open") {
-      event.preventDefault();
-      close();
+    if (input.type !== "keyDown" || input.key !== "Escape" || state !== "open") return;
+    event.preventDefault();
+    // Esc held down: its repeats must not hide the window right after the first press stopped an answer.
+    if (input.isAutoRepeat) return;
+    let stopped = false;
+    try {
+      stopped = deps.onEscape?.() ?? false;
+    } catch (e) {
+      log.error("panel.escapeFailed", { error: e });
     }
+    if (!stopped) close();
   });
   wc.on("render-process-gone", (_e, details) => log.error("panel.rendererGone", { reason: details.reason }));
 

@@ -47,6 +47,23 @@ describe("userMessage", () => {
     expect(userMessage("voiceFailed")).toBe("Voice input stopped working. Details are in the snapsolve log.");
   });
 
+  it("stopped (097): an answer stopped with Esc says so, in a word", () => {
+    expect(ERROR_KINDS).toContain("stopped");
+    expect(userMessage("stopped")).toBe("Stopped.");
+    expect(new SnapsolveError("stopped").message).toBe("Stopped.");
+  });
+
+  it("answer mode (089): an unreadable knowledge folder, or too much text in it, each say what to do; no material is not an error (Amendment 26)", () => {
+    expect(ERROR_KINDS).toEqual(expect.arrayContaining(["knowledgeUnreadable", "knowledgeTooLarge"]));
+    expect(ERROR_KINDS).not.toContain("knowledgeMissing");
+    expect(userMessage("knowledgeUnreadable")).toBe(
+      "Answer mode can't read the knowledge folder. Check its permissions, or point knowledgeDir in config.json at another folder.",
+    );
+    expect(userMessage("knowledgeTooLarge")).toBe(
+      "The knowledge folder is too large for answer mode. Remove some files, or point knowledgeDir in config.json at a smaller folder.",
+    );
+  });
+
   it("an unknown kind (e.g. from a stale renderer) falls back to the internal message", () => {
     expect(userMessage("noSuchKind" as ErrorKind)).toBe(userMessage("internal"));
   });

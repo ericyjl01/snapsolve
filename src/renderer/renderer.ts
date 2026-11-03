@@ -11,11 +11,15 @@
 // grant shows a permission card instead (SPEC §7.1, Amendment 2): its text and Open System Settings / Relaunch,
 // nothing else; voice's refused Microphone or Speech Recognition does the same with Open System Settings only. While
 // a question is dictated (Amendment 11, task 063) the composer is a listening bar: a red dot, input level bars, the
-// live transcript and how to send or cancel; a dictated question shows with a mic mark.
+// live transcript and how to send or cancel; a dictated question shows with a mic mark. The mic buttons are held to
+// talk (Amendment 27, task 096: hold.ts). The title bar's Solve | Answer
+// toggle (Amendment 25, task 089) shows the mode of the chat on screen, or with none the mode a new chat starts in;
+// switching while a chat is on screen starts a new chat in the other mode (a chat keeps the mode it started in).
 import { continuedNote, screenRecordingCard, userMessage, voicePermissionCard } from "../shared/errors";
 import type { SnapsolveApi } from "../shared/ipc";
-import type { AssistantTurn, Thread, UserTurn, VoiceState } from "../shared/types";
+import type { AssistantTurn, ChatMode, Thread, UserTurn, VoiceState } from "../shared/types";
 import { modelName } from "../shared/models";
+import { bindHold } from "./hold";
 import { renderAnswer } from "./render";
 
 declare global {
@@ -29,6 +33,8 @@ interface Card {
   root: HTMLElement;
   turns: HTMLElement;
   live: HTMLElement;
+  /** The questions waiting behind the answer being written (099), after it. */
+  queue: HTMLElement;
   retry: HTMLButtonElement;
 }
 
@@ -45,6 +51,7 @@ const chatList = document.getElementById("chats") as HTMLElement;
 const scrim = document.getElementById("scrim") as HTMLElement;
 const showChats = document.getElementById("sidebar-show") as HTMLButtonElement;
 const chatTitle = document.getElementById("chat-title") as HTMLElement;
+const modeSwitch = document.getElementById("mode") as HTMLElement;
 /** At this width and wider the sidebar is docked beside the chat; narrower it is an overlay (078). */
 const wide = window.matchMedia("(min-width: 600px)");
 /** At most this tall before the composer scrolls (about five lines). */
@@ -79,6 +86,8 @@ let freshAfter: string | null | undefined;
 let sidebarOpen = wide.matches;
 /** The user closed the sidebar (082): it stays closed through resizes until Show chats. */
 let sidebarClosedByUser = false;
+/** The mode a new chat starts in (config.json `mode`, 089): "solve" until main says otherwise. */
+let newChatMode: ChatMode = "solve";
 
 const BUSY = new Set<Thread["status"]>(["new", "queued", "running"]);
 const isBusy = (t: Thread) => BUSY.has(t.status) || pending.has(t.id);
@@ -109,12 +118,13 @@ function createCard(thread: Thread): Card {
   root.dataset.threadId = thread.id;
   const turns = el("div", "turns");
   const live = el("div", "live");
+  const queue = el("div", "queue");
   const actions = el("div", "actions");
   const retry = el("button", "retry", "Retry");
   retry.type = "button";
   actions.append(retry);
-  root.append(turns, live, actions);
-  const card: Card = { kind: "thread", root, turns, live, retry };
+  root.append(turns, live, queue, actions);
+  const card: Card = { kind: "thread", root, turns, live, queue, retry };
   retry.addEventListener("click", () => {
     pending.add(thread.id);
     update(thread.id);
@@ -177,6 +187,28 @@ function micMark(): SVGSVGElement {
   return svg;
 }
 
+/** The small speaker shown before a question heard from the Mac (task 098), drawn like the mic. */
+function speakerMark(): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "speaker-mark");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("width", "12");
+  svg.setAttribute("height", "11");
+  svg.setAttribute("viewBox", "0 0 15 14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.6");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("stroke-linecap", "round");
+  const cone = document.createElementNS(ns, "path");
+  cone.setAttribute("d", "M1.5 5h2.5l3.5-3v10l-3.5-3h-2.5z");
+  const waves = document.createElementNS(ns, "path");
+  waves.setAttribute("d", "M10 4.5a3.5 3.5 0 0 1 0 5M12 2.5a6.5 6.5 0 0 1 0 9");
+  svg.append(cone, waves);
+  return svg;
+}
+
 function flash(button: HTMLButtonElement, text: string): void {
   const label = button.textContent;
   button.textContent = text;
@@ -193,6 +225,12 @@ function titleOf(thread: Thread): string {
     .find(Boolean);
   const asked = firstUserTurn(thread);
   return line || (asked?.kind === "text" ? asked.text.trim() : "") || "Screenshot";
+}
+
+/** The chat's last turn is an answer stopped with Esc (097): not a failure in the sidebar. */
+function endsStopped(thread: Thread): boolean {
+  const last = thread.turns.at(-1);
+  return last?.role === "assistant" && last.isError && last.errorKind === "stopped";
 }
 
 function firstUserTurn(thread: Thread): UserTurn | undefined {
@@ -223,13 +261,21 @@ function renderTurns(card: Card, thread: Thread): void {
         asked.title = "Dictated";
         asked.append(micMark(), document.createTextNode(turn.text));
         nodes.push(asked);
+      } else if (turn.heard) {
+        const asked = el("p", "question heard");
+        asked.title = "Heard from your Mac";
+        asked.append(speakerMark(), document.createTextNode(turn.text));
+        nodes.push(asked);
       } else {
         nodes.push(el("p", "question", turn.text));
       }
     } else if (turn.isError) {
       if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));
-      if (turn.text) nodes.push(answerNode("partial", turn.text));
-      nodes.push(el("p", "error", turn.errorMessage ?? userMessage(turn.errorKind ?? "internal")));
+      // 097: an answer stopped with Esc keeps its text as written (an answer's look: code blocks, math), with a quiet
+      // "Stopped." instead of an error.
+      const stopped = turn.errorKind === "stopped";
+      if (turn.text) nodes.push(answerNode(stopped ? "answer stopped" : "partial", turn.text));
+      nodes.push(el("p", stopped ? "stopped" : "error", turn.errorMessage ?? userMessage(turn.errorKind ?? "internal")));
     } else {
       if (turn.warning) nodes.push(el("p", "warning", userMessage(turn.warning)));
       if (turn.note === "resumeFallback") nodes.push(el("p", "note", userMessage("resumeFailed")));
@@ -237,6 +283,23 @@ function renderTurns(card: Card, thread: Thread): void {
     }
   }
   card.turns.replaceChildren(...nodes);
+}
+
+/**
+ * The questions asked while the chat answers (099), in order: faded, with their mic or speaker mark and "Queued". Each
+ * becomes a normal question when its turn starts (main drops it from `queued` before its saved turn arrives).
+ */
+function renderQueue(card: Card, thread: Thread): void {
+  card.queue.replaceChildren(
+    ...(thread.queued ?? []).map((q) => {
+      const asked = el("p", `question queued${q.voice ? " voice" : q.heard ? " heard" : ""}`);
+      asked.title = q.voice ? "Dictated · queued" : q.heard ? "Heard from your Mac · queued" : "Queued";
+      if (q.voice) asked.append(micMark());
+      else if (q.heard) asked.append(speakerMark());
+      asked.append(el("span", "question-text", q.text), el("span", "queued-label", "Queued"));
+      return asked;
+    }),
+  );
 }
 
 function renderLive(card: Card, thread: Thread): void {
@@ -264,6 +327,7 @@ function update(threadId: string): void {
   }
   renderTurns(card, thread);
   renderLive(card, thread);
+  renderQueue(card, thread);
   const busy = isBusy(thread);
   const last = thread.turns.at(-1);
   card.retry.hidden = busy || thread.status !== "error";
@@ -292,7 +356,7 @@ function renderChats(order: Thread[]): void {
     row.type = "button";
     row.dataset.chatId = thread.id;
     if (thread.id === shown) row.setAttribute("aria-current", "true");
-    const dot = el("span", `chat-dot${isBusy(thread) ? " busy" : thread.status === "error" ? " error" : ""}`);
+    const dot = el("span", `chat-dot${isBusy(thread) ? " busy" : thread.status === "error" && !endsStopped(thread) ? " error" : ""}`);
     dot.setAttribute("aria-hidden", "true");
     row.append(dot, el("span", "chat-name", titleOf(thread)));
     row.addEventListener("click", () => chooseChat(thread.id));
@@ -341,6 +405,36 @@ function startNewChat(): void {
   });
 }
 
+/** The mode of the chat on screen; with none (no chats, or after "+"), the mode a new chat starts in (089). */
+function shownMode(): ChatMode {
+  const onScreen = shown === null ? undefined : threads.get(shown);
+  if (!onScreen) return newChatMode;
+  return onScreen.mode === "answer" ? "answer" : "solve";
+}
+
+function renderModeSwitch(): void {
+  const mode = shownMode();
+  for (const button of modeSwitch.querySelectorAll<HTMLButtonElement>("[data-mode]")) {
+    button.setAttribute("aria-checked", String(button.dataset.mode === mode));
+  }
+}
+
+/**
+ * The toggle (089): new chats start in `mode` from now on (saved by main). A chat keeps the mode it started in, so with
+ * one on screen this also starts a new chat, as "+" does; the next capture or question begins it.
+ */
+function chooseMode(mode: ChatMode): void {
+  if (mode === shownMode()) return;
+  const was = newChatMode;
+  newChatMode = mode;
+  if (shown !== null) startNewChat();
+  else layout();
+  api.setMode(mode).catch(() => {
+    newChatMode = was;
+    layout();
+  });
+}
+
 /** Every thread, newest first (createdAt, then id: main's order). */
 function newestFirst(): Thread[] {
   return [...threads.values()].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.id.localeCompare(b.id));
@@ -378,12 +472,17 @@ function layout(): void {
     update(thread.id);
   }
   empty.textContent =
-    threads.size === 0 ? "Press the snapsolve hotkey to solve what's on your screen." : "New chat. Press the snapsolve hotkey or type a question.";
+    shownMode() === "answer"
+      ? "Answer mode. Ask a question and snapsolve drafts your answer, using your knowledge folder for anything about you."
+      : threads.size === 0
+        ? "Press the snapsolve hotkey to solve what's on your screen."
+        : "New chat. Press the snapsolve hotkey or type a question.";
   // Shown with no threads at all, and after "+" until the new thread arrives.
   empty.hidden = shown !== null || (threads.size > 0 && freshAfter === undefined);
   const onScreen = shown === null ? undefined : threads.get(shown);
   chatTitle.textContent = onScreen ? titleOf(onScreen) : "New chat";
   renderChats(chatsOnly);
+  renderModeSwitch();
   updateComposer();
 }
 
@@ -441,18 +540,21 @@ function showVoice(state: VoiceState): void {
   composerBox.hidden = active;
   listening.hidden = !active;
   listening.classList.toggle("stopping", state.state === "stopping");
+  // 098: listening to what the Mac plays rather than the microphone.
+  listening.classList.toggle("mac", state.state !== "idle" && state.mac === true);
   voiceNote.hidden = true;
   if (state.state === "idle") {
     if (state.note) {
       voiceNote.textContent = state.note;
       voiceNote.hidden = false;
-      noteTimer = setTimeout(() => (voiceNote.hidden = true), VOICE_NOTE_MS);
+      // A long note (098's silent note names a settings pane) stays twice as long, to be read.
+      noteTimer = setTimeout(() => (voiceNote.hidden = true), state.note.length > 60 ? 2 * VOICE_NOTE_MS : VOICE_NOTE_MS);
     }
     return;
   }
-  (listening.querySelector(".transcript") as HTMLElement).textContent = state.text || "Listening…";
+  (listening.querySelector(".transcript") as HTMLElement).textContent = state.text || (state.mac ? "Listening to your Mac…" : "Listening…");
   (listening.querySelector(".hint") as HTMLElement).textContent =
-    state.state === "listening" ? `${state.key} to send · esc to cancel` : "Sending…";
+    state.state === "listening" ? `${state.hold ? "let go" : state.key} to send · esc to cancel` : "Sending…";
   const level = state.state === "listening" ? state.level : 0;
   // Five bars, the middle ones tallest, scaled by the input level.
   const shape = [0.5, 0.8, 1, 0.8, 0.5];
@@ -475,13 +577,19 @@ box.addEventListener("keydown", (event) => {
 });
 box.addEventListener("input", fitComposer);
 send.addEventListener("click", sendFollowUp);
-// The mic buttons (title bar and composer) do what the voice hotkey does: start, and again stop and send.
-for (const id of ["voice", "composer-voice"]) {
-  (document.getElementById(id) as HTMLButtonElement).addEventListener("click", () => void api.toggleVoice().catch(() => undefined));
-}
+// The mic buttons (title bar and composer) are held as the voice hotkey is: down starts, letting go sends (096).
+bindHold(
+  ["voice", "composer-voice"].map((id) => document.getElementById(id) as HTMLButtonElement),
+  window,
+  (held) => void api.holdVoice(held).catch(() => undefined),
+);
 api.onVoice(showVoice);
 (document.getElementById("hide") as HTMLButtonElement).addEventListener("click", () => void api.hide().catch(() => undefined));
 (document.getElementById("new-chat") as HTMLButtonElement).addEventListener("click", startNewChat);
+modeSwitch.addEventListener("click", (event) => {
+  const mode = (event.target as Element | null)?.closest<HTMLElement>("[data-mode]")?.dataset.mode;
+  if (mode === "solve" || mode === "answer") chooseMode(mode);
+});
 (document.getElementById("sidebar-new") as HTMLButtonElement).addEventListener("click", startNewChat);
 showChats.addEventListener("click", () => chooseSidebar(true));
 (document.getElementById("sidebar-hide") as HTMLButtonElement).addEventListener("click", () => chooseSidebar(false));
@@ -501,3 +609,10 @@ document.addEventListener("click", (event) => {
 });
 
 void api.listThreads().then(setThreads, () => setThreads([]));
+void api.getMode().then(
+  (mode) => {
+    newChatMode = mode;
+    layout();
+  },
+  () => undefined,
+);

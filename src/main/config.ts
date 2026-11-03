@@ -1,14 +1,14 @@
 // config.json: defaults (SPEC §6.1), per-field validation, created if missing, never rewritten once it exists —
-// except by the tray's choices, which each change only their own key: `saveTheme` (Appearance, 077, Amendment 14)
-// and `saveTransparency` (Transparency, 090, Amendments 23, 24).
+// except by the user's choices, which each change only their own key: `saveTheme` (Appearance, 077, Amendment 14),
+// `saveTransparency` (Transparency, 090, Amendments 23, 24) and `saveMode` (the Solve | Answer toggle, 089, Amendment 25).
 import { randomUUID } from "node:crypto";
 import { link, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
-import type { Config, Effort, Hotkeys, Theme } from "../shared/types";
+import type { ChatMode, Config, Effort, Hotkeys, Theme } from "../shared/types";
 import type { Logger } from "./log";
 
 export const DEFAULTS: Readonly<Config> = Object.freeze({
-  hotkeys: Object.freeze({ capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V" }),
+  hotkeys: Object.freeze({ capture: "Control+Alt+C", toggle: "Control+Alt+X", voice: "Control+Alt+V", listen: "Control+Alt+B" }),
   model: "opus",
   effort: "high",
   panelWidth: 420,
@@ -20,6 +20,8 @@ export const DEFAULTS: Readonly<Config> = Object.freeze({
   timeoutSec: 180,
   theme: "dark",
   transparency: 20,
+  mode: "solve",
+  knowledgeDir: null,
 });
 
 export interface LoadedConfig {
@@ -97,12 +99,17 @@ export function saveTransparency(file: string, transparency: number, fs: SaveFs 
   return saveKey(file, "transparency", transparency, fs);
 }
 
+/** Saves `mode` into config.json (the title bar's Solve | Answer toggle, SPEC Amendment 25), as `saveKey` does. */
+export function saveMode(file: string, mode: ChatMode, fs: SaveFs = { rename }): Promise<SaveResult> {
+  return saveKey(file, "mode", mode, fs);
+}
+
 /**
  * Sets one key in config.json: every other key and value stays as it is. A missing file is written with the
  * defaults plus that key. An unreadable, malformed or non-object file is left untouched and the error returned.
  * Atomic: a synced temp file beside `file` is renamed over it.
  */
-async function saveKey<K extends "theme" | "transparency">(file: string, key: K, value: Config[K], fs: SaveFs): Promise<SaveResult> {
+async function saveKey<K extends "theme" | "transparency" | "mode">(file: string, key: K, value: Config[K], fs: SaveFs): Promise<SaveResult> {
   let raw: Record<string, unknown>;
   try {
     const parsed: unknown = JSON.parse((await readFile(file, "utf8")).replace(/^﻿/, ""));
@@ -137,6 +144,7 @@ type FieldKey = Exclude<keyof Config, "hotkeys">;
 
 const EFFORTS: readonly Effort[] = ["low", "medium", "high", "xhigh", "max"];
 const THEMES: readonly Theme[] = ["dark", "light", "system"];
+const MODES: readonly ChatMode[] = ["solve", "answer"];
 // An alias ("opus") or a full id ("claude-opus-5-5[1m]"); no spaces, so it stays one CLI argument.
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:[\]-]{0,99}$/;
 
@@ -160,6 +168,12 @@ const FIELDS: Record<FieldKey, { valid: (v: unknown) => boolean; expected: strin
   timeoutSec: { valid: intIn(10, 3600), expected: "an integer from 10 to 3600" },
   theme: { valid: (v) => THEMES.includes(v as Theme), expected: `one of ${THEMES.join(", ")}` },
   transparency: { valid: (v) => intIn(0, 90)(v) && (v as number) % 10 === 0, expected: "0, 10, 20 … 90 (percent)" },
+  mode: { valid: (v) => MODES.includes(v as ChatMode), expected: `one of ${MODES.join(", ")}` },
+  // Kept as written; knowledge.ts resolves `~` against the home folder and null to <data>/knowledge.
+  knowledgeDir: {
+    valid: (v) => v === null || (typeof v === "string" && (path.isAbsolute(v) || v === "~" || v.startsWith("~/"))),
+    expected: "null, an absolute path or a path starting with ~/",
+  },
 };
 
 function validate(raw: unknown): { config: Config; warnings: string[] } {
@@ -186,7 +200,7 @@ function validate(raw: unknown): { config: Config; warnings: string[] } {
 function validateHotkeys(raw: unknown, warnings: string[]): Hotkeys {
   const hotkeys = { ...DEFAULTS.hotkeys };
   if (!isObject(raw)) {
-    warnings.push(invalid("hotkeys", "an object with capture, toggle and voice", raw, DEFAULTS.hotkeys));
+    warnings.push(invalid("hotkeys", "an object with capture, toggle, voice and listen", raw, DEFAULTS.hotkeys));
     return hotkeys;
   }
   for (const [key, value] of Object.entries(raw)) {
@@ -212,7 +226,7 @@ function validateHotkeys(raw: unknown, warnings: string[]): Hotkeys {
   return hotkeys;
 }
 
-const HOTKEY_NAMES: readonly (keyof Hotkeys)[] = ["capture", "toggle", "voice"];
+const HOTKEY_NAMES: readonly (keyof Hotkeys)[] = ["capture", "toggle", "voice", "listen"];
 
 // Electron accelerator grammar (https://www.electronjs.org/docs/latest/api/accelerator), case-insensitive.
 const MODIFIERS: Record<string, string> = {

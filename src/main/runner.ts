@@ -1,12 +1,13 @@
 // Runs Claude turns (SPEC §3.1–3.5): builds argv, env and the stdin message, spawns `claude -p` once per turn,
-// streams its events, serializes turns per thread under a global cap, kills on timeout, adopts a new session's
-// transcript once its first turn exits (failed or not) and falls back to a fresh session carrying the thread's
-// history when resume fails.
+// streams its events, serializes turns per thread under a global cap, kills on timeout or on a stop (Esc, task 097),
+// adopts a new session's transcript once its first turn exits (failed or not) and falls back to a fresh session
+// carrying the thread's history when resume fails. A question that waits (099) is listed for its thread (`queued`)
+// until its turn starts.
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { type ErrorKind, SnapsolveError, userMessage } from "../shared/errors";
-import type { AssistantTurn, Config, Effort, Thread, ThreadStatus, Turn, UserTurn } from "../shared/types";
+import type { AssistantTurn, ChatMode, Config, Effort, QueuedQuestion, Thread, ThreadStatus, Turn, UserTurn } from "../shared/types";
 import { type AuthStatus, formatUsage, isUsageBlocked, type UsageInfo, usageBlockedMessage } from "./auth";
 import type { Logger } from "./log";
 import type { Store } from "./store";
@@ -15,12 +16,17 @@ import { createLineSplitter, parseEvent, type RateWindow, type StreamEvent } fro
 export const NEW_TEXT = "Solve the problem on this screen.";
 // Every capture continues the current thread (065), so the screenshot may be a new problem.
 export const APPEND_TEXT = "Here is another screenshot. If it is unrelated to the earlier problem, treat it as a new question.";
+// Answer mode (089): a screenshot there is a written question about the user (an application form, a chat).
+export const ANSWER_NEW_TEXT = "Draft my answer to the question on this screen.";
+export const ANSWER_APPEND_TEXT = "Here is another screenshot. Draft my answer to the question on it.";
 export const EARLIER_HEADER = "Earlier answers in this thread:";
 export const SEED_HEADER = "The previous thread's last answer:";
 
 const SCREENSHOT = /^(\d{3})\.png$/;
 const STDERR_KEEP = 4096;
 const KILL_GRACE_MS = 5000;
+/** How long a stopped claude gets to exit after SIGTERM before SIGKILL (097: Esc should end it within about a second). */
+const STOP_GRACE_MS = 1000;
 
 export interface Command {
   path: string;
@@ -42,7 +48,8 @@ export interface SendImage {
 export type TurnRequest =
   | { kind: "new"; screenshot: string; seed?: string }
   | { kind: "append"; screenshot: string }
-  | { kind: "followUp"; text: string; voice?: true }
+  /** `voice`: dictated (063); `heard`: heard from what the Mac played (098); never both. */
+  | { kind: "followUp"; text: string; voice?: true; heard?: true }
   | { kind: "retry" };
 
 /** A request that adds a user turn; a retry re-runs one of these. */
@@ -82,6 +89,11 @@ export type RunnerEvent =
       sevenDay: RateWindow | null;
     }
   | { type: "done"; threadId: string; thread: Thread; turn: AssistantTurn; note?: "resumeFallback" }
+  /**
+   * The thread's waiting questions changed (099): every follow-up enqueued that could not start at once, in order. Sent
+   * when one is added and when one starts, before its user turn is saved, so a question never shows twice.
+   */
+  | { type: "queued"; threadId: string; queued: QueuedQuestion[] }
   | { type: "error"; threadId: string; kind: ErrorKind; message: string; retry: boolean; thread: Thread | null };
 
 export type TurnOutcome = { ok: true; thread: Thread } | { ok: false; kind: ErrorKind; message: string };
@@ -92,8 +104,14 @@ export interface RunnerDeps {
   command: Command | (() => Command);
   store: Store;
   config: Pick<Config, "maxConcurrent" | "timeoutSec" | "allowApiKey">;
-  /** Contents of prompts/system.md. */
+  /** Contents of prompts/system.md: a solve chat's system prompt. */
   systemPrompt: string;
+  /**
+   * An answer chat's system prompt (089), built again for every turn (knowledge.ts). It rejects with `knowledgeUnreadable`
+   * or `knowledgeTooLarge`, whose message the card shows; the turn then fails before claude is started. Not wired →
+   * an answer chat's turns fail as `internal`.
+   */
+  answerSystemPrompt?: () => Promise<string>;
   env: Readonly<Record<string, string | undefined>>;
   spawn: SpawnFn;
   /** `<data>/sessions`, claude's cwd; created before every spawn. */
@@ -103,6 +121,8 @@ export interface RunnerDeps {
   loadSendImage: (file: string) => Promise<SendImage>;
   /** How long a timed-out claude gets to exit after the first kill before SIGKILL; default `KILL_GRACE_MS`. */
   killGraceMs?: number;
+  /** The same after a stop (097); default `STOP_GRACE_MS`. */
+  stopGraceMs?: number;
   /** `claude auth status`, rechecked after an error result (SPEC §3.6); logged out turns the error into notLoggedIn. */
   checkAuth?: () => Promise<AuthStatus>;
 }
@@ -112,6 +132,13 @@ export interface Runner {
   enqueue(threadId: string, request: TurnRequest): Promise<TurnOutcome>;
   /** Subscribes to every event; returns the unsubscribe function. */
   on(listener: (event: RunnerEvent) => void): () => void;
+  /**
+   * Esc (097): stops the thread's running turn. Its claude gets SIGTERM (SIGKILL after `stopGraceMs`), or is never
+   * started if the turn is still being prepared; text after the stop is dropped and the turn ends as an errored
+   * `stopped` answer keeping the text streamed so far (Retry re-runs it). True when a turn was running (or already
+   * stopping); false when none is (a turn only waiting in the queue is left alone, as are the thread's later turns).
+   */
+  stop(threadId: string): boolean;
 }
 
 /** SPEC §3.1, exactly; the system prompt is one argv element. */
@@ -215,8 +242,8 @@ export function buildUserMessage(kind: UserRequest["kind"], images: SendImage[],
 }
 
 /** SPEC §2.3: a seeded thread's first question, the previous thread's last answer before the append question. */
-export function seededQuestion(seed: string): string {
-  return `${SEED_HEADER}\n\n${seed}\n\n---\n\n${APPEND_TEXT}`;
+export function seededQuestion(seed: string, appendText: string = APPEND_TEXT): string {
+  return `${SEED_HEADER}\n\n${seed}\n\n---\n\n${appendText}`;
 }
 
 /** The first message of a replacement session (SPEC §3.4): every screenshot, the earlier answers, the question. */
@@ -231,6 +258,15 @@ interface Job {
   threadId: string;
   request: TurnRequest;
   resolve: (outcome: TurnOutcome) => void;
+  /** A follow-up that had to wait: it is in its thread's `queued` list (099). */
+  listed?: boolean;
+}
+
+/** A thread's running turn, for `stop` (097). */
+interface Active {
+  stopped: boolean;
+  /** Set while its claude runs: SIGTERM, then SIGKILL after the stop grace. */
+  kill?: () => void;
 }
 
 type Mode = "first" | "resume" | "fallback";
@@ -251,6 +287,8 @@ interface Attempt {
   ran: boolean;
   spawnError: NodeJS.ErrnoException | null;
   timedOut: boolean;
+  /** Stopped (097): claude was killed for it, or never started. */
+  stopped: boolean;
   code: number | null;
   stderr: string;
 }
@@ -261,6 +299,8 @@ export function createRunner(deps: RunnerDeps): Runner {
   const listeners = new Set<(event: RunnerEvent) => void>();
   const waiting: Job[] = [];
   const busy = new Set<string>();
+  /** The running turn of each busy thread (097). */
+  const active = new Map<string, Active>();
   let running = 0;
   /** The latest `rate_limit_event` of any turn: while it blocks, turns fail before spawning (SPEC §3.6). */
   let usage: UsageInfo | null = null;
@@ -280,17 +320,28 @@ export function createRunner(deps: RunnerDeps): Runner {
       const i = waiting.findIndex((job) => !busy.has(job.threadId));
       if (i < 0) return;
       const [job] = waiting.splice(i, 1);
+      if (job.listed) emitQueued(job.threadId);
       running++;
       busy.add(job.threadId);
+      active.set(job.threadId, { stopped: false });
       void run(job.threadId, job.request)
         .catch((e: unknown) => fail(job.threadId, e, null))
         .then((outcome) => {
           running--;
           busy.delete(job.threadId);
+          active.delete(job.threadId);
           job.resolve(outcome);
           pump();
         });
     }
+  }
+
+  /** The thread's waiting follow-ups, in order (099). */
+  function emitQueued(threadId: string): void {
+    const queued = waiting.flatMap((job) =>
+      job.threadId === threadId && job.listed && job.request.kind === "followUp" ? [{ text: job.request.text, ...marks(job.request) }] : [],
+    );
+    emit({ type: "queued", threadId, queued });
   }
 
   async function setStatus(threadId: string, status: ThreadStatus): Promise<Thread> {
@@ -311,7 +362,8 @@ export function createRunner(deps: RunnerDeps): Runner {
     let { kind, message } = classifyError(e);
     // The error carries the details (stderr tail, exception, stack); never the answer text.
     log.warn("runner.turnFailed", { threadId, kind, code: attempt?.code ?? null, error: e });
-    if (attempt?.result?.isError && kind !== "notLoggedIn" && kind !== "usageLimit" && (await loggedOut())) {
+    // A stop (097) is the user's own doing: no recheck, even when claude printed an error result on its way out.
+    if (attempt?.result?.isError && kind !== "notLoggedIn" && kind !== "usageLimit" && kind !== "stopped" && (await loggedOut())) {
       kind = "notLoggedIn";
       message = userMessage(kind);
     }
@@ -374,6 +426,17 @@ export function createRunner(deps: RunnerDeps): Runner {
       const blocked = new SnapsolveError("usageLimit", usageBlockedMessage(usage.resetsAt as number, now()));
       return fail(threadId, blocked, null, { startedAt, turn: true });
     }
+    // 089: an answer chat's system prompt carries the knowledge folder as it is now; one that cannot be built fails
+    // the turn here, with its own message on the card, before claude is started.
+    let systemPrompt = deps.systemPrompt;
+    if (thread.mode === "answer") {
+      try {
+        if (!deps.answerSystemPrompt) throw new SnapsolveError("internal", "answer mode is not wired");
+        systemPrompt = await deps.answerSystemPrompt();
+      } catch (e) {
+        return fail(threadId, e, null, { startedAt, turn: true });
+      }
+    }
     const prior = thread.turns.slice(0, target.index);
     const answers = prior.filter(isAnswer).map((t) => t.text);
     // A seeded thread's later turns carry the previous thread's answer as the earliest one (the first turn's own
@@ -389,8 +452,8 @@ export function createRunner(deps: RunnerDeps): Runner {
     let attempt: Attempt | null = null;
     let note: "resumeFallback" | undefined;
     if (mode === "resume") {
-      attempt = await spawnTurn(thread, { resume: thread.transcriptPath as string }, await requestMessage(thread, asked));
-      if (isResumeFailure(attempt)) {
+      attempt = await spawnTurn(thread, { resume: thread.transcriptPath as string }, await requestMessage(thread, asked), systemPrompt);
+      if (!attempt.stopped && isResumeFailure(attempt)) {
         log.warn("runner.resumeFailed", { threadId, sessionId: thread.sessionId });
         mode = "fallback";
       }
@@ -399,15 +462,18 @@ export function createRunner(deps: RunnerDeps): Runner {
       thread = await store.replaceSession(threadId);
       if (answers.length > 0) note = "resumeFallback";
       const images = await Promise.all(screenshotFiles(thread.turns).map((f) => deps.loadSendImage(screenshotPath(thread, f))));
-      attempt = await spawnTurn(thread, { id: thread.sessionId }, buildFallbackMessage(images, earlier, question(asked)));
+      const message = buildFallbackMessage(images, earlier, question(asked, thread.mode));
+      attempt = await spawnTurn(thread, { id: thread.sessionId }, message, systemPrompt);
     } else if (mode === "first") {
-      attempt = await spawnTurn(thread, { id: thread.sessionId }, await requestMessage(thread, asked));
+      attempt = await spawnTurn(thread, { id: thread.sessionId }, await requestMessage(thread, asked), systemPrompt);
     }
     if (!attempt) throw new SnapsolveError("internal", `no attempt for mode ${mode}`);
 
     // SPEC §3.4: a new session's transcript (it holds the screenshots) leaves claude's projects dir as soon as
     // its first turn exits, whatever the outcome; a resumed one is already in the thread dir.
     if (mode !== "resume" && attempt.ran) await adopt(threadId, thread.sessionId);
+    // 097: a stop wins over whatever claude printed after it.
+    if (attempt.stopped) return fail(threadId, new SnapsolveError("stopped"), attempt, { startedAt });
     if (!attempt.result || attempt.result.isError || attempt.spawnError) {
       return fail(threadId, attemptError(attempt), attempt, { startedAt });
     }
@@ -440,14 +506,20 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   async function requestMessage(thread: Thread, request: UserRequest): Promise<UserMessage> {
     if (request.kind === "followUp") return buildUserMessage("followUp", [], request.text);
-    return buildUserMessage(request.kind, [await deps.loadSendImage(screenshotPath(thread, request.screenshot))], question(request));
+    const image = await deps.loadSendImage(screenshotPath(thread, request.screenshot));
+    return buildUserMessage(request.kind, [image], question(request, thread.mode));
   }
 
   function screenshotPath(thread: Thread, file: string): string {
     return store.screenshotPath(thread.id, Number((SCREENSHOT.exec(file) as RegExpExecArray)[1]));
   }
 
-  async function spawnTurn(thread: Thread, session: { id: string } | { resume: string }, message: UserMessage): Promise<Attempt> {
+  async function spawnTurn(
+    thread: Thread,
+    session: { id: string } | { resume: string },
+    message: UserMessage,
+    systemPrompt: string,
+  ): Promise<Attempt> {
     const attempt: Attempt = {
       result: null,
       text: "",
@@ -460,15 +532,22 @@ export function createRunner(deps: RunnerDeps): Runner {
       ran: false,
       spawnError: null,
       timedOut: false,
+      stopped: false,
       code: null,
       stderr: "",
     };
     const command = typeof deps.command === "function" ? deps.command() : deps.command;
     const args = [
       ...command.prefixArgs,
-      ...buildArgs({ model: thread.model, effort: thread.effort, systemPrompt: deps.systemPrompt, session }),
+      ...buildArgs({ model: thread.model, effort: thread.effort, systemPrompt, session }),
     ];
     await mkdir(deps.sessionsDir, { recursive: true });
+    // Stopped while the turn was being prepared (097): claude is never started. No await from here to `entry.kill`.
+    const entry = active.get(thread.id);
+    if (entry?.stopped) {
+      attempt.stopped = true;
+      return attempt;
+    }
     const startedAt = now();
     let child: ChildProcess;
     try {
@@ -496,6 +575,8 @@ export function createRunner(deps: RunnerDeps): Runner {
       if (!event) return;
       switch (event.type) {
         case "text":
+          // After a stop nothing more is streamed or kept (097).
+          if (attempt.stopped) return;
           attempt.ttftMs ??= now() - startedAt;
           attempt.sawText = true;
           attempt.text += event.text;
@@ -546,25 +627,42 @@ export function createRunner(deps: RunnerDeps): Runner {
         settled = true;
         clearTimeout(timer);
         clearTimeout(graceTimer);
+        if (entry) entry.kill = undefined;
         log.info("runner.exit", {
           threadId: thread.id,
           code: attempt.code,
           timedOut: attempt.timedOut,
+          stopped: attempt.stopped,
           ms: now() - startedAt,
         });
         resolve(attempt);
       };
-      const timer = setTimeout(() => {
-        attempt.timedOut = true;
-        log.warn("runner.timeout", { threadId: thread.id, timeoutSec: config.timeoutSec, pid: child.pid ?? null });
+      /** SIGTERM, then SIGKILL after `graceMs` (a claude that ignores SIGTERM, seen as a risk on macOS, must not outlive its turn). */
+      let killing = false;
+      const terminate = (graceMs: number) => {
+        if (killing) return;
+        killing = true;
         child.kill();
-        // A claude that ignores SIGTERM (seen as a risk on macOS) must not outlive its turn.
         graceTimer = setTimeout(() => {
           log.warn("runner.sigkill", { threadId: thread.id, pid: child.pid ?? null });
           child.kill("SIGKILL");
           settle();
-        }, deps.killGraceMs ?? KILL_GRACE_MS);
+        }, graceMs);
+      };
+      const timer = setTimeout(() => {
+        if (killing) return;
+        attempt.timedOut = true;
+        log.warn("runner.timeout", { threadId: thread.id, timeoutSec: config.timeoutSec, pid: child.pid ?? null });
+        terminate(deps.killGraceMs ?? KILL_GRACE_MS);
       }, config.timeoutSec * 1000);
+      if (entry) {
+        entry.kill = () => {
+          if (killing) return;
+          attempt.stopped = true;
+          log.info("runner.stop", { threadId: thread.id, pid: child.pid ?? null });
+          terminate(deps.stopGraceMs ?? STOP_GRACE_MS);
+        };
+      }
 
       child.on("error", (e: NodeJS.ErrnoException) => {
         attempt.spawnError ??= e;
@@ -595,8 +693,14 @@ export function createRunner(deps: RunnerDeps): Runner {
           void fail(threadId, new SnapsolveError("internal", problem), null, { record: false }).then(resolve);
           return;
         }
-        waiting.push({ threadId, request, resolve });
+        const job: Job = { threadId, request, resolve };
+        waiting.push(job);
         pump();
+        // Still waiting (its chat is answering, or every slot is taken): a question is listed until it starts (099).
+        if (request.kind === "followUp" && waiting.includes(job)) {
+          job.listed = true;
+          emitQueued(threadId);
+        }
         if (waiting.some((job) => job.threadId === threadId) && !busy.has(threadId)) {
           setStatus(threadId, "queued").catch((e: unknown) => log.warn("runner.statusFailed", { threadId, error: e }));
         }
@@ -605,6 +709,15 @@ export function createRunner(deps: RunnerDeps): Runner {
     on(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+    stop(threadId) {
+      const entry = active.get(threadId);
+      if (!entry) return false;
+      if (!entry.stopped) {
+        entry.stopped = true;
+        entry.kill?.();
+      }
+      return true;
     },
   };
 }
@@ -618,15 +731,18 @@ function imageBlock(image: SendImage): ContentBlock {
 }
 
 function userTurn(request: UserRequest): UserTurn {
-  if (request.kind === "followUp") return { role: "user", kind: "text", text: request.text, ...(request.voice ? { voice: true as const } : {}) };
+  if (request.kind === "followUp") return { role: "user", kind: "text", text: request.text, ...marks(request) };
   const turn: UserTurn = { role: "user", kind: "screenshot", file: request.screenshot };
   return request.kind === "new" && request.seed !== undefined ? { ...turn, seed: request.seed } : turn;
 }
 
-function question(request: UserRequest): string {
+/** What a turn asks: a follow-up's own text, or a screenshot's question for the chat's mode (089). */
+function question(request: UserRequest, mode: ChatMode | undefined): string {
   if (request.kind === "followUp") return request.text;
-  if (request.kind === "append") return APPEND_TEXT;
-  return request.seed === undefined ? NEW_TEXT : seededQuestion(request.seed);
+  const answer = mode === "answer";
+  if (request.kind === "append") return answer ? ANSWER_APPEND_TEXT : APPEND_TEXT;
+  if (request.seed !== undefined) return seededQuestion(request.seed, answer ? ANSWER_APPEND_TEXT : APPEND_TEXT);
+  return answer ? ANSWER_NEW_TEXT : NEW_TEXT;
 }
 
 /** The seed on the thread's first user turn, if that turn is a seeded screenshot. */
@@ -662,10 +778,16 @@ export function retryTarget(thread: Thread): { request: UserRequest; index: numb
   }
   if (index < 0) return null;
   const turn = thread.turns[index] as UserTurn;
-  if (turn.kind === "text") return { request: { kind: "followUp", text: turn.text, ...(turn.voice ? { voice: true as const } : {}) }, index };
+  if (turn.kind === "text") return { request: { kind: "followUp", text: turn.text, ...marks(turn) }, index };
   const first = !thread.turns.slice(0, index).some((t) => t.role === "user");
   if (!first) return { request: { kind: "append", screenshot: turn.file }, index };
   return { request: { kind: "new", screenshot: turn.file, ...(turn.seed !== undefined ? { seed: turn.seed } : {}) }, index };
+}
+
+/** A question's voice (063) or heard (098) mark, carried from a request to its turn and back for a retry. */
+function marks(from: { voice?: true; heard?: true }): { voice?: true; heard?: true } {
+  if (from.voice) return { voice: true };
+  return from.heard ? { heard: true } : {};
 }
 
 function isAnswer(turn: Turn): turn is AssistantTurn {
@@ -677,6 +799,9 @@ function requestProblem(request: TurnRequest): string | null {
   if (request.kind === "followUp") {
     const voice: unknown = (request as { voice?: unknown }).voice;
     if (voice !== undefined && voice !== true) return "invalid voice mark";
+    const heard: unknown = (request as { heard?: unknown }).heard;
+    if (heard !== undefined && heard !== true) return "invalid heard mark";
+    if (voice === true && heard === true) return "a question is dictated or heard, not both";
     return typeof request.text === "string" && request.text.trim() !== "" ? null : "empty follow-up";
   }
   if (request.kind === "new" || request.kind === "append") {
@@ -731,9 +856,12 @@ function spawnFailure(e: NodeJS.ErrnoException): { code: string | null; syscall:
 }
 
 /** The card's error: Claude's own words for a usage limit, the fixed text for the rest (details are logged). */
+/** Kinds whose card shows the error's own message: Claude's words for a usage limit; the folder for answer mode (089). */
+const OWN_MESSAGE: ReadonlySet<ErrorKind> = new Set(["usageLimit", "knowledgeUnreadable", "knowledgeTooLarge"]);
+
 function classifyError(e: unknown): { kind: ErrorKind; message: string } {
   if (e instanceof SnapsolveError) {
-    return { kind: e.kind, message: e.kind === "usageLimit" ? e.message : userMessage(e.kind) };
+    return { kind: e.kind, message: OWN_MESSAGE.has(e.kind) ? e.message : userMessage(e.kind) };
   }
   return { kind: "internal", message: userMessage("internal") };
 }

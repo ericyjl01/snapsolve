@@ -9,7 +9,7 @@ import { readDisplaySizes } from "../../src/main/macos";
 import { defaultBounds, pointsPerInch } from "../../src/main/panel";
 import { CONTINUED_NOTE } from "../../src/shared/errors";
 import type { Thread } from "../../src/shared/types";
-import { fixturesDir } from "../paths";
+import { fixturesDir, repoRoot } from "../paths";
 import { launchApp, type LaunchedApp } from "./helpers";
 
 const FAKE = path.join(fixturesDir, "fake-claude.mjs");
@@ -34,9 +34,12 @@ const PRELOAD_NAMES = [
   "openScreenRecordingSettings",
   "relaunch",
   "onVoice",
-  "toggleVoice",
+  "holdVoice",
   "openVoiceSettings",
   "openThread",
+  // Amendment 25 (task 089): the title bar's Solve | Answer toggle.
+  "getMode",
+  "setMode",
 ];
 
 interface Panel extends LaunchedApp {
@@ -119,9 +122,14 @@ function luminance(color: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** What the voice hotkey does (063). */
-function voiceKey(app: ElectronApplication): Promise<void> {
-  return app.evaluate(() => (globalThis as unknown as { snapsolveTest: { voice(): void } }).snapsolveTest.voice());
+/** The listen hotkey (⌃⌥B, 098) held (down) or let go (up), as voice's listen source gets them. */
+function listenKey(app: ElectronApplication, down: boolean): Promise<void> {
+  return app.evaluate((_electron, d) => (globalThis as unknown as { snapsolveTest: { listenKey(down: boolean): void } }).snapsolveTest.listenKey(d), down);
+}
+
+/** The voice hotkey held (down) or let go (up), as the key press and the helper's released line reach voice (096). */
+function voiceKey(app: ElectronApplication, down: boolean): Promise<void> {
+  return app.evaluate((_electron, d) => (globalThis as unknown as { snapsolveTest: { voiceKey(down: boolean): void } }).snapsolveTest.voiceKey(d), down);
 }
 
 /** What Esc does while listening (063): the temporary global Escape shortcut's callback. */
@@ -273,7 +281,7 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the sixteen preload functions", async () => {
+  it("is content-protected, has the CSP meta, denies window.open and exposes exactly the eighteen preload functions", async () => {
     const p = await launchPanel();
     try {
       expect((await windowInfo(p.app)).contentProtected).toBe(true);
@@ -1023,9 +1031,12 @@ describe("panel (e2e)", () => {
       const plus = p.page.locator("#titlebar").getByRole("button", { name: "New chat" });
       expect(await plus.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("no-drag");
       // Before the ×, at the top right.
-      // 063 put the mic (Dictate) first; 078 put the sidebar toggle before everything.
-      expect(await p.page.locator("#titlebar button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).toEqual([
+      // 063 put the mic (Dictate) first; 078 put the sidebar toggle before everything; 089's Solve / Answer
+      // mode radios (named by their text) sit before the mic.
+      expect(await p.page.locator("#titlebar button").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? e.textContent?.trim()))).toEqual([
         "Show chats",
+        "Solve",
+        "Answer",
         "Dictate",
         "New chat",
         "Hide window",
@@ -1222,7 +1233,7 @@ describe("panel (e2e)", () => {
         const bar = p.page.locator("#titlebar");
         expect(await bar.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-app-region") || getComputedStyle(el).getPropertyValue("app-region"))).toBe("drag");
 
-        await capture(p.app);
+        const id = await capture(p.app);
         await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
         expect((await bar.boundingBox())?.height).toBe(36);
         const { workArea, bounds } = await windowInfo(p.app);
@@ -1247,7 +1258,9 @@ describe("panel (e2e)", () => {
           }, { timeout: 5_000 })
           .toEqual({ ...target, ...size });
 
-        // Collapse (Esc in the focused window), then the next capture reopens where it was left.
+        // Collapse (Esc in the focused window), then the next capture reopens where it was left. The answer is done
+        // first: an Esc while it is written stops it instead of hiding the window (097).
+        await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
         await p.page.locator("#threads").click();
         await p.app.evaluate(({ BrowserWindow }) => {
           const { webContents } = BrowserWindow.getAllWindows()[0];
@@ -1277,7 +1290,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel();
     const stateFile = path.join(p.dataDir, "window.json");
     try {
-      await capture(p.app);
+      const id = await capture(p.app);
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
       await p.page.locator(".grip").waitFor({ state: "attached", timeout: 5_000 });
       expect(await p.app.evaluate(({ BrowserWindow }) => {
@@ -1318,7 +1331,9 @@ describe("panel (e2e)", () => {
         win.emit("resized");
       }, target);
 
-      // Hide (Esc), then the next capture reopens at the saved size.
+      // Hide (Esc), then the next capture reopens at the saved size. The answer is done first: an Esc while it is
+      // written stops it instead of hiding the window (097).
+      await p.page.locator(`${card(id)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
       await p.page.locator("#threads").click();
       await p.app.evaluate(({ BrowserWindow }) => {
         const { webContents } = BrowserWindow.getAllWindows()[0];
@@ -1520,7 +1535,7 @@ describe("panel (e2e)", () => {
     const p = await launchPanel();
     try {
       const pill = await p.page.locator("#composer-box").evaluate((el) => getComputedStyle(el).borderTopLeftRadius);
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       const bar = p.page.locator("#listening");
       await bar.waitFor({ state: "visible", timeout: 5_000 });
       expect(await bar.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe(pill);
@@ -1545,7 +1560,7 @@ describe("panel (e2e)", () => {
     }
   }, 60_000);
 
-  it("voice: hotkey → listening bar with the live transcript → hotkey again → the question in the newest card with a mic mark, answered (063)", async () => {
+  it("voice: hold the hotkey → listening bar with the live transcript → let go → the question in the newest card with a mic mark, answered (063, 096)", async () => {
     const p = await launchPanel();
     const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
     try {
@@ -1554,7 +1569,7 @@ describe("panel (e2e)", () => {
       await p.page.locator("#hide").click();
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
 
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       // Shown (it was hidden), without taking focus; the composer is the listening bar.
       await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(true);
       expect((await windowInfo(p.app)).focused).toBe(false);
@@ -1563,11 +1578,11 @@ describe("panel (e2e)", () => {
       expect(await p.page.locator("#follow-up").isVisible()).toBe(false);
       expect(await bar.locator(".dot").isVisible()).toBe(true);
       expect(await bar.locator(".levels .level").count()).toBeGreaterThan(0);
-      expect(await bar.locator(".hint").innerText()).toBe("⌃⌥V to send · esc to cancel");
+      expect(await bar.locator(".hint").innerText()).toBe("let go to send · esc to cancel");
       await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
       expect(await escapeRegistered(p.app)).toBe(true);
 
-      await voiceKey(p.app);
+      await voiceKey(p.app, false);
       const asked = p.page.locator(`${card(id)} .question.voice`);
       await asked.waitFor({ state: "visible", timeout: 10_000 });
       expect(await asked.innerText()).toContain("why the product rule?");
@@ -1587,7 +1602,40 @@ describe("panel (e2e)", () => {
     }
   }, 90_000);
 
-  it("voice: Esc cancels (nothing sent, Esc released); the composer's mic button does what the hotkey does (063)", async () => {
+  it("listen: hold ⌃⌥B → the bar listens to the Mac → let go → the question with a speaker mark, saved heard, answered (098)", async () => {
+    const p = await launchPanel();
+    const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
+    try {
+      const id = await capture(p.app);
+      await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(1);
+
+      await listenKey(p.app, true);
+      const bar = p.page.locator("#listening");
+      await bar.waitFor({ state: "visible", timeout: 5_000 });
+      expect(await bar.getAttribute("class")).toContain("mac");
+      expect(await bar.locator(".hint").innerText()).toBe("let go to send · esc to cancel");
+      await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
+      expect(await escapeRegistered(p.app)).toBe(true);
+
+      await listenKey(p.app, false);
+      const asked = p.page.locator(`${card(id)} .question.heard`);
+      await asked.waitFor({ state: "visible", timeout: 10_000 });
+      expect(await asked.innerText()).toContain("why the product rule?");
+      expect(await asked.getAttribute("title")).toBe("Heard from your Mac");
+      expect(await asked.locator(".speaker-mark").count()).toBe(1);
+      expect(await asked.locator(".mic-mark").count()).toBe(0);
+      await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(2);
+      await expect.poll(() => bar.isVisible(), { timeout: 5_000 }).toBe(false);
+      const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", id, "thread.json"), "utf8"));
+      expect(saved.turns.filter((t: { kind?: string }) => t.kind === "text")).toEqual([
+        { role: "user", kind: "text", text: "why the product rule?", heard: true },
+      ]);
+    } finally {
+      await p.close();
+    }
+  }, 90_000);
+
+  it("voice: Esc while held cancels (nothing sent, Esc released, letting go after does nothing); the mic buttons are held to talk (063, 096)", async () => {
     const p = await launchPanel();
     const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
     try {
@@ -1595,21 +1643,31 @@ describe("panel (e2e)", () => {
       await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(1);
       const bar = p.page.locator("#listening");
 
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why");
       await voiceEscape(p.app);
       await expect.poll(() => bar.isVisible(), { timeout: 5_000 }).toBe(false);
       expect(await escapeRegistered(p.app)).toBe(false);
+      await voiceKey(p.app, false);
       await new Promise((r) => setTimeout(r, 1_000));
       expect(await p.page.locator(`${card(id)} .question`).count()).toBe(0);
 
+      // The composer's mic, held: down starts, up (the mic is hidden by then) sends.
       const mic = p.page.locator("#composer-voice");
       expect(await mic.getAttribute("aria-label")).toBe("Dictate");
-      await mic.click();
+      expect(await mic.getAttribute("title")).toBe("Hold to dictate a question");
+      await mic.hover();
+      await p.page.mouse.down();
       await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
-      await p.page.locator("#voice").click();
+      await p.page.mouse.up();
       await p.page.locator(`${card(id)} .question.voice`).waitFor({ state: "visible", timeout: 10_000 });
       await expect.poll(() => answers(id), { timeout: 20_000 }).toBe(2);
+
+      // The title bar's mic: a click is a tap, too short to talk: nothing sent, the hold note.
+      await p.page.locator("#voice").click();
+      await expect.poll(() => p.page.locator("#voice-note").innerText(), { timeout: 5_000 }).toBe("Hold to talk, let go to send.");
+      await new Promise((r) => setTimeout(r, 1_000));
+      expect(await p.page.locator(`${card(id)} .question.voice`).count()).toBe(1);
     } finally {
       await p.close();
     }
@@ -1618,9 +1676,11 @@ describe("panel (e2e)", () => {
   it("voice: an empty transcript sends nothing and says Didn't catch that (063)", async () => {
     const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "empty" });
     try {
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       await p.page.locator("#listening").waitFor({ state: "visible", timeout: 5_000 });
-      await voiceKey(p.app);
+      // Held long enough to count (a tap under 300 ms is cancelled with the hold note instead).
+      await new Promise((r) => setTimeout(r, 600));
+      await voiceKey(p.app, false);
       const note = p.page.locator("#voice-note");
       await expect.poll(() => note.innerText(), { timeout: 5_000 }).toBe("Didn't catch that.");
       expect(await p.page.locator("[data-thread-id]").count()).toBe(0);
@@ -1632,7 +1692,7 @@ describe("panel (e2e)", () => {
   it("voice: mic denied shows a permission card with Open System Settings and no Retry (063)", async () => {
     const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "denied" });
     try {
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       const permission = p.page.locator(".card.permission");
       await permission.waitFor({ state: "visible", timeout: 5_000 });
       expect(await permission.locator(".error").textContent()).toMatch(/Microphone/);
@@ -1649,7 +1709,7 @@ describe("panel (e2e)", () => {
   it("voice: a helper that crashes shows an error card, no buttons, and the composer is back (063)", async () => {
     const p = await launchPanel(undefined, { FAKE_SPEECH_SCENARIO: "crash" });
     try {
-      await voiceKey(p.app);
+      await voiceKey(p.app, true);
       const card = p.page.locator(".card.permission");
       await card.waitFor({ state: "visible", timeout: 10_000 });
       expect(await card.locator(".error").textContent()).toBe("Voice input stopped working. Details are in the snapsolve log.");
@@ -1657,6 +1717,336 @@ describe("panel (e2e)", () => {
       await expect.poll(() => p.page.locator("#listening").isVisible(), { timeout: 5_000 }).toBe(false);
       expect(await p.page.locator("#follow-up").isVisible()).toBe(true);
       expect(await escapeRegistered(p.app)).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 60_000);
+});
+
+// Task 097 (SPEC Amendment 28): Esc stops an answer that is being written, as in a chatbot.
+describe("Esc stops an answer (e2e, 097)", () => {
+  /** A real Esc to the focused window, as the OS delivers it (main's before-input-event; Playwright's keyboard skips it). */
+  function escape(app: ElectronApplication): Promise<void> {
+    return app.evaluate(({ BrowserWindow }) => {
+      const { webContents } = BrowserWindow.getAllWindows()[0];
+      webContents.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+      webContents.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+    });
+  }
+
+  it("Esc while it streams: claude stops, the text so far stays as written (an answer, not faded) marked Stopped with Retry, the window stays; the next question is answered; Esc then hides", async () => {
+    const scenarioDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-scenario-"));
+    const scenarioFile = path.join(scenarioDir, "scenario");
+    // hang: the first piece of the answer ("Answer "), then nothing.
+    writeFileSync(scenarioFile, "hang");
+    const p = await launchPanel(undefined, { FAKE_CLAUDE_SCENARIO_FILE: scenarioFile });
+    try {
+      const id = await capture(p.app);
+      const streaming = p.page.locator(`${card(id)} .answer.streaming`);
+      await streaming.waitFor({ state: "visible", timeout: 20_000 });
+      await expect.poll(() => streaming.innerText(), { timeout: 5_000 }).toContain("Answer");
+      await streaming.click();
+      const stoppedAt = Date.now();
+      await escape(p.app);
+
+      const stopped = p.page.locator(`${card(id)} .answer.stopped`);
+      await stopped.waitFor({ state: "visible", timeout: 5_000 });
+      expect(Date.now() - stoppedAt).toBeLessThan(3_000);
+      expect((await stopped.innerText()).trim()).toBe("Answer");
+      // As it was written: the answer's own look, not an error's faded partial text.
+      expect(Number(await stopped.evaluate((el) => getComputedStyle(el).opacity))).toBe(1);
+      expect(await stopped.evaluate((el) => el.classList.contains("partial"))).toBe(false);
+      expect(await p.page.locator(`${card(id)} p.stopped`).innerText()).toBe("Stopped.");
+      expect(await p.page.locator(`${card(id)} .retry`).isVisible()).toBe(true);
+      expect(await p.page.locator(`${card(id)} .answer.streaming`).count()).toBe(0);
+      expect((await windowInfo(p.app)).visible).toBe(true);
+      // The sidebar does not mark a stopped chat as failed.
+      expect(await p.page.locator(`[data-chat-id="${id}"] .chat-dot.error`).count()).toBe(0);
+      const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", id, "thread.json"), "utf8")) as Thread;
+      expect(saved.status).toBe("error");
+      expect(saved.turns.at(-1)).toMatchObject({ role: "assistant", text: "Answer ", isError: true, errorKind: "stopped", errorMessage: "Stopped." });
+
+      writeFileSync(scenarioFile, "ok");
+      await p.page.locator("#follow-up").fill("why?");
+      await p.page.locator("#follow-up").press("Enter");
+      await p.page.locator(`${card(id)} .answer:not(.streaming):not(.stopped)`).first().waitFor({ state: "visible", timeout: 20_000 });
+
+      await escape(p.app);
+      await expect.poll(async () => (await windowInfo(p.app)).visible, { timeout: 5_000 }).toBe(false);
+    } finally {
+      await p.close();
+      rmSync(scenarioDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 90_000);
+
+  it("Esc during Thinking… (before any text) stops it too: Stopped with no text, and Retry answers it", async () => {
+    const scenarioDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-scenario-"));
+    const scenarioFile = path.join(scenarioDir, "scenario");
+    writeFileSync(scenarioFile, "slow");
+    // slow with a long delay: "Thinking…" for seconds before the first piece.
+    const p = await launchPanel(undefined, { FAKE_CLAUDE_SCENARIO_FILE: scenarioFile, FAKE_DELAY_MS: "30000" });
+    try {
+      const id = await capture(p.app);
+      const thinking = p.page.locator(`${card(id)} .thinking`);
+      await thinking.waitFor({ state: "visible", timeout: 20_000 });
+      await thinking.click();
+      await escape(p.app);
+      await p.page.locator(`${card(id)} p.stopped`).waitFor({ state: "visible", timeout: 5_000 });
+      expect(await p.page.locator(`${card(id)} .answer.stopped, ${card(id)} .partial`).count()).toBe(0);
+      expect((await windowInfo(p.app)).visible).toBe(true);
+
+      writeFileSync(scenarioFile, "ok");
+      await p.page.locator(`${card(id)} .retry`).click();
+      await p.page.locator(`${card(id)} .answer:not(.streaming):not(.stopped)`).first().waitFor({ state: "visible", timeout: 20_000 });
+    } finally {
+      await p.close();
+      rmSync(scenarioDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 90_000);
+});
+
+// Task 099: a question asked while an answer is written waits for it, and shows at once as queued.
+describe("queued questions (e2e, 099)", () => {
+  it("typed and dictated during an answer: each shows at once, faded and marked Queued, after the answer; then each is asked and answered in order", async () => {
+    const p = await launchPanel();
+    const answers = (id: string) => p.page.locator(`${card(id)} .answer:not(.streaming)`).count();
+    try {
+      const id = await capture(p.app);
+      await p.page.locator(`${card(id)} .thinking, ${card(id)} .answer.streaming`).first().waitFor({ state: "visible", timeout: 20_000 });
+
+      await p.page.locator("#follow-up").fill("why?");
+      await p.page.locator("#follow-up").press("Enter");
+      const queued = p.page.locator(`${card(id)} .question.queued`);
+      await queued.first().waitFor({ state: "visible", timeout: 5_000 });
+      expect(await queued.first().locator(".question-text").innerText()).toBe("why?");
+      expect(await queued.first().locator(".queued-label").innerText()).toBe("Queued");
+      expect(Number(await queued.first().evaluate((el) => getComputedStyle(el).opacity))).toBeLessThan(1);
+      // After the answer being written.
+      expect(
+        await p.page.evaluate((sel) => {
+          const live = document.querySelector(`${sel} .live`) as Element;
+          const q = document.querySelector(`${sel} .question.queued`) as Element;
+          return Boolean(live.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING);
+        }, card(id)),
+      ).toBe(true);
+      expect(await answers(id)).toBe(0);
+
+      // Held ⌃⌥V while it is still written: no "wait" note, the dictation queues behind it.
+      await voiceKey(p.app, true);
+      const bar = p.page.locator("#listening");
+      await bar.waitFor({ state: "visible", timeout: 5_000 });
+      await expect.poll(() => bar.locator(".transcript").innerText(), { timeout: 5_000 }).toContain("why the product");
+      await voiceKey(p.app, false);
+      await expect.poll(() => queued.count(), { timeout: 10_000 }).toBe(2);
+      expect(await queued.nth(1).locator(".mic-mark").count()).toBe(1);
+      expect(await queued.nth(1).locator(".question-text").innerText()).toBe("why the product rule?");
+      expect(await p.page.locator("#voice-note").isVisible()).toBe(false);
+
+      // Each becomes a normal question when its turn starts, never shown twice, and all three are answered.
+      await expect.poll(() => answers(id), { timeout: 60_000 }).toBe(3);
+      expect(await queued.count()).toBe(0);
+      expect(await p.page.locator(`${card(id)} .question`).allInnerTexts()).toEqual(["why?", "why the product rule?"]);
+      const saved = JSON.parse(readFileSync(path.join(p.dataDir, "threads", id, "thread.json"), "utf8")) as Thread;
+      expect(saved.turns.filter((t) => t.role === "user" && t.kind === "text")).toEqual([
+        { role: "user", kind: "text", text: "why?" },
+        { role: "user", kind: "text", text: "why the product rule?", voice: true },
+      ]);
+      expect("queued" in saved).toBe(false);
+    } finally {
+      await p.close();
+    }
+  }, 120_000);
+});
+
+// Task 089 (SPEC Amendment 25): the title bar's Solve | Answer toggle and answer mode's knowledge folder.
+describe("answer mode (e2e, 089)", () => {
+  const ANSWER_EMPTY = "Answer mode. Ask a question and snapsolve drafts your answer, using your knowledge folder for anything about you.";
+
+  /** A data dir whose default knowledge folder (<data>/knowledge) holds one story. */
+  function dataDirWithKnowledge(): string {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    mkdirSync(path.join(dataDir, "knowledge", "stories"), { recursive: true });
+    writeFileSync(path.join(dataDir, "knowledge", "stories", "fast.md"), "I learned Electron in a week to build snapsolve.\n");
+    return dataDir;
+  }
+
+  /** The fake claude's `start` lines (FAKE_LOG): its argv per spawn; none when it never ran. */
+  function starts(fakeLog: string): { argv: string[] }[] {
+    let text = "";
+    try {
+      text = readFileSync(fakeLog, "utf8");
+    } catch {
+      return [];
+    }
+    return text
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { event: string; argv: string[] })
+      .filter((e) => e.event === "start");
+  }
+
+  const modeRadio = (page: Page, name: "Solve" | "Answer") =>
+    page.locator("#titlebar").getByRole("radiogroup", { name: "Mode" }).getByRole("radio", { name });
+  const checked = (page: Page) =>
+    page.locator('#titlebar [role="radio"][aria-checked="true"]').evaluateAll((els) => els.map((e) => e.textContent?.trim()));
+  const configMode = (dataDir: string) => (JSON.parse(readFileSync(path.join(dataDir, "config.json"), "utf8")) as { mode?: string }).mode;
+  const savedThread = (dataDir: string, id: string) => JSON.parse(readFileSync(path.join(dataDir, "threads", id, "thread.json"), "utf8")) as Thread;
+
+  async function launchWithLog(dataDir: string): Promise<{ launched: LaunchedApp; page: Page; fakeLog: string; projects: string }> {
+    const projects = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-projects-"));
+    const fakeLog = path.join(projects, "fake.log");
+    const launched = await launchApp({
+      dataDir,
+      env: { SNAPSOLVE_TEST_CLAUDE: FAKE, SNAPSOLVE_TEST_PROJECTS: projects, FAKE_PROJECTS: projects, FAKE_LOG: fakeLog },
+    });
+    const page = await launched.app.firstWindow();
+    await page.waitForLoadState("domcontentloaded");
+    return { launched, page, fakeLog, projects };
+  }
+
+  function cleanup(...dirs: string[]): void {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  }
+
+  it("Solve by default; Answer with no chat on screen saves mode answer; a typed question starts an answer chat whose claude gets the answer prompt, the format and the knowledge files", async () => {
+    const dataDir = dataDirWithKnowledge();
+    const { launched, page, fakeLog, projects } = await launchWithLog(dataDir);
+    try {
+      await expect.poll(() => checked(page), { timeout: 5_000 }).toEqual(["Solve"]);
+      await modeRadio(page, "Answer").click();
+      await expect.poll(() => checked(page), { timeout: 5_000 }).toEqual(["Answer"]);
+      await expect.poll(() => configMode(dataDir), { timeout: 5_000 }).toBe("answer");
+      expect(await page.locator("#empty").textContent()).toBe(ANSWER_EMPTY);
+      expect(await page.locator("#empty").isVisible()).toBe(true);
+
+      const box = page.locator("#composer textarea");
+      await box.fill("Tell me about a time you learned a technology quickly.");
+      await box.press("Enter");
+      await expect.poll(() => chats(page).then((c) => c.length), { timeout: 10_000 }).toBe(1);
+      const [id] = await chats(page);
+      await page.locator(`${card(id!)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(await checked(page)).toEqual(["Answer"]);
+      expect(savedThread(dataDir, id!).mode).toBe("answer");
+
+      const [start] = starts(fakeLog);
+      const system = start.argv[start.argv.indexOf("--system-prompt") + 1];
+      const base = readFileSync(path.join(repoRoot, "prompts", "answer.md"), "utf8").trimEnd();
+      const format = readFileSync(path.join(repoRoot, "prompts", "answer-format.md"), "utf8").trim();
+      expect(system).toBe(
+        `${base}\n\n## Answer format\n\n${format}\n\n## Reference material\n\n<file path="stories/fast.md">\nI learned Electron in a week to build snapsolve.\n</file>\n`,
+      );
+    } finally {
+      await launched.close();
+      cleanup(dataDir, projects);
+    }
+  }, 90_000);
+
+  it("switching while a chat is on screen starts a new chat in that mode; each chat keeps its mode, shown again when chosen; a restart keeps the choice", async () => {
+    const dataDir = dataDirWithKnowledge();
+    let run = await launchWithLog(dataDir);
+    try {
+      const first = await capture(run.launched.app);
+      await run.page.locator(`${card(first)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(await checked(run.page)).toEqual(["Solve"]);
+
+      await modeRadio(run.page, "Answer").click();
+      await expect.poll(() => run.page.locator("[data-thread-id]").count(), { timeout: 5_000 }).toBe(0);
+      expect(await run.page.locator("#empty").textContent()).toBe(ANSWER_EMPTY);
+      expect(await checked(run.page)).toEqual(["Answer"]);
+      expect(await chats(run.page)).toEqual([first]);
+
+      const box = run.page.locator("#composer textarea");
+      await box.fill("Walk me through a project.");
+      await box.press("Enter");
+      await expect.poll(() => chats(run.page).then((c) => c.length), { timeout: 10_000 }).toBe(2);
+      const [second] = await chats(run.page);
+      expect(second).not.toBe(first);
+      await run.page.locator(`${card(second!)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(savedThread(dataDir, second!).mode).toBe("answer");
+      expect(Object.keys(savedThread(dataDir, first))).not.toContain("mode");
+
+      await chooseChat(run.page, first);
+      await expect.poll(() => checked(run.page), { timeout: 5_000 }).toEqual(["Solve"]);
+      await chooseChat(run.page, second!);
+      await expect.poll(() => checked(run.page), { timeout: 5_000 }).toEqual(["Answer"]);
+
+      // Back to Solve while the answer chat is on screen: a new chat again, in Solve; the next capture starts it.
+      await modeRadio(run.page, "Solve").click();
+      await expect.poll(() => run.page.locator("[data-thread-id]").count(), { timeout: 5_000 }).toBe(0);
+      expect(await checked(run.page)).toEqual(["Solve"]);
+      const third = await capture(run.launched.app);
+      expect([first, second]).not.toContain(third);
+      await run.page.locator(`${card(third)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(Object.keys(savedThread(dataDir, third))).not.toContain("mode");
+
+      // A restart keeps the last choice for new chats (config.json mode); the newest chat shows its own mode.
+      await modeRadio(run.page, "Answer").click();
+      await expect.poll(() => configMode(dataDir), { timeout: 5_000 }).toBe("answer");
+      await run.launched.close();
+      cleanup(run.projects);
+      run = await launchWithLog(dataDir);
+      await expect.poll(() => chats(run.page).then((c) => c.length), { timeout: 10_000 }).toBe(3);
+      await expect.poll(() => checked(run.page), { timeout: 5_000 }).toEqual(["Solve"]);
+      await newChat(run.page);
+      await expect.poll(() => checked(run.page), { timeout: 5_000 }).toEqual(["Answer"]);
+    } finally {
+      await run.launched.close();
+      cleanup(dataDir, run.projects);
+    }
+  }, 150_000);
+
+  it("answer mode with no knowledge folder still answers (Amendment 26): claude is started, its system prompt says there is no reference material, and no error shows", async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), "snapsolve-e2e-"));
+    const { launched, page, fakeLog, projects } = await launchWithLog(dataDir);
+    try {
+      await modeRadio(page, "Answer").click();
+      await expect.poll(() => checked(page), { timeout: 5_000 }).toEqual(["Answer"]);
+      const box = page.locator("#composer textarea");
+      await box.fill("How do you keep up with AI news?");
+      await box.press("Enter");
+      await expect.poll(() => chats(page).then((c) => c.length), { timeout: 10_000 }).toBe(1);
+      const [id] = await chats(page);
+      await page.locator(`${card(id!)} .answer:not(.streaming)`).first().waitFor({ state: "visible", timeout: 20_000 });
+      expect(await page.locator(`${card(id!)} .error`).count()).toBe(0);
+      expect(savedThread(dataDir, id!).status).not.toBe("error");
+
+      const all = starts(fakeLog);
+      expect(all).toHaveLength(1);
+      const system = all[0].argv[all[0].argv.indexOf("--system-prompt") + 1];
+      const base = readFileSync(path.join(repoRoot, "prompts", "answer.md"), "utf8").trimEnd();
+      const format = readFileSync(path.join(repoRoot, "prompts", "answer-format.md"), "utf8").trim();
+      expect(system).toBe(
+        `${base}\n\n## Answer format\n\n${format}\n\n## Reference material\n\nNone: the user's knowledge folder has no text files.\n`,
+      );
+    } finally {
+      await launched.close();
+      cleanup(dataDir, projects);
+    }
+  }, 90_000);
+
+  it("at the narrowest window (280 px) the toggle and every title bar button stay inside the window", async () => {
+    const p = await launchPanel();
+    try {
+      await p.app.evaluate(({ BrowserWindow }) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        win.show();
+        const { x, y } = win.getBounds();
+        win.setBounds({ x, y, width: 280, height: 400 });
+        win.emit("resized");
+      });
+      await expect.poll(() => p.page.evaluate(() => window.innerWidth), { timeout: 5_000 }).toBe(280);
+      const rights = await p.page
+        .locator("#titlebar > *")
+        .evaluateAll((els) =>
+          els
+            .filter((e) => getComputedStyle(e).display !== "none")
+            .map((e) => [e.id || e.getAttribute("class") || e.tagName, e.getBoundingClientRect().right] as const),
+        );
+      expect(rights.length).toBeGreaterThan(4);
+      for (const [name, right] of rights) expect(right, String(name)).toBeLessThanOrEqual(280);
+      expect(await modeRadio(p.page, "Answer").isVisible()).toBe(true);
+      expect(await p.page.locator("#hide").isVisible()).toBe(true);
     } finally {
       await p.close();
     }

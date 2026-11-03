@@ -8,17 +8,26 @@ import type { Logger } from "../../src/main/log";
 import {
   createVoice,
   ESCAPE,
+  holdEscape,
+  holdModifiers,
   parseHelperLine,
   resolveSpeechHelper,
-  VOICE_BUSY_NOTE,
   VOICE_EMPTY_NOTE,
+  VOICE_HOLD_NOTE,
+  VOICE_MAC_EMPTY_NOTE,
+  VOICE_MAC_SILENT_NOTE,
+  VOICE_MAX_HOLD_MS,
+  VOICE_MIN_HOLD_MS,
   VOICE_STOP_TIMEOUT_MS,
   type VoiceDeps,
 } from "../../src/main/voice";
+import * as voiceModule from "../../src/main/voice";
 import { userMessage } from "../../src/shared/errors";
 import type { VoiceState } from "../../src/shared/types";
 
 const QUESTION = "why the product rule?";
+/** Long enough to count as a hold (096). */
+const HELD_MS = 1_000;
 
 /** The speech helper as main sees it: JSON lines on stdout, SIGINT = stop and send, any other signal = gone. */
 class FakeHelper extends EventEmitter {
@@ -71,10 +80,12 @@ function recordingLog() {
     error: (...a: unknown[]) => void lines.push(a),
     flush: async () => {},
   };
-  return { log, text: () => JSON.stringify(lines) };
+  return { log, lines, text: () => JSON.stringify(lines) };
 }
 
-function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; answering?: boolean } = {}) {
+function setup(
+  options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; holdKeys?: string[]; listenHoldKeys?: string[] } = {},
+) {
   const children: FakeHelper[] = [];
   const spawn = vi.fn((_file: string, _args: readonly string[], _options: unknown) => {
     if (options.spawnThrows) throw options.spawnThrows;
@@ -84,28 +95,32 @@ function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; ans
   });
   const shortcut = fakeShortcut();
   const states: VoiceState[] = [];
-  const send = vi.fn(async (_text: string) => undefined);
+  const send = vi.fn(async (_text: string, _heard?: true) => undefined);
   const onDenied = vi.fn();
   const onFailed = vi.fn();
-  const isAnswering = vi.fn(() => options.answering ?? false);
   const showWindow = vi.fn();
   const recorded = recordingLog();
+  let clock = 0;
   const deps: VoiceDeps = {
     helper: options.helper === undefined ? { path: "/app/native/snapsolve-speech", prefixArgs: [] } : options.helper,
     spawn,
     env: { PATH: "/usr/bin" },
     globalShortcut: shortcut,
     keyLabel: "⌃⌥V",
+    holdKeys: options.holdKeys ?? ["control", "option"],
+    // 098: the listen hotkey (⌃⌥B), held like the voice key.
+    listenKeyLabel: "⌃⌥B",
+    listenHoldKeys: options.listenHoldKeys ?? ["control", "option"],
     onState: (s) => void states.push(s),
     send,
     onDenied,
     onFailed,
-    isAnswering,
     showWindow,
     log: recorded.log,
+    now: () => clock,
   };
   const voice = createVoice(deps);
-  return {
+  const t = {
     voice,
     deps,
     spawn,
@@ -114,13 +129,36 @@ function setup(options: { helper?: VoiceDeps["helper"]; spawnThrows?: Error; ans
     send,
     onDenied,
     onFailed,
-    isAnswering,
     showWindow,
+    logLines: recorded.lines,
     logText: recorded.text,
     child: () => children.at(-1)!,
     children,
     last: () => states.at(-1),
+    /** Moves the voice clock on (the hold's length); timers are separate. */
+    tick: (ms: number) => void (clock += ms),
+    /** The voice keys held for HELD_MS, then the helper reports them released. */
+    holdKeyAndLetGo: async () => {
+      voice.press("key");
+      t.tick(HELD_MS);
+      t.child().line({ type: "released" });
+      await flush();
+    },
+    /** The listen keys (⌃⌥B, 098) held for HELD_MS, then the helper reports them released. */
+    holdListenAndLetGo: async () => {
+      voice.press("listen");
+      t.tick(HELD_MS);
+      t.child().line({ type: "released" });
+      await flush();
+    },
+    /** A mic button held for HELD_MS, then let go. */
+    holdButtonAndLetGo: () => {
+      voice.press("button");
+      t.tick(HELD_MS);
+      voice.release("button");
+    },
   };
+  return t;
 }
 
 /** Lets stdout lines, exit and close run. */
@@ -128,12 +166,18 @@ async function flush(): Promise<void> {
   for (let i = 0; i < 5; i++) await new Promise<void>((r) => setImmediate(r));
 }
 
+const listening = (text: string, level = 0, hold = true): VoiceState => ({ state: "listening", text, level, key: "⌃⌥V", hold });
+
 describe("parseHelperLine (helper output parsing)", () => {
-  it("reads ready, level, partial, final and error lines", () => {
+  it("reads ready, level, partial, final, released and error lines", () => {
     expect(parseHelperLine('{"type":"ready"}')).toEqual({ type: "ready" });
     expect(parseHelperLine('{"type":"level","level":0.5}')).toEqual({ type: "level", level: 0.5 });
     expect(parseHelperLine('{"type":"partial","text":"why the"}')).toEqual({ type: "partial", text: "why the" });
     expect(parseHelperLine('{"type":"final","text":"why"}')).toEqual({ type: "final", text: "why" });
+    // 096: the held voice keys came up.
+    expect(parseHelperLine('{"type":"released"}')).toEqual({ type: "released" });
+    // 098: listening to the Mac heard only zeros (nothing played, or System Audio Recording refused).
+    expect(parseHelperLine('{"type":"final","text":"","silent":true}')).toEqual({ type: "final", text: "", silent: true });
     expect(parseHelperLine('{"type":"error","kind":"micDenied","message":"no"}')).toEqual({
       type: "error",
       kind: "micDenied",
@@ -159,53 +203,105 @@ describe("parseHelperLine (helper output parsing)", () => {
   ])("ignores a malformed line %j", (line) => {
     expect(parseHelperLine(line)).toBeNull();
   });
+
+  it.each(['{"type":"final","text":"","silent":false}', '{"type":"final","text":"","silent":"yes"}', '{"type":"final","text":"","silent":1}'])(
+    "a silent mark that is not true is dropped (098): %j",
+    (line) => {
+      expect(parseHelperLine(line)).toEqual({ type: "final", text: "" });
+    },
+  );
 });
 
-describe("voice", () => {
+describe("holdModifiers (096): the voice accelerator's modifiers, as the helper's --hold names them", () => {
+  it.each([
+    ["Control+Alt+V", ["control", "option"]],
+    ["Ctrl+Option+Shift+K", ["control", "option", "shift"]],
+    ["CommandOrControl+Shift+V", ["shift", "command"]],
+    ["CmdOrCtrl+Alt+Space", ["option", "command"]],
+    ["Cmd+V", ["command"]],
+    ["Super+Alt+V", ["option", "command"]],
+    ["Meta+V", ["command"]],
+    ["alt+control+v", ["control", "option"]],
+    ["Control+Ctrl+V", ["control"]],
+  ])("%s → %j (fixed order: control, option, shift, command; no repeats)", (accelerator, names) => {
+    expect(holdModifiers(accelerator)).toEqual(names);
+  });
+
+  it.each(["F13", "V", "", "Space"])("an accelerator with no modifier (%j) has nothing to hold: []", (accelerator) => {
+    expect(holdModifiers(accelerator)).toEqual([]);
+  });
+});
+
+describe("holdEscape (096 review 1): Esc as it arrives while the voice keys are held", () => {
+  it.each([
+    [["control", "option"], "Control+Alt+Escape"],
+    [["control", "option", "shift"], "Control+Alt+Shift+Escape"],
+    [["shift", "command"], "Shift+Command+Escape"],
+    [["command"], "Command+Escape"],
+  ])("%j → %s", (keys, accelerator) => {
+    expect(holdEscape(keys)).toBe(accelerator);
+  });
+
+  it("nothing held → null (the bare Escape is enough)", () => {
+    expect(holdEscape([])).toBeNull();
+  });
+});
+
+describe("voice (hold to talk, 096)", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("first press shows the window, spawns the helper with piped stdio and listens with the Esc shortcut held", () => {
+  it("holding the voice key shows the window and spawns the helper watching ⌃ and ⌥ (--hold control,option), with Esc held", () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     expect(t.showWindow).toHaveBeenCalledTimes(1);
     expect(t.spawn).toHaveBeenCalledTimes(1);
     const [file, args, options] = t.spawn.mock.calls[0];
     expect(file).toBe("/app/native/snapsolve-speech");
-    expect(args).toEqual([]);
+    expect(args).toEqual(["--hold", "control,option"]);
     expect(options).toMatchObject({ stdio: ["pipe", "pipe", "pipe"], env: { PATH: "/usr/bin" } });
-    expect(t.last()).toEqual({ state: "listening", text: "", level: 0, key: "⌃⌥V" });
+    expect(t.last()).toEqual(listening(""));
     expect(t.voice.status()).toBe("listening");
     expect(t.shortcut.registered.has(ESCAPE)).toBe(true);
   });
 
+  it("holding a mic button spawns the helper without the key watch (the button's own release ends it)", () => {
+    const t = setup({ helper: { path: "/electron", prefixArgs: ["/fixtures/fake-speech.mjs"] } });
+    t.voice.press("button");
+    expect(t.spawn.mock.calls[0][0]).toBe("/electron");
+    expect(t.spawn.mock.calls[0][1]).toEqual(["/fixtures/fake-speech.mjs"]);
+    expect(t.last()).toEqual(listening(""));
+    t.voice.cancel();
+    // The key watch goes after the helper's own prefix arguments.
+    t.voice.press("key");
+    expect(t.spawn.mock.calls[1][1]).toEqual(["/fixtures/fake-speech.mjs", "--hold", "control,option"]);
+  });
+
   it("partial and level lines update the listening state, also when a line arrives in pieces", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().stdout.write('{"type":"level","lev');
     t.child().stdout.write('el":0.4}\n{"type":"partial","text":"why the"}\n');
     await flush();
-    expect(t.last()).toEqual({ state: "listening", text: "why the", level: 0.4, key: "⌃⌥V" });
+    expect(t.last()).toEqual(listening("why the", 0.4));
     t.child().line("garbage");
     t.child().line({ type: "partial", text: "why the product" });
     await flush();
-    expect(t.last()).toEqual({ state: "listening", text: "why the product", level: 0.4, key: "⌃⌥V" });
+    expect(t.last()).toEqual(listening("why the product", 0.4));
   });
 
-  it("second Ctrl+Option+V sends: stop is SIGINT, a press while it finishes is ignored, the final text goes to send once", async () => {
+  it("letting go of the keys sends: the helper's released line → SIGINT, the final text goes to send once", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().line({ type: "ready" });
     t.child().line({ type: "partial", text: "why the product" });
     await flush();
-    t.voice.toggle();
+    t.tick(HELD_MS);
+    t.child().line({ type: "released" });
+    await flush();
     expect(t.child().signals).toEqual(["SIGINT"]);
     expect(t.last()).toEqual({ state: "stopping", text: "why the product", key: "⌃⌥V" });
-    // While the helper finishes the transcript another press does nothing.
-    t.voice.toggle();
-    expect(t.spawn).toHaveBeenCalledTimes(1);
-    expect(t.child().signals).toEqual(["SIGINT"]);
     t.child().line({ type: "final", text: QUESTION });
     t.child().exit(0);
     await flush();
@@ -214,15 +310,66 @@ describe("voice", () => {
     expect(t.last()).toEqual({ state: "idle" });
     expect(t.onFailed).not.toHaveBeenCalled();
     expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
-    // Idle again: the next press starts a new dictation.
-    t.voice.toggle();
+    // Idle again: the next hold starts a new dictation.
+    t.voice.press("key");
     expect(t.spawn).toHaveBeenCalledTimes(2);
   });
 
-  it("a stop pressed before the helper is ready waits for its ready line, then SIGINT (a SIGINT before would kill it)", async () => {
+  it("the key pressed again while held (auto-repeat) or while the text is on its way is ignored: one helper, no signal", async () => {
     const t = setup();
-    t.voice.toggle();
-    t.voice.toggle();
+    t.voice.press("key");
+    t.child().line({ type: "ready" });
+    await flush();
+    t.tick(HELD_MS);
+    t.voice.press("key");
+    t.voice.press("key");
+    t.voice.press("button");
+    expect(t.spawn).toHaveBeenCalledTimes(1);
+    expect(t.child().signals).toEqual([]);
+    expect(t.voice.status()).toBe("listening");
+    t.child().line({ type: "released" });
+    await flush();
+    t.voice.press("key");
+    t.voice.release("key");
+    expect(t.spawn).toHaveBeenCalledTimes(1);
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    expect(t.voice.status()).toBe("stopping");
+  });
+
+  it("a held mic button sends when let go; a release from the other source, or a released line, does not end it", async () => {
+    const t = setup();
+    t.voice.press("button");
+    t.child().line({ type: "ready" });
+    await flush();
+    t.tick(HELD_MS);
+    t.voice.release("key");
+    t.child().line({ type: "released" });
+    await flush();
+    expect(t.child().signals).toEqual([]);
+    expect(t.voice.status()).toBe("listening");
+    t.voice.release("button");
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send).toHaveBeenCalledWith(QUESTION);
+  });
+
+  it("the keys' release does not end a button's dictation, and the button's release does not end the keys'", async () => {
+    const t = setup();
+    t.voice.press("key");
+    t.tick(HELD_MS);
+    t.voice.release("button");
+    expect(t.voice.status()).toBe("listening");
+    t.child().line({ type: "released" });
+    await flush();
+    expect(t.voice.status()).toBe("stopping");
+  });
+
+  it("let go before the helper is ready: waits for its ready line, then SIGINT (a SIGINT before would kill it)", async () => {
+    const t = setup();
+    t.voice.press("button");
+    t.tick(HELD_MS);
+    t.voice.release("button");
     expect(t.child().signals).toEqual([]);
     expect(t.last()).toEqual({ state: "stopping", text: "", key: "⌃⌥V" });
     t.child().line({ type: "ready" });
@@ -233,35 +380,205 @@ describe("voice", () => {
     expect(t.send).toHaveBeenCalledWith(QUESTION);
   });
 
-  it("a helper that never gets ready after the stop is killed at the stop timeout", async () => {
+  it(`a hold shorter than ${VOICE_MIN_HOLD_MS} ms is a tap: cancelled (SIGTERM), nothing sent, a note says to hold`, async () => {
+    expect(VOICE_MIN_HOLD_MS).toBe(300);
+    expect(VOICE_HOLD_NOTE).toBe("Hold to talk, let go to send.");
+    for (const source of ["key", "button"] as const) {
+      const t = setup();
+      t.voice.press(source);
+      t.child().line({ type: "ready" });
+      await flush();
+      t.tick(VOICE_MIN_HOLD_MS - 1);
+      if (source === "key") t.child().line({ type: "released" });
+      else t.voice.release(source);
+      await flush();
+      expect(t.child().signals).toEqual(["SIGTERM"]);
+      expect(t.last()).toEqual({ state: "idle", note: VOICE_HOLD_NOTE });
+      expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
+      t.child().line({ type: "final", text: QUESTION });
+      t.child().exit(0);
+      await flush();
+      expect(t.send).not.toHaveBeenCalled();
+      expect(t.onFailed).not.toHaveBeenCalled();
+    }
+  });
+
+  it(`a hold of exactly ${VOICE_MIN_HOLD_MS} ms counts: it sends`, async () => {
+    const t = setup();
+    t.voice.press("button");
+    t.child().line({ type: "ready" });
+    await flush();
+    t.tick(VOICE_MIN_HOLD_MS);
+    t.voice.release("button");
+    expect(t.child().signals).toEqual(["SIGINT"]);
+  });
+
+  it("Esc pressed while ⌃⌥ are still held arrives as ⌃⌥Esc: that is held too during a key hold, cancels, and both are released after", async () => {
+    const t = setup();
+    t.voice.press("key");
+    expect(t.shortcut.registered.has(ESCAPE)).toBe(true);
+    expect(t.shortcut.registered.has("Control+Alt+Escape")).toBe(true);
+    t.child().line({ type: "ready" });
+    await flush();
+    t.tick(HELD_MS);
+    t.shortcut.press("Control+Alt+Escape");
+    expect(t.child().signals).toEqual(["SIGTERM"]);
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
+    expect(t.shortcut.registered.has("Control+Alt+Escape")).toBe(false);
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("both Escapes are released when a key hold ends by sending too", async () => {
+    const t = setup();
+    await t.holdKeyAndLetGo();
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send).toHaveBeenCalledWith(QUESTION);
+    expect([...t.shortcut.registered.keys()]).toEqual([]);
+    expect(t.shortcut.unregister.mock.calls.map((c) => c[0]).sort()).toEqual(["Control+Alt+Escape", ESCAPE].sort());
+  });
+
+  it("a mic button's dictation holds only the bare Escape (no modifier is down); so does a voice key with nothing to watch", () => {
+    const button = setup();
+    button.voice.press("button");
+    expect([...button.shortcut.registered.keys()]).toEqual([ESCAPE]);
+    const plain = setup({ holdKeys: [] });
+    plain.voice.press("key");
+    expect([...plain.shortcut.registered.keys()]).toEqual([ESCAPE]);
+  });
+
+  it("a ⌃⌥Esc taken by another app still lets the key hold run (logged); only what was ours is unregistered", async () => {
+    const t = setup();
+    t.shortcut.registered.set("Control+Alt+Escape", () => undefined);
+    t.voice.press("key");
+    expect(t.voice.status()).toBe("listening");
+    expect(t.logLines.some((l) => l[0] === "voice.escapeTaken")).toBe(true);
+    t.voice.cancel();
+    expect(t.shortcut.unregister.mock.calls.map((c) => c[0])).toEqual([ESCAPE]);
+    expect(t.shortcut.registered.has("Control+Alt+Escape")).toBe(true);
+  });
+
+  it("a press while the text is on its way is logged as ignored (063's voice.pressIgnored)", async () => {
+    const t = setup();
+    t.holdButtonAndLetGo();
+    expect(t.voice.status()).toBe("stopping");
+    t.voice.press("button");
+    expect(t.logLines.filter((l) => l[0] === "voice.pressIgnored")).toHaveLength(1);
+    expect(t.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("Esc while held cancels: nothing sent, Esc released; a later release or released line does nothing", async () => {
+    const t = setup();
+    t.voice.press("key");
+    t.child().line({ type: "partial", text: "why" });
+    await flush();
+    t.tick(HELD_MS);
+    t.shortcut.press(ESCAPE);
+    expect(t.child().signals).toEqual(["SIGTERM"]);
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
+    expect(t.shortcut.unregister).toHaveBeenCalledWith(ESCAPE);
+    const seen = t.states.length;
+    t.child().line({ type: "released" });
+    await flush();
+    t.voice.release("key");
+    t.voice.release("button");
+    t.child().line({ type: "final", text: QUESTION });
+    t.child().exit(0);
+    await flush();
+    expect(t.states.length).toBe(seen);
+    expect(t.child().signals).toEqual(["SIGTERM"]);
+    expect(t.send).not.toHaveBeenCalled();
+    expect(t.onFailed).not.toHaveBeenCalled();
+  });
+
+  it(`a release that never comes: listening ends at ${VOICE_MAX_HOLD_MS / 1000} s with stop and send, logged`, async () => {
+    vi.useFakeTimers();
+    expect(VOICE_MAX_HOLD_MS).toBe(120_000);
+    const t = setup();
+    t.voice.press("key");
+    t.child().line({ type: "ready" });
+    await vi.advanceTimersByTimeAsync(0);
+    vi.advanceTimersByTime(VOICE_MAX_HOLD_MS - 1);
+    expect(t.child().signals).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    expect(t.voice.status()).toBe("stopping");
+    expect(t.logLines.some((l) => l[0] === "voice.holdCapped")).toBe(true);
+    t.child().line({ type: "final", text: QUESTION });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.send).toHaveBeenCalledWith(QUESTION);
+  });
+
+  it("the hold cap does not fire after the dictation ended", async () => {
     vi.useFakeTimers();
     const t = setup();
-    t.voice.toggle();
-    t.voice.toggle();
+    t.voice.press("button");
+    t.tick(HELD_MS);
+    t.voice.cancel();
+    vi.advanceTimersByTime(VOICE_MAX_HOLD_MS);
+    expect(t.child().signals).toEqual(["SIGTERM"]);
+    expect(t.logLines.some((l) => l[0] === "voice.holdCapped")).toBe(false);
+  });
+
+  it("a voice key with no modifier to watch (holdKeys []) works as before 096: press again to send", async () => {
+    const t = setup({ holdKeys: [] });
+    t.voice.press("key");
+    expect(t.spawn.mock.calls[0][1]).toEqual([]);
+    expect(t.last()).toEqual(listening("", 0, false));
+    t.child().line({ type: "ready" });
+    await flush();
+    t.tick(HELD_MS);
+    t.voice.release("key");
+    expect(t.child().signals).toEqual([]);
+    t.voice.press("key");
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    expect(t.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("a helper that never gets ready after the release is killed at the stop timeout", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.holdButtonAndLetGo();
     vi.advanceTimersByTime(VOICE_STOP_TIMEOUT_MS);
     expect(t.child().signals).toEqual(["SIGKILL"]);
     expect(t.last()).toEqual({ state: "idle" });
     expect(t.onFailed).toHaveBeenCalledTimes(1);
   });
 
-  it("a press while the current thread is thinking or answering is ignored: nothing spawned, a note says to wait", () => {
-    const t = setup({ answering: true });
-    t.voice.toggle();
-    expect(t.spawn).not.toHaveBeenCalled();
-    expect(t.showWindow).not.toHaveBeenCalled();
-    expect(t.shortcut.register).not.toHaveBeenCalled();
-    expect(VOICE_BUSY_NOTE).toBe("Wait for the answer, then ask.");
-    expect(t.last()).toEqual({ state: "idle", note: VOICE_BUSY_NOTE });
-    expect(t.voice.status()).toBe("idle");
+  it("099: voice asks nothing about the chat: no isAnswering dep, no busy note; a press always listens (the question is queued behind any answer)", async () => {
+    expect("VOICE_BUSY_NOTE" in voiceModule).toBe(false);
+    expect("isAnswering" in setup().deps).toBe(false);
+    for (const source of ["key", "button", "listen"] as const) {
+      const t = setup();
+      t.voice.press(source);
+      expect(t.spawn).toHaveBeenCalledTimes(1);
+      expect(t.showWindow).toHaveBeenCalledTimes(1);
+      expect(t.voice.status()).toBe("listening");
+      t.child().line({ type: "ready" });
+      await flush();
+      t.tick(HELD_MS);
+      if (source === "button") t.voice.release("button");
+      else t.child().line({ type: "released" });
+      await flush();
+      t.child().line({ type: "final", text: QUESTION });
+      await flush();
+      expect(t.send.mock.calls).toEqual([source === "listen" ? [QUESTION, true] : [QUESTION]]);
+      expect(t.states.some((s) => s.state === "idle" && s.note !== undefined)).toBe(false);
+    }
   });
 
-  it("an answer that starts while listening does not block the stop: the second press still sends", async () => {
+  it("an answer that starts while listening does not block the release: it still sends", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().line({ type: "ready" });
     await flush();
-    t.isAnswering.mockReturnValue(true);
-    t.voice.toggle();
+    t.tick(HELD_MS);
+    t.child().line({ type: "released" });
+    await flush();
     expect(t.child().signals).toEqual(["SIGINT"]);
     t.child().line({ type: "final", text: QUESTION });
     await flush();
@@ -270,8 +587,7 @@ describe("voice", () => {
 
   it("the final text is trimmed before it is sent", async () => {
     const t = setup();
-    t.voice.toggle();
-    t.voice.toggle();
+    await t.holdKeyAndLetGo();
     t.child().line({ type: "final", text: `  ${QUESTION}\n` });
     await flush();
     expect(t.send).toHaveBeenCalledWith(QUESTION);
@@ -279,39 +595,24 @@ describe("voice", () => {
 
   it("a helper still running after its final line is stopped (no orphan process)", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("button");
     t.child().line({ type: "ready" });
     await flush();
-    t.voice.toggle();
+    t.tick(HELD_MS);
+    t.voice.release("button");
     t.child().line({ type: "final", text: QUESTION });
     await flush();
     expect(t.child().signals).toEqual(["SIGINT", "SIGTERM"]);
   });
 
-  it("Esc cancels: the helper is killed, nothing is sent, a later final is ignored and Esc is unregistered", async () => {
-    const t = setup();
-    t.voice.toggle();
-    t.child().line({ type: "partial", text: "why" });
-    await flush();
-    t.shortcut.press(ESCAPE);
-    expect(t.child().signals).toEqual(["SIGTERM"]);
-    expect(t.last()).toEqual({ state: "idle" });
-    expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
-    expect(t.shortcut.unregister).toHaveBeenCalledWith(ESCAPE);
-    t.child().line({ type: "final", text: QUESTION });
-    t.child().exit(0);
-    await flush();
-    expect(t.send).not.toHaveBeenCalled();
-    expect(t.last()).toEqual({ state: "idle" });
-    expect(t.onFailed).not.toHaveBeenCalled();
-  });
-
   it("Esc also cancels while the helper is finishing", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().line({ type: "ready" });
     await flush();
-    t.voice.toggle();
+    t.tick(HELD_MS);
+    t.child().line({ type: "released" });
+    await flush();
     t.shortcut.press(ESCAPE);
     expect(t.child().signals).toEqual(["SIGINT", "SIGTERM"]);
     t.child().line({ type: "final", text: QUESTION });
@@ -324,7 +625,7 @@ describe("voice", () => {
     const t = setup();
     t.voice.cancel();
     expect(t.states).toEqual([]);
-    t.voice.toggle();
+    t.voice.press("key");
     t.voice.cancel();
     expect(t.child().signals).toEqual(["SIGTERM"]);
     expect(t.last()).toEqual({ state: "idle" });
@@ -333,10 +634,17 @@ describe("voice", () => {
     expect(t.send).not.toHaveBeenCalled();
   });
 
+  it("release when idle does nothing", () => {
+    const t = setup();
+    t.voice.release("key");
+    t.voice.release("button");
+    expect(t.states).toEqual([]);
+    expect(t.spawn).not.toHaveBeenCalled();
+  });
+
   it("empty transcript sends nothing and shows a note", async () => {
     const t = setup();
-    t.voice.toggle();
-    t.voice.toggle();
+    await t.holdKeyAndLetGo();
     t.child().line({ type: "final", text: "   " });
     t.child().exit(0);
     await flush();
@@ -351,7 +659,7 @@ describe("voice", () => {
     ["speechDenied", "speechRecognition"],
   ] as const)("mic denied shows a permission card: a %s line → onDenied(%s), nothing sent, Esc released", async (kind, denial) => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().line({ type: "error", kind, message: "denied" });
     t.child().exit(1);
     await flush();
@@ -364,7 +672,7 @@ describe("voice", () => {
 
   it("a helper error of kind failed → the error card, nothing sent", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().line({ type: "error", kind: "failed", message: "audio engine" });
     t.child().exit(1);
     await flush();
@@ -375,7 +683,7 @@ describe("voice", () => {
 
   it("an unavailable recognizer → a note saying voice is not available on this Mac", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().line({ type: "error", kind: "unavailable", message: "locale" });
     t.child().exit(1);
     await flush();
@@ -386,8 +694,11 @@ describe("voice", () => {
   it("helper crash → an error card, not a hang: exit without a final line, while listening or stopping", async () => {
     for (const stopFirst of [false, true]) {
       const t = setup();
-      t.voice.toggle();
-      if (stopFirst) t.voice.toggle();
+      t.voice.press("button");
+      if (stopFirst) {
+        t.tick(HELD_MS);
+        t.voice.release("button");
+      }
       t.child().exit(null, "SIGSEGV");
       await flush();
       expect(t.last()).toEqual({ state: "idle" });
@@ -399,7 +710,7 @@ describe("voice", () => {
 
   it("a helper that cannot start (spawn error event or a throw) → the error card, Esc released", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().emit("error", Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" }));
     await flush();
     expect(t.last()).toEqual({ state: "idle" });
@@ -407,7 +718,7 @@ describe("voice", () => {
     expect(t.shortcut.registered.has(ESCAPE)).toBe(false);
 
     const thrown = setup({ spawnThrows: new Error("EACCES") });
-    thrown.voice.toggle();
+    thrown.voice.press("key");
     expect(thrown.last()).toEqual({ state: "idle" });
     expect(thrown.onFailed).toHaveBeenCalledTimes(1);
     expect(thrown.shortcut.registered.has(ESCAPE)).toBe(false);
@@ -416,11 +727,12 @@ describe("voice", () => {
 
   it("a helper that never answers the stop is killed after the stop timeout, with the error card", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("button");
     t.child().line({ type: "ready" });
     await flush();
     vi.useFakeTimers();
-    t.voice.toggle();
+    t.tick(HELD_MS);
+    t.voice.release("button");
     vi.advanceTimersByTime(VOICE_STOP_TIMEOUT_MS - 1);
     expect(t.child().signals).toEqual(["SIGINT"]);
     vi.advanceTimersByTime(1);
@@ -432,7 +744,7 @@ describe("voice", () => {
 
   it("no helper (not macOS, or not built) → a note, nothing spawned, no Esc shortcut", () => {
     const t = setup({ helper: null });
-    t.voice.toggle();
+    t.voice.press("key");
     expect(t.spawn).not.toHaveBeenCalled();
     expect(t.last()).toEqual({ state: "idle", note: userMessage("voiceUnavailable") });
     expect(t.shortcut.register).not.toHaveBeenCalled();
@@ -441,9 +753,10 @@ describe("voice", () => {
   it("an Esc taken by another app still lets the dictation run (logged), and nothing is unregistered that is not ours", async () => {
     const t = setup();
     t.shortcut.registered.set(ESCAPE, () => undefined);
-    t.voice.toggle();
+    t.voice.press("button");
     expect(t.voice.status()).toBe("listening");
-    t.voice.toggle();
+    t.tick(HELD_MS);
+    t.voice.release("button");
     t.child().line({ type: "final", text: QUESTION });
     await flush();
     expect(t.send).toHaveBeenCalledWith(QUESTION);
@@ -453,8 +766,7 @@ describe("voice", () => {
   it("a send that fails is logged, voice is idle again", async () => {
     const t = setup();
     t.send.mockRejectedValueOnce(new Error("no thread"));
-    t.voice.toggle();
-    t.voice.toggle();
+    await t.holdKeyAndLetGo();
     t.child().line({ type: "final", text: QUESTION });
     await flush();
     await flush();
@@ -465,14 +777,254 @@ describe("voice", () => {
   it("the transcript is never logged (ARCHITECTURE Do NOT), not even partial text or a failed send", async () => {
     const t = setup();
     t.send.mockRejectedValueOnce(new Error("no thread"));
-    t.voice.toggle();
+    t.voice.press("key");
     t.child().line({ type: "partial", text: "secret partial words" });
     t.child().stderr.write("helper noise\n");
     await flush();
-    t.voice.toggle();
+    t.tick(HELD_MS);
+    t.child().line({ type: "released" });
+    await flush();
     t.child().line({ type: "final", text: "secret final words" });
     t.child().exit(0);
     await flush();
+    await flush();
+    expect(t.logText()).not.toContain("secret");
+  });
+});
+
+const listeningToMac = (text: string, level = 0, hold = true): VoiceState => ({ state: "listening", text, level, key: "⌃⌥B", hold, mac: true });
+
+describe("listen to the Mac (098): hold ⌃⌥B, the helper hears what the Mac plays, let go sends a heard question", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("holding the listen key shows the window and spawns the helper on the Mac's sound (--source system), watching ⌃ and ⌥, with both Escapes held", () => {
+    const t = setup();
+    t.voice.press("listen");
+    expect(t.showWindow).toHaveBeenCalledTimes(1);
+    expect(t.spawn).toHaveBeenCalledTimes(1);
+    const [file, args, options] = t.spawn.mock.calls[0];
+    expect(file).toBe("/app/native/snapsolve-speech");
+    expect(args).toEqual(["--source", "system", "--hold", "control,option"]);
+    expect(options).toMatchObject({ stdio: ["pipe", "pipe", "pipe"], env: { PATH: "/usr/bin" } });
+    expect(t.last()).toEqual(listeningToMac(""));
+    expect(t.voice.status()).toBe("listening");
+    expect([...t.shortcut.registered.keys()]).toEqual([ESCAPE, "Control+Alt+Escape"]);
+  });
+
+  it("the source and the key watch go after the helper's own prefix arguments", () => {
+    const t = setup({ helper: { path: "/electron", prefixArgs: ["/fixtures/fake-speech.mjs"] } });
+    t.voice.press("listen");
+    expect(t.spawn.mock.calls[0]).toEqual([
+      "/electron",
+      ["/fixtures/fake-speech.mjs", "--source", "system", "--hold", "control,option"],
+      expect.anything(),
+    ]);
+  });
+
+  it("partials and levels show as listening to the Mac; letting go → SIGINT, stopping, then send(text, true) once; Escapes released", async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.child().line({ type: "ready" });
+    t.child().line({ type: "level", level: 0.3 });
+    t.child().line({ type: "partial", text: "tell me about" });
+    await flush();
+    expect(t.last()).toEqual(listeningToMac("tell me about", 0.3));
+    t.tick(HELD_MS);
+    t.child().line({ type: "released" });
+    await flush();
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    expect(t.last()).toEqual({ state: "stopping", text: "tell me about", key: "⌃⌥B", mac: true });
+    t.child().line({ type: "final", text: "  tell me about a project you led  " });
+    t.child().exit(0);
+    await flush();
+    expect(t.send.mock.calls).toEqual([["tell me about a project you led", true]]);
+    expect(t.last()).toEqual({ state: "idle" });
+    expect(t.shortcut.registered.size).toBe(0);
+    expect(t.onFailed).not.toHaveBeenCalled();
+  });
+
+  it("a dictation from the voice key still sends with no heard mark (send(text) alone)", async () => {
+    const t = setup();
+    await t.holdKeyAndLetGo();
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send.mock.calls).toEqual([[QUESTION]]);
+  });
+
+  it("one dictation at a time: the voice key or a mic button pressed while listening to the Mac is ignored, and ⌃⌥B while dictating", async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.voice.press("key");
+    t.voice.press("button");
+    t.voice.press("listen");
+    expect(t.spawn).toHaveBeenCalledTimes(1);
+    expect(t.child().signals).toEqual([]);
+    t.voice.cancel();
+    t.voice.press("key");
+    t.voice.press("listen");
+    expect(t.spawn).toHaveBeenCalledTimes(2);
+    expect(t.spawn.mock.calls[1][1]).toEqual(["--hold", "control,option"]);
+    expect(t.last()).toEqual(listening(""));
+  });
+
+  it("only its own release ends it: the voice key's or a button's release does nothing; a listen release does not end a voice dictation", async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.tick(HELD_MS);
+    t.voice.release("key");
+    t.voice.release("button");
+    expect(t.child().signals).toEqual([]);
+    expect(t.voice.status()).toBe("listening");
+    t.voice.release("listen");
+    expect(t.voice.status()).toBe("stopping");
+    t.voice.cancel();
+    t.voice.press("key");
+    t.tick(HELD_MS);
+    t.voice.release("listen");
+    expect(t.voice.status()).toBe("listening");
+    expect(t.child().signals).toEqual([]);
+  });
+
+  it(`a tap (under ${VOICE_MIN_HOLD_MS} ms) is cancelled with the hold note; nothing sent`, async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.tick(VOICE_MIN_HOLD_MS - 1);
+    t.child().line({ type: "released" });
+    await flush();
+    expect(t.child().signals).toEqual(["SIGTERM"]);
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_HOLD_NOTE });
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("Esc or ⌃⌥Esc while held cancels: nothing sent, a later released line does nothing", async () => {
+    for (const key of [ESCAPE, "Control+Alt+Escape"]) {
+      const t = setup();
+      t.voice.press("listen");
+      t.tick(HELD_MS);
+      t.shortcut.press(key);
+      expect(t.child().signals).toEqual(["SIGTERM"]);
+      expect(t.last()).toEqual({ state: "idle" });
+      expect(t.shortcut.registered.size).toBe(0);
+      t.child().line({ type: "released" });
+      t.child().line({ type: "final", text: QUESTION });
+      await flush();
+      expect(t.send).not.toHaveBeenCalled();
+    }
+  });
+
+  it(`a release that never comes stops and sends at ${VOICE_MAX_HOLD_MS / 1000} s, still marked heard`, async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.voice.press("listen");
+    t.child().line({ type: "ready" });
+    await vi.advanceTimersByTimeAsync(0);
+    vi.advanceTimersByTime(VOICE_MAX_HOLD_MS);
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    expect(t.logLines.some((l) => l[0] === "voice.holdCapped" && (l[1] as { source?: string }).source === "listen")).toBe(true);
+    t.child().line({ type: "final", text: QUESTION });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.send.mock.calls).toEqual([[QUESTION, true]]);
+  });
+
+  it("a listen key with no modifier to watch (listenHoldKeys []) is pressed again to send; only the bare Escape is held", async () => {
+    const t = setup({ listenHoldKeys: [] });
+    t.voice.press("listen");
+    expect(t.spawn.mock.calls[0][1]).toEqual(["--source", "system"]);
+    expect(t.last()).toEqual(listeningToMac("", 0, false));
+    expect([...t.shortcut.registered.keys()]).toEqual([ESCAPE]);
+    t.child().line({ type: "ready" });
+    await flush();
+    t.tick(HELD_MS);
+    t.voice.release("listen");
+    expect(t.child().signals).toEqual([]);
+    t.voice.press("listen");
+    expect(t.child().signals).toEqual(["SIGINT"]);
+    t.child().line({ type: "final", text: QUESTION });
+    await flush();
+    expect(t.send.mock.calls).toEqual([[QUESTION, true]]);
+  });
+
+  it("no words heard: the Mac's own note; nothing sent", async () => {
+    const t = setup();
+    await t.holdListenAndLetGo();
+    t.child().line({ type: "final", text: " " });
+    t.child().exit(0);
+    await flush();
+    expect(VOICE_MAC_EMPTY_NOTE).toBe("Didn't catch any words from your Mac.");
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_MAC_EMPTY_NOTE });
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("only silence heard (nothing played, or System Audio Recording refused): the note says where to turn it on", async () => {
+    const t = setup();
+    await t.holdListenAndLetGo();
+    t.child().line({ type: "final", text: "", silent: true });
+    t.child().exit(0);
+    await flush();
+    expect(VOICE_MAC_SILENT_NOTE).toBe(
+      "Heard nothing from your Mac. If something was playing, turn on System Audio Recording for snapsolve in System Settings › Privacy & Security.",
+    );
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_MAC_SILENT_NOTE });
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("words heard but marked silent cannot happen; if it did, the words are sent (the text wins)", async () => {
+    const t = setup();
+    await t.holdListenAndLetGo();
+    t.child().line({ type: "final", text: QUESTION, silent: true });
+    await flush();
+    expect(t.send.mock.calls).toEqual([[QUESTION, true]]);
+  });
+
+  it("the voice key's empty transcript keeps its own note, even with a silent mark", async () => {
+    const t = setup();
+    await t.holdKeyAndLetGo();
+    t.child().line({ type: "final", text: "", silent: true });
+    await flush();
+    expect(t.last()).toEqual({ state: "idle", note: VOICE_EMPTY_NOTE });
+  });
+
+  it("refused Speech Recognition → the permission card; unavailable → the voice note; failed → the error card", async () => {
+    const denied = setup();
+    denied.voice.press("listen");
+    denied.child().line({ type: "error", kind: "speechDenied", message: "denied" });
+    await flush();
+    expect(denied.onDenied).toHaveBeenCalledWith("speechRecognition");
+    const unavailable = setup();
+    unavailable.voice.press("listen");
+    unavailable.child().line({ type: "error", kind: "unavailable", message: "no tap" });
+    await flush();
+    expect(unavailable.last()).toEqual({ state: "idle", note: userMessage("voiceUnavailable") });
+    const failed = setup();
+    failed.voice.press("listen");
+    failed.child().line({ type: "error", kind: "failed", message: "OSStatus 560947818" });
+    await flush();
+    expect(failed.onFailed).toHaveBeenCalledTimes(1);
+    for (const t of [denied, unavailable, failed]) {
+      expect(t.send).not.toHaveBeenCalled();
+      expect(t.shortcut.registered.size).toBe(0);
+    }
+  });
+
+  it("no helper → the unavailable note, nothing spawned", () => {
+    const t = setup({ helper: null });
+    t.voice.press("listen");
+    expect(t.spawn).not.toHaveBeenCalled();
+    expect(t.last()).toEqual({ state: "idle", note: userMessage("voiceUnavailable") });
+  });
+
+  it("what the Mac said is never logged", async () => {
+    const t = setup();
+    t.voice.press("listen");
+    t.child().line({ type: "partial", text: "secret partial words" });
+    await flush();
+    t.tick(HELD_MS);
+    t.child().line({ type: "released" });
+    await flush();
+    t.child().line({ type: "final", text: "secret final words" });
+    t.child().exit(0);
     await flush();
     expect(t.logText()).not.toContain("secret");
   });
@@ -485,16 +1037,17 @@ describe("voice with fake timers off", () => {
 
   it("a second dictation's output never reaches the first one's state (each run is its own)", async () => {
     const t = setup();
-    t.voice.toggle();
+    t.voice.press("key");
     const first = t.child();
     t.voice.cancel();
-    t.voice.toggle();
+    t.voice.press("key");
     const second = t.child();
     expect(second).not.toBe(first);
     first.line({ type: "partial", text: "old" });
+    first.line({ type: "released" });
     second.line({ type: "partial", text: "new" });
     await flush();
-    expect(t.last()).toEqual({ state: "listening", text: "new", level: 0, key: "⌃⌥V" });
+    expect(t.last()).toEqual(listening("new"));
     first.exit(0);
     await flush();
     expect(t.voice.status()).toBe("listening");

@@ -28,9 +28,10 @@ import { IPC } from "../shared/ipc";
 import { applyTheme, applyTransparency, createApp, recoverBusyThreads, resolveClaudeCommand, type Shot } from "./app";
 import { checkAuth } from "./auth";
 import { createCapturer, ScreenRecordingDeniedError, screenshotOf } from "./capture";
-import { loadConfig, saveTheme, saveTransparency } from "./config";
+import { loadConfig, saveMode, saveTheme, saveTransparency } from "./config";
 import { encodeForModel } from "./encode";
 import { createHotkeys } from "./hotkeys";
+import { answerSystemPrompt, knowledgeFolder, readAnswerFormat, readKnowledge } from "./knowledge";
 import { createLogger, type Logger } from "./log";
 import { createPermissionHandlers, darwinStartup, hotkeyLabel, hotkeySymbols, readDisplaySizes } from "./macos";
 import { createPanel, loadWindowBounds, resolveSnapsolveUrl, saveWindowBounds, SCHEME } from "./panel";
@@ -38,7 +39,7 @@ import { dataPaths, ensureDirs, resolveDataDir } from "./paths";
 import { buildEnv, createRunner, type Command, type SendImage } from "./runner";
 import { createStore } from "./store";
 import { createTray, drawTrayIcon, openHistoryFolder, type TrayControl } from "./tray";
-import { createVoice, resolveSpeechHelper, type Voice } from "./voice";
+import { createVoice, holdModifiers, resolveSpeechHelper, type Voice } from "./voice";
 
 // `electron dist/main.js` does not read package.json, so name and version are injected at build time.
 app.setName(__APP_NAME__);
@@ -159,11 +160,21 @@ async function start(): Promise<void> {
     log,
     purge: (sessionsDir) => purge(typeof command === "function" ? command() : command, sessionsDir, buildEnv(env, config.allowApiKey)),
   });
+  // Answer mode (089): the shipped answer prompt and format are read once; the user's format and knowledge folder
+  // again for every answer-mode turn, so edits count from the next question.
+  const answerBase = await readPrompt("answer.md");
+  const answerFormat = await readPrompt("answer-format.md");
   const runner = createRunner({
     command,
     store,
     config,
-    systemPrompt: await readSystemPrompt(),
+    systemPrompt: await readPrompt("system.md"),
+    answerSystemPrompt: async () =>
+      answerSystemPrompt({
+        base: answerBase,
+        format: await readAnswerFormat(paths.answerFormat, answerFormat),
+        knowledge: await readKnowledge(knowledgeFolder(config.knowledgeDir, paths.knowledge, home)),
+      }),
     env,
     spawn,
     sessionsDir: paths.sessions,
@@ -197,6 +208,8 @@ async function start(): Promise<void> {
     saveBounds: (saved) => saveWindowBounds(paths.windowState, saved),
     physicalSize: (id) => sizes.get(id),
     onClose: () => voice?.cancel(),
+    // Esc (097): stops the chat on screen's answer. While dictating, Esc stays voice's (it cancels via the hide).
+    onEscape: () => (voice?.status() ?? "idle") === "idle" && core.stopAnswer(),
   });
   const core = createApp({
     store,
@@ -219,6 +232,7 @@ async function start(): Promise<void> {
     },
     onTurnEnded: () => panel.turnEnded(),
     onUsage: (usage) => tray?.setTooltip(usage),
+    saveMode: (mode) => saveMode(paths.config, mode),
   });
   // Voice (task 063): the speech helper beside main.js (test mode: a node script Electron runs as node).
   const fakeSpeech = test ? process.env.SNAPSOLVE_TEST_SPEECH : undefined;
@@ -230,14 +244,18 @@ async function start(): Promise<void> {
     env: fakeSpeech ? { ...process.env, ELECTRON_RUN_AS_NODE: "1" } : process.env,
     globalShortcut,
     keyLabel: hotkeySymbols(config.hotkeys.voice, process.platform),
+    // Hold to talk (096): the helper watches these while the voice hotkey is held (globalShortcut has no key-up).
+    holdKeys: holdModifiers(config.hotkeys.voice),
+    // Listen to the Mac (098): the listen hotkey is held the same way; the helper hears the Mac's sound instead.
+    listenKeyLabel: hotkeySymbols(config.hotkeys.listen, process.platform),
+    listenHoldKeys: holdModifiers(config.hotkeys.listen),
     onState: (state) => panel.send(IPC.voiceState, state),
-    send: (text) => core.onVoice(text),
+    send: (text, heard) => (heard ? core.onVoice(text, true) : core.onVoice(text)),
     onDenied: (denial) => {
       voiceDenial = denial;
       void core.onVoiceDenied(denial);
     },
     onFailed: () => void core.onVoiceFailed(),
-    isAnswering: () => core.isAnswering(),
     showWindow: () => panel.open(),
     log,
   });
@@ -261,9 +279,16 @@ async function start(): Promise<void> {
     [IPC.historyClear]: core.handlers.clearHistory,
     [IPC.screenRecordingSettingsOpen]: permissionHandlers.openScreenRecordingSettings,
     [IPC.appRelaunch]: permissionHandlers.relaunch,
-    // The mic buttons do what the voice hotkey does (SPEC Amendment 11).
-    [IPC.voiceToggle]: async () => voice?.toggle(),
+    // The mic buttons are held as the voice hotkey is (SPEC Amendment 27): true starts, false stops and sends.
+    [IPC.voiceHold]: async (held) => {
+      if (typeof held !== "boolean") throw new SnapsolveError("internal", "voice:hold takes a boolean");
+      if (held) voice?.press("button");
+      else voice?.release("button");
+    },
     [IPC.voiceSettingsOpen]: permissionHandlers.openVoiceSettings,
+    // The title bar's Solve | Answer toggle (SPEC Amendment 25).
+    [IPC.modeGet]: core.handlers.getMode,
+    [IPC.modeSet]: core.handlers.setMode,
   });
 
   // SPEC §1.1 "tray notification": a balloon on the Windows tray icon; a system notification on macOS. Test mode
@@ -300,7 +325,10 @@ async function start(): Promise<void> {
     config,
     onCapture: captureInto(core.onCapture),
     onToggle: () => panel.toggle(),
-    onVoice: () => voice?.toggle(),
+    // Key down only; the release comes from the speech helper's watch (096).
+    onVoice: () => voice?.press("key"),
+    // Listen to the Mac (098): key down only, as for voice.
+    onListen: () => voice?.press("listen"),
     notify,
     label: (accelerator) => hotkeyLabel(accelerator, process.platform),
     log,
@@ -336,8 +364,10 @@ async function start(): Promise<void> {
       resetPosition: () => panel.resetPosition(),
       /** What the tray's Transparency steps do (090). */
       setTransparency: (transparency: number) => setTransparency(transparency),
-      /** What the voice hotkey does (063). */
-      voice: () => voice?.toggle(),
+      /** The voice hotkey held (true) or let go (false, as the helper's released line reports it) (096). */
+      voiceKey: (down: boolean) => (down ? voice?.press("key") : voice?.release("key")),
+      /** The listen hotkey held (true) or let go (false) (098). */
+      listenKey: (down: boolean) => (down ? voice?.press("listen") : voice?.release("listen")),
       /** What the temporary Esc shortcut does while listening. */
       voiceEscape: () => voice?.cancel(),
     };
@@ -359,11 +389,11 @@ function trayImage(platform: NodeJS.Platform): Electron.NativeImage {
   return image;
 }
 
-/** prompts/system.md beside main.js (the released app/) or one level up (dev: dist/main.js). */
-async function readSystemPrompt(): Promise<string> {
-  const candidates = [path.join(__dirname, "prompts", "system.md"), path.join(__dirname, "..", "prompts", "system.md")];
+/** prompts/<name> beside main.js (the released app/) or one level up (dev: dist/main.js). */
+async function readPrompt(name: string): Promise<string> {
+  const candidates = [path.join(__dirname, "prompts", name), path.join(__dirname, "..", "prompts", name)];
   const file = candidates.find((f) => existsSync(f));
-  if (!file) throw new SnapsolveError("internal", `prompts/system.md not found next to ${__dirname}`);
+  if (!file) throw new SnapsolveError("internal", `prompts/${name} not found next to ${__dirname}`);
   return readFile(file, "utf8");
 }
 

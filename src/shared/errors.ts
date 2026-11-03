@@ -18,6 +18,9 @@ export const ERROR_KINDS = [
   "speechDenied",
   "voiceUnavailable",
   "voiceFailed",
+  "knowledgeUnreadable",
+  "knowledgeTooLarge",
+  "stopped",
   "internal",
 ] as const;
 
@@ -40,6 +43,14 @@ const MESSAGES: Record<ErrorKind, string> = {
   speechDenied: "snapsolve needs Speech Recognition access for voice questions. Turn it on in System Settings.",
   voiceUnavailable: "Voice input isn't available on this Mac.",
   voiceFailed: "Voice input stopped working. Details are in the snapsolve log.",
+  // Answer mode (089): the card shows the error's own message, which names the folder; these are the fallbacks. No
+  // material is not an error (Amendment 26).
+  knowledgeUnreadable:
+    "Answer mode can't read the knowledge folder. Check its permissions, or point knowledgeDir in config.json at another folder.",
+  knowledgeTooLarge:
+    "The knowledge folder is too large for answer mode. Remove some files, or point knowledgeDir in config.json at a smaller folder.",
+  // 097: Esc stopped the answer; the card keeps what was written, with Retry.
+  stopped: "Stopped.",
   internal: "Something went wrong. Details are in the snapsolve log.",
 };
 

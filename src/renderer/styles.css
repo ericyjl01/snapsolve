@@ -142,6 +142,52 @@ button[hidden] {
 
 .titlebar .name {
   flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The narrowest windows (280 px) keep the mode toggle and every button; the name gives way (089). */
+@media (max-width: 339px) {
+  .titlebar .name {
+    display: none;
+  }
+}
+
+/* Task 089 (Amendment 25): the Solve | Answer toggle, a small segmented pill; the mode in effect is filled. */
+.mode {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--hover);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.mode button {
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.mode button:hover {
+  color: var(--fg);
+}
+
+.mode button[aria-checked="true"] {
+  background: var(--fg);
+  color: var(--ground-solid);
 }
 
 /* The chat on screen names the chat column when the window is wide (078); narrow, the bar says snapsolve. */
@@ -457,9 +503,15 @@ button[hidden] {
   color: var(--error);
 }
 
-.note {
+/* 097: an answer stopped with Esc is drawn as an answer (.answer.stopped); only this note under it says it stopped. */
+.note,
+p.stopped {
   color: var(--muted);
   font-size: 11px;
+}
+
+p.stopped {
+  margin: 0;
 }
 
 .warning {
@@ -624,5 +676,33 @@ button[hidden] {
 .question .mic-mark {
   margin-right: 5px;
   vertical-align: -1px;
+  color: var(--muted);
+}
+
+/* A question heard from the Mac (098): its bubble starts with a small speaker, as a dictated one starts with the mic. */
+.question .speaker-mark {
+  margin-right: 5px;
+  vertical-align: -1px;
+  color: var(--muted);
+}
+
+/* Questions waiting behind the answer being written (099): after it, on the right, faded, each marked Queued. */
+.queue {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue:empty {
+  display: none;
+}
+
+.question.queued {
+  opacity: 0.55;
+}
+
+.question .queued-label {
+  margin-left: 8px;
+  font: 11px/1 -apple-system, system-ui, sans-serif;
   color: var(--muted);
 }

@@ -22,7 +22,7 @@ let store: Store;
 let calls: string[];
 let listener: ((e: RunnerEvent) => void) | null;
 let deps: AppDeps & {
-  runner: { enqueue: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> };
+  runner: { enqueue: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> };
   panel: { open: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn> };
 };
 
@@ -42,12 +42,14 @@ beforeEach(async () => {
         listener = l;
         return () => undefined;
       }),
+      // 097: nothing is running unless a test says so.
+      stop: vi.fn((_threadId: string) => false),
     },
     panel: {
       open: vi.fn(() => calls.push("open")),
       send: vi.fn((channel: string) => calls.push(channel)),
     },
-    config: { model: "opus", effort: "high", maxScreenshotsPerThread: 6 },
+    config: { model: "opus", effort: "high", maxScreenshotsPerThread: 6, mode: "solve" },
     log: quietLog,
     openExternal: vi.fn(async () => undefined),
     confirmClearHistory: vi.fn(async () => true),
@@ -86,6 +88,66 @@ const errorTurn: AssistantTurn = {
 };
 
 const answer = (text: string): AssistantTurn => ({ role: "assistant", text, durationMs: 5, ttftMs: 1, costUsd: null, isError: false });
+
+// 097: Esc with the window focused stops the answer of the chat on screen; false lets Esc hide the window as before.
+describe("stopAnswer (097)", () => {
+  it("the chat a capture landed in is the one stopped: runner.stop(its id), true when the runner stopped a turn", async () => {
+    deps.runner.stop.mockReturnValue(true);
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    expect(app.stopAnswer()).toBe(true);
+    expect(deps.runner.stop).toHaveBeenCalledTimes(1);
+    expect(deps.runner.stop).toHaveBeenCalledWith(id);
+  });
+
+  it("nothing running in that chat: false (Esc hides)", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    expect(app.stopAnswer()).toBe(false);
+    expect(deps.runner.stop).toHaveBeenCalledWith(id);
+  });
+
+  it("after + nothing is on screen: false, the runner is not asked", async () => {
+    deps.runner.stop.mockReturnValue(true);
+    const app = createApp(deps);
+    await app.onCapture(shot(PNG));
+    await app.handlers.newThread();
+    expect(app.stopAnswer()).toBe(false);
+    expect(deps.runner.stop).not.toHaveBeenCalled();
+  });
+
+  it("a chat chosen in the sidebar is the one stopped", async () => {
+    const app = createApp(deps);
+    const a = await store.createThread({ model: "opus", effort: "high" });
+    await new Promise((r) => setTimeout(r, 5));
+    await store.createThread({ model: "opus", effort: "high" });
+    await app.handlers.listThreads();
+    await app.handlers.openThread(a.id);
+    app.stopAnswer();
+    expect(deps.runner.stop).toHaveBeenCalledWith(a.id);
+  });
+
+  it("after a restart, before any capture: the newest chat (the one the window shows) is stopped, never a permission card", async () => {
+    const app = createApp(deps);
+    await store.createThread({ model: "opus", effort: "high" });
+    await new Promise((r) => setTimeout(r, 5));
+    const newest = await store.createThread({ model: "opus", effort: "high" });
+    await app.handlers.listThreads();
+    // A typed follow-up runs in the chat on screen without making it "current" in main.
+    await app.handlers.followUp(newest.id, "why?");
+    await new Promise((r) => setTimeout(r, 5));
+    await app.onVoiceDenied("microphone");
+    app.stopAnswer();
+    expect(deps.runner.stop).toHaveBeenCalledTimes(1);
+    expect(deps.runner.stop).toHaveBeenCalledWith(newest.id);
+  });
+
+  it("no chats at all: false, the runner is not asked", () => {
+    const app = createApp(deps);
+    expect(app.stopAnswer()).toBe(false);
+    expect(deps.runner.stop).not.toHaveBeenCalled();
+  });
+});
 
 describe("onCapture", () => {
   it("creates a thread with the configured model, opens the panel with the card, saves the PNG, then enqueues the turn", async () => {
@@ -270,7 +332,6 @@ describe("onCapture shows the window before the PNG is made and saved (088)", ()
     expect(card.turns.at(-1)).toMatchObject({ role: "assistant", isError: true, errorKind: "captureFailed", errorMessage: userMessage("captureFailed") });
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
     expect(warn.mock.calls.some((c) => (c[1] as { threadId?: string } | undefined)?.threadId === id)).toBe(true);
-    expect(app.isAnswering()).toBe(false);
     // A restart does not find it busy (it would come back as an error card with nothing to retry).
     expect(BUSY).not.toContain((await store.getThread(id)).status);
   });
@@ -286,7 +347,6 @@ describe("onCapture shows the window before the PNG is made and saved (088)", ()
     expect(card.turns.at(-2)).toMatchObject({ role: "assistant", text: "x = 4", isError: false });
     expect(card.turns.at(-1)).toMatchObject({ isError: true, errorKind: "captureFailed" });
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
-    expect(app.isAnswering()).toBe(false);
     // The error is the panel's alone: thread.json is unchanged.
     expect((await store.getThread(id)).turns).toHaveLength(2);
   });
@@ -544,40 +604,97 @@ describe("onVoice (063)", () => {
     await expect(app.onVoice(text)).rejects.toThrow();
     expect(deps.runner.enqueue).not.toHaveBeenCalled();
   });
-});
 
-describe("isAnswering (063): a voice press is ignored while the current thread thinks or answers", () => {
-  it("no thread → false; a capture's thread is busy until its answer is done; after + → false", async () => {
+  // 098: what the Mac played (⌃⌥B) goes the same way, marked heard instead of dictated.
+  it("heard from the Mac → the chat on screen, marked heard (no voice mark)", async () => {
     const app = createApp(deps);
-    expect(app.isAnswering()).toBe(false);
     const id = await app.onCapture(shot(PNG));
-    expect(app.isAnswering()).toBe(true);
-    listener?.({ type: "status", threadId: id, status: "running" });
-    await new Promise((r) => setTimeout(r, 10));
-    expect(app.isAnswering()).toBe(true);
-    const done = await store.updateThread(id, { status: "done" });
-    listener?.({ type: "done", threadId: id, thread: done } as RunnerEvent);
-    expect(app.isAnswering()).toBe(false);
-    // An errored turn is not answering either.
-    const errored = await store.updateThread(id, { status: "error" });
-    listener?.({ type: "error", threadId: id, thread: errored } as RunnerEvent);
-    expect(app.isAnswering()).toBe(false);
-    // "+": the next question starts a new thread, so nothing is in the way.
-    listener?.({ type: "status", threadId: id, status: "running" });
-    await new Promise((r) => setTimeout(r, 10));
-    expect(app.isAnswering()).toBe(true);
-    await app.handlers.newThread();
-    expect(app.isAnswering()).toBe(false);
+    deps.panel.open.mockClear();
+    expect(await app.onVoice(SAID, true)).toBe(id);
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(id, { kind: "followUp", text: SAID, heard: true });
+    expect(deps.panel.open).toHaveBeenCalled();
   });
 
-  it("a follow-up queued on the current thread makes it busy again", async () => {
+  it("heard from the Mac with no chat → a new text chat whose first question is marked heard", async () => {
+    const app = createApp(deps);
+    const id = await app.onVoice(SAID, true);
+    expect(await store.listThreads()).toHaveLength(1);
+    expect(deps.runner.enqueue).toHaveBeenCalledWith(id, { kind: "followUp", text: SAID, heard: true });
+  });
+
+  it("an empty heard transcript queues nothing", async () => {
+    const app = createApp(deps);
+    await expect(app.onVoice("  ", true)).rejects.toThrow();
+    expect(deps.runner.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+// 099: a question asked while the chat on screen thinks or answers is queued behind it (Eric: "wait for the first
+// question to finish and then answer the second one."), and the chat shows it at once as queued.
+describe("queued questions (099)", () => {
+  const lastSnapshot = () => sent(IPC.threadsChanged).at(-1) as Thread[];
+  const shownThread = (id: string) => lastSnapshot().find((t) => t.id === id) as Thread;
+
+  it("isAnswering is gone: nothing gates a question any more", () => {
+    const app = createApp(deps) as unknown as Record<string, unknown>;
+    expect(app.isAnswering).toBeUndefined();
+  });
+
+  it("a typed, dictated or heard question while the chat runs is enqueued behind the answer (not refused)", async () => {
+    deps.runner.enqueue.mockImplementation(() => new Promise(() => undefined));
     const app = createApp(deps);
     const id = await app.onCapture(shot(PNG));
-    const done = await store.updateThread(id, { status: "done" });
-    listener?.({ type: "done", threadId: id, thread: done } as RunnerEvent);
-    listener?.({ type: "status", threadId: id, status: "queued" });
+    listener?.({ type: "status", threadId: id, status: "running" });
     await new Promise((r) => setTimeout(r, 10));
-    expect(app.isAnswering()).toBe(true);
+    await app.handlers.followUp(id, "why?");
+    expect(await app.onVoice("and then?")).toBe(id);
+    expect(await app.onVoice("what did he ask?", true)).toBe(id);
+    expect(deps.runner.enqueue.mock.calls.slice(1)).toEqual([
+      [id, { kind: "followUp", text: "why?" }],
+      [id, { kind: "followUp", text: "and then?", voice: true }],
+      [id, { kind: "followUp", text: "what did he ask?", heard: true }],
+    ]);
+  });
+
+  it("the runner's queued list rides on the thread the panel gets (threads:changed), and is never saved", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    const before = sent(IPC.threadsChanged).length;
+    listener?.({ type: "queued", threadId: id, queued: [{ text: "why?" }, { text: "and then?", voice: true }] });
+    expect(sent(IPC.threadsChanged).length).toBe(before + 1);
+    expect(shownThread(id).queued).toEqual([{ text: "why?" }, { text: "and then?", voice: true }]);
+    expect((await app.handlers.listThreads()).find((t) => t.id === id)?.queued).toEqual([{ text: "why?" }, { text: "and then?", voice: true }]);
+    const onDisk = JSON.parse(await readFile(path.join(root, "data", "threads", id, "thread.json"), "utf8")) as Record<string, unknown>;
+    expect("queued" in onDisk).toBe(false);
+  });
+
+  it("later snapshots keep the list (a status, a saved turn, the answer's done), until the runner empties it: then no queued key", async () => {
+    const app = createApp(deps);
+    const id = await app.onCapture(shot(PNG));
+    listener?.({ type: "queued", threadId: id, queued: [{ text: "why?" }] });
+    listener?.({ type: "status", threadId: id, status: "running" });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(shownThread(id).queued).toEqual([{ text: "why?" }]);
+    const withTurn = await store.appendTurn(id, { role: "user", kind: "screenshot", file: "001.png" });
+    listener?.({ type: "turn", threadId: id, thread: withTurn });
+    expect(shownThread(id).queued).toEqual([{ text: "why?" }]);
+    // The answer's own done carries the list too, so the queued question does not blink out when it finishes.
+    const done = await store.updateThread(id, { status: "done" });
+    listener?.({ type: "done", threadId: id, thread: done, turn: answer("x = 4") });
+    expect((sent(IPC.answerDone).at(-1) as { thread: Thread }).thread.queued).toEqual([{ text: "why?" }]);
+    listener?.({ type: "queued", threadId: id, queued: [] });
+    expect("queued" in shownThread(id)).toBe(false);
+  });
+
+  it("each chat's list is its own", async () => {
+    const app = createApp(deps);
+    const a = await app.onCapture(shot(PNG));
+    await app.handlers.newThread();
+    const b = await app.onCapture(shot(PNG2));
+    listener?.({ type: "queued", threadId: a, queued: [{ text: "a?" }] });
+    listener?.({ type: "queued", threadId: b, queued: [{ text: "b?", heard: true }] });
+    expect(shownThread(a).queued).toEqual([{ text: "a?" }]);
+    expect(shownThread(b).queued).toEqual([{ text: "b?", heard: true }]);
   });
 });
 
@@ -775,10 +892,10 @@ describe("IPC handlers", () => {
   });
 
   // The Copy button and `copy` handler are gone with the restyle (061): nothing writes to the clipboard.
-  it("exposes exactly the seven renderer handlers, none of them copy (061), newThread added (065), openThread added (078)", () => {
+  it("exposes exactly the nine renderer handlers, none of them copy (061), newThread added (065), openThread added (078), getMode and setMode added (089)", () => {
     const app = createApp(deps);
     expect(Object.keys(app.handlers).sort()).toEqual(
-      ["listThreads", "followUp", "retry", "openExternal", "clearHistory", "newThread", "openThread"].sort(),
+      ["listThreads", "followUp", "retry", "openExternal", "clearHistory", "newThread", "openThread", "getMode", "setMode"].sort(),
     );
   });
 
@@ -1138,16 +1255,106 @@ describe("openThread (078)", () => {
     await app.handlers.openThread(errored.id);
     expect(await app.onCapture(shot(PNG2))).toBe(errored.id);
   });
+});
 
-  it("isAnswering follows the chosen thread", async () => {
-    deps.runner.enqueue.mockImplementation(() => new Promise(() => undefined));
+// 089 (SPEC Amendment 25): the title bar's Solve | Answer toggle. config.mode is the mode new chats start in; a chat
+// keeps the mode it started in, and a capture or question still goes to the chat on screen.
+describe("mode (089)", () => {
+  it("with mode answer, a capture, a typed question and a dictation each start an answer chat", async () => {
+    deps.config.mode = "answer";
     const app = createApp(deps);
     const captured = await app.onCapture(shot(PNG));
-    const errored = await erroredThread([{ role: "user", kind: "screenshot", file: "001.png" }, errorTurn]);
-    listener?.({ type: "status", threadId: captured, status: "running" });
-    await new Promise((r) => setTimeout(r, 20));
-    expect(app.isAnswering()).toBe(true);
-    await app.handlers.openThread(errored.id);
-    expect(app.isAnswering()).toBe(false);
+    expect((await store.getThread(captured)).mode).toBe("answer");
+    await app.handlers.newThread();
+    await app.handlers.newThread("Walk me through a project.");
+    const typed = (await store.listThreads()).find((t) => t.turns.length === 0 && t.id !== captured);
+    expect(typed?.mode).toBe("answer");
+    await app.handlers.newThread();
+    const dictated = await app.onVoice("Tell me about a time you learned something fast.");
+    expect((await store.getThread(dictated)).mode).toBe("answer");
+    expect(new Set([captured, typed?.id, dictated]).size).toBe(3);
+  });
+
+  it("with mode solve, new chats have no mode key, as before", async () => {
+    const app = createApp(deps);
+    const captured = await app.onCapture(shot(PNG));
+    expect(Object.keys(await store.getThread(captured))).not.toContain("mode");
+  });
+
+  it("getMode is config.mode; setMode switches it for new chats and saves it once; choosing the same mode again saves nothing", async () => {
+    const saveMode = vi.fn(async (_mode: string) => ({ ok: true as const }));
+    const app = createApp({ ...deps, saveMode });
+    expect(await app.handlers.getMode()).toBe("solve");
+    await app.handlers.setMode("answer");
+    expect(await app.handlers.getMode()).toBe("answer");
+    expect(deps.config.mode).toBe("answer");
+    expect(saveMode.mock.calls).toEqual([["answer"]]);
+    await app.handlers.setMode("answer");
+    expect(saveMode).toHaveBeenCalledTimes(1);
+    const id = await app.onCapture(shot(PNG));
+    expect((await store.getThread(id)).mode).toBe("answer");
+  });
+
+  it("setMode does not move captures: the chat on screen keeps them until the renderer starts a new chat (+)", async () => {
+    const app = createApp({ ...deps, saveMode: async () => ({ ok: true as const }) });
+    const solveChat = await app.onCapture(shot(PNG));
+    await app.handlers.setMode("answer");
+    expect(await app.onCapture(shot(PNG2))).toBe(solveChat);
+    expect(Object.keys(await store.getThread(solveChat))).not.toContain("mode");
+    await app.handlers.newThread();
+    const answerChat = await app.onCapture(shot(PNG));
+    expect(answerChat).not.toBe(solveChat);
+    expect((await store.getThread(answerChat)).mode).toBe("answer");
+    expect((await store.listThreads()).map((t) => t.id).sort()).toEqual([answerChat, solveChat].sort());
+  });
+
+  it("a full chat's seeded continuation keeps that chat's mode, whatever the toggle says now (review 1)", async () => {
+    deps.config.maxScreenshotsPerThread = 1;
+    const app = createApp({ ...deps, saveMode: async () => ({ ok: true as const }) });
+    const solveChat = await app.onCapture(shot(PNG));
+    // The fake runner records no turns: the screenshot turn and its answer, as the real one would.
+    await store.appendTurn(solveChat, { role: "user", kind: "screenshot", file: "001.png" });
+    await store.appendTurn(solveChat, answer("x = 4"));
+    await app.handlers.setMode("answer");
+    const solveNext = await app.onCapture(shot(PNG2));
+    expect(solveNext).not.toBe(solveChat);
+    expect(Object.keys(await store.getThread(solveNext))).not.toContain("mode");
+    expect(deps.runner.enqueue).toHaveBeenLastCalledWith(solveNext, { kind: "new", screenshot: "001.png", seed: "x = 4" });
+
+    await app.handlers.newThread();
+    const answerChat = await app.onCapture(shot(PNG));
+    expect((await store.getThread(answerChat)).mode).toBe("answer");
+    await store.appendTurn(answerChat, { role: "user", kind: "screenshot", file: "001.png" });
+    await store.appendTurn(answerChat, answer("My story."));
+    await app.handlers.setMode("solve");
+    const answerNext = await app.onCapture(shot(PNG2));
+    expect([answerChat, solveNext]).not.toContain(answerNext);
+    expect((await store.getThread(answerNext)).mode).toBe("answer");
+  });
+
+  it.each([["interview"], [""], [undefined], [null], [1]])("setMode(%j) from the renderer is refused: nothing changes, nothing is saved", async (bad) => {
+    const saveMode = vi.fn(async () => ({ ok: true as const }));
+    const app = createApp({ ...deps, saveMode });
+    await expect(app.handlers.setMode(bad as never)).rejects.toMatchObject({ name: "SnapsolveError", kind: "internal" });
+    expect(await app.handlers.getMode()).toBe("solve");
+    expect(saveMode).not.toHaveBeenCalled();
+  });
+
+  it("a failed save is logged and the mode still holds for this run", async () => {
+    const warnings: { event: string; fields?: Record<string, unknown> }[] = [];
+    const log = { ...quietLog, warn: (event: string, fields?: Record<string, unknown>) => void warnings.push({ event, fields }) };
+    const app = createApp({ ...deps, log, saveMode: async () => ({ ok: false as const, error: "cannot write config.json (EACCES)" }) });
+    await app.handlers.setMode("answer");
+    expect(await app.handlers.getMode()).toBe("answer");
+    expect(warnings).toEqual([{ event: "mode.saveFailed", fields: { mode: "answer", error: "cannot write config.json (EACCES)" } }]);
+    const rejecting = createApp({
+      ...deps,
+      log,
+      saveMode: async () => {
+        throw new Error("boom");
+      },
+    });
+    await rejecting.handlers.setMode("solve");
+    expect(warnings.at(-1)?.event).toBe("mode.saveFailed");
   });
 });

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { screenRecordingCard, SnapsolveError, userMessage, voicePermissionCard } from "../shared/errors";
 import { IPC, type IpcEvents } from "../shared/ipc";
-import type { AssistantTurn, Config, Theme, Thread, ThreadStatus, VoiceCardKind, VoiceDenial } from "../shared/types";
+import type { AssistantTurn, ChatMode, Config, QueuedQuestion, Theme, Thread, ThreadStatus, VoiceCardKind, VoiceDenial } from "../shared/types";
 import { formatUsage } from "./auth";
 import { decideAppend } from "./capture";
 import type { Logger } from "./log";
@@ -17,10 +17,13 @@ import { isUuid, type SavedScreenshot, type Store } from "./store";
 
 export interface AppDeps {
   store: Store;
-  runner: Pick<Runner, "enqueue" | "on">;
+  runner: Pick<Runner, "enqueue" | "on" | "stop">;
   panel: { open(): void; send<C extends keyof IpcEvents>(channel: C, payload: IpcEvents[C]): void };
-  config: Pick<Config, "model" | "effort" | "maxScreenshotsPerThread">;
+  /** `mode` is the mode new chats start in (089); `setMode` changes it for this run and saves it with `saveMode`. */
+  config: Pick<Config, "model" | "effort" | "maxScreenshotsPerThread" | "mode">;
   log: Logger;
+  /** Saves the Solve | Answer toggle's choice into config.json (`saveMode`, task 089); a failure is logged. */
+  saveMode?: (mode: ChatMode) => Promise<{ ok: true } | { ok: false; error: string }>;
   /** `shell.openExternal`; only ever called with an http(s) URL. */
   openExternal: (url: string) => Promise<void>;
   /** The native confirm dialog before clearing history; true = go ahead. */
@@ -51,6 +54,13 @@ export type AppHandlers = {
   openThread(threadId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   clearHistory(): Promise<boolean>;
+  /** The mode new chats start in (089). */
+  getMode(): Promise<ChatMode>;
+  /**
+   * The Solve | Answer toggle (089): new chats start in `mode` from now on, saved to config.json. The chat a capture or
+   * question joins does not change: the renderer starts a new chat (`newThread()`) when switching with one on screen.
+   */
+  setMode(mode: ChatMode): Promise<void>;
 };
 
 export interface App {
@@ -67,15 +77,20 @@ export interface App {
   onCaptureDenied(prompted: boolean): Promise<void>;
   /**
    * A dictated question (task 063): where a typed one would go — a follow-up to the current thread, or a new text
-   * thread when there is none or after "+". Marked as dictated. Resolves with the thread's id once it is queued.
+   * thread when there is none or after "+". Marked as dictated, or with `heard` as heard from what the Mac played (the
+   * listen hotkey, task 098). Resolves with the thread's id once it is queued.
    */
-  onVoice(text: string): Promise<string>;
+  onVoice(text: string, heard?: true): Promise<string>;
   /** Voice was refused a permission: one unsaved card that says which to turn on; a dictation that works removes it. */
   onVoiceDenied(denial: VoiceDenial): Promise<void>;
   /** The speech helper failed: the same card slot, saying so. */
   onVoiceFailed(): Promise<void>;
-  /** The thread a capture or question would join is new, queued or running (a voice press is then ignored, 063). */
-  isAnswering(): boolean;
+  /**
+   * Esc with the window focused (097): stops the running answer of the chat on screen (`runner.stop`) — the current
+   * thread, or before one is known the newest chat (permission cards aside); nothing after "+". False when nothing is
+   * running there, so Esc hides the window as before.
+   */
+  stopAnswer(): boolean;
   /** The renderer's requests (arguments come from the renderer, so each is checked). */
   handlers: AppHandlers;
 }
@@ -96,6 +111,8 @@ export function createApp(deps: AppDeps): App {
   let voiceCardId: string | null = null;
   /** New chats whose first screenshot could not be saved (088): the next capture into one is its first turn. */
   const unstarted = new Set<string>();
+  /** Each chat's questions waiting behind its answer (the runner's `queued` events, 099); kept apart, never saved. */
+  const queuedBy = new Map<string, QueuedQuestion[]>();
 
   function remember(thread: Thread): void {
     known.set(thread.id, thread);
@@ -106,7 +123,13 @@ export function createApp(deps: AppDeps): App {
   }
 
   function snapshot(): Thread[] {
-    return byNewest([...known.values()]);
+    return byNewest([...known.values()].map(withQueued));
+  }
+
+  /** The thread as the panel shows it: with its waiting questions, if any (099). */
+  function withQueued(thread: Thread): Thread {
+    const queued = queuedBy.get(thread.id);
+    return queued ? { ...thread, queued } : thread;
   }
 
   /** Applies `patch` to a thread this app has seen; one it has not is read from disk first. */
@@ -136,15 +159,20 @@ export function createApp(deps: AppDeps): App {
         remember(event.thread);
         broadcast();
         return;
+      case "queued":
+        if (event.queued.length > 0) queuedBy.set(event.threadId, event.queued);
+        else queuedBy.delete(event.threadId);
+        broadcast();
+        return;
       case "done":
         remember(event.thread);
-        panel.send(IPC.answerDone, { threadId: event.threadId, thread: event.thread });
+        panel.send(IPC.answerDone, { threadId: event.threadId, thread: withQueued(event.thread) });
         deps.onTurnEnded?.();
         return;
       case "error":
         if (event.thread) {
           remember(event.thread);
-          panel.send(IPC.answerDone, { threadId: event.threadId, thread: event.thread });
+          panel.send(IPC.answerDone, { threadId: event.threadId, thread: withQueued(event.thread) });
         } else {
           void patchThread(event.threadId, { status: "error" });
         }
@@ -200,9 +228,17 @@ export function createApp(deps: AppDeps): App {
     }
   }
 
-  /** `seed`: the previous thread's last answer, when an append past the screenshot limit starts this one (SPEC §2.3). */
-  async function newThread(shot: Shot, shownMs: number, seed?: string): Promise<string> {
-    const thread = await store.createThread({ model: config.model, effort: config.effort });
+  /** A new chat, in the mode the toggle says new chats start in (089) unless it continues one (`mode`). */
+  function createThread(mode: ChatMode = config.mode): Promise<Thread> {
+    return store.createThread({ model: config.model, effort: config.effort, mode });
+  }
+
+  /**
+   * `seed`: the previous thread's last answer, when an append past the screenshot limit starts this one (SPEC §2.3);
+   * `mode`: that thread's mode, which the continuation keeps (089).
+   */
+  async function newThread(shot: Shot, shownMs: number, seed?: string, mode?: ChatMode): Promise<string> {
+    const thread = await createThread(mode);
     dropPermissionCard();
     current = thread.id;
     remember(thread);
@@ -236,7 +272,7 @@ export function createApp(deps: AppDeps): App {
 
   /** A new thread whose first turn is a question (typed after "+", or dictated with no current thread). */
   async function textThread(request: Extract<TurnRequest, { kind: "followUp" }>): Promise<string> {
-    const thread = await store.createThread({ model: config.model, effort: config.effort });
+    const thread = await createThread();
     current = thread.id;
     fresh = false;
     remember(thread);
@@ -338,6 +374,22 @@ export function createApp(deps: AppDeps): App {
       broadcast();
       return true;
     },
+
+    async getMode() {
+      return config.mode;
+    },
+
+    async setMode(mode) {
+      if (mode !== "solve" && mode !== "answer") throw new SnapsolveError("internal", "unknown mode");
+      if (mode === config.mode) return;
+      config.mode = mode;
+      try {
+        const result = await deps.saveMode?.(mode);
+        if (result && !result.ok) log.warn("mode.saveFailed", { mode, error: result.error });
+      } catch (e) {
+        log.warn("mode.saveFailed", { mode, error: e });
+      }
+    },
   };
 
   return {
@@ -348,7 +400,9 @@ export function createApp(deps: AppDeps): App {
       const target = await currentThread();
       fresh = false;
       if (!target) return newThread(shot, shownMs);
-      if (decideAppend(target, config.maxScreenshotsPerThread) === "newThread") return newThread(shot, shownMs, lastAnswerText(target));
+      if (decideAppend(target, config.maxScreenshotsPerThread) === "newThread") {
+        return newThread(shot, shownMs, lastAnswerText(target), target.mode === "answer" ? "answer" : "solve");
+      }
       dropPermissionCard();
       const shown = known.get(target.id) ?? target;
       // The chat it lands in says "Thinking…" until the runner takes the turn (its status and turn events).
@@ -367,11 +421,11 @@ export function createApp(deps: AppDeps): App {
       broadcast();
     },
 
-    async onVoice(text) {
+    async onVoice(text, heard) {
       if (typeof text !== "string" || text.trim() === "") throw new SnapsolveError("internal", "empty dictation");
       if (voiceCardId) known.delete(voiceCardId);
       voiceCardId = null;
-      const request = { kind: "followUp" as const, text, voice: true as const };
+      const request = heard === true ? { kind: "followUp" as const, text, heard: true as const } : { kind: "followUp" as const, text, voice: true as const };
       const target = await currentThread();
       if (!target) return textThread(request);
       fresh = false;
@@ -385,10 +439,11 @@ export function createApp(deps: AppDeps): App {
     onVoiceDenied: (denial) => voiceCard(denial),
     onVoiceFailed: () => voiceCard("failed"),
 
-    isAnswering() {
-      if (fresh || !current) return false;
-      const thread = known.get(current);
-      return thread !== undefined && BUSY.has(thread.status);
+    stopAnswer() {
+      if (fresh || current === null) return false;
+      // Before the first capture or chosen chat, the window shows the newest chat (as the renderer's `current`).
+      const shown = current ?? byNewest([...known.values()].filter((t) => !t.permission))[0]?.id;
+      return shown ? runner.stop(shown) : false;
     },
 
     handlers,

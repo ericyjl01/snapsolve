@@ -10,22 +10,24 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
   - `log.ts`: JSON-lines logger to `<data>/logs/snapsolve.log`
   - `store.ts`: threads on disk (thread.json, PNGs, owned transcripts), atomic writes, clear history
   - `stream.ts`: stream-json line splitter and event classifier (pure)
-  - `runner.ts`: builds args/env/stdin, spawns `claude`, per-thread FIFO, global cap, timeouts, transcript adoption, resume fallback
+  - `runner.ts`: builds args/env/stdin, spawns `claude`, per-thread FIFO, global cap, timeouts, `stop` (Esc, task 097), transcript adoption, resume fallback; the `queued` event lists each chat's waiting follow-ups (099)
   - `auth.ts`: `claude auth status`, usage/rate-limit formatting
   - `encode.ts`: resize / PNG→JPEG fallback for the image sent to the model (pure, over an image interface)
   - `capture.ts`: display + source selection, capture mutex, platform panel handling; the PNG and the model's image made only on `encode()` (`screenshotOf`, task 088), so the window is shown first
-  - `panel.ts`: the panel BrowserWindow, tab and floating-window bounds (saved per display in `<data>/window.json`: `loadWindowBounds` / `saveWindowBounds`, task 058; the default 9 × 6 in centred, `defaultBounds` / `pointsPerInch`, task 091), content protection, the ground's alpha (`groundRule` injected with insertCSS, `setTransparency`, task 090), IPC handlers, `snapsolve://` protocol (`app/<file>` = the renderer from `dist/renderer`, `thread/<uuid>/<n>.png` = thumbnails), auto-hide timer
-  - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `newThread`), the renderer's request handlers, runner events → panel, `resolveClaudeCommand`
+  - `panel.ts`: the panel BrowserWindow, tab and floating-window bounds (saved per display in `<data>/window.json`: `loadWindowBounds` / `saveWindowBounds`, task 058; the default 9 × 6 in centred, `defaultBounds` / `pointsPerInch`, task 091), content protection, the ground's alpha (`groundRule` injected with insertCSS, `setTransparency`, task 090), IPC handlers, `snapsolve://` protocol (`app/<file>` = the renderer from `dist/renderer`, `thread/<uuid>/<n>.png` = thumbnails), auto-hide timer, Esc (stops the answer on screen via `onEscape`, else hides; task 097)
+  - `app.ts`: the capture → store → runner → panel pipeline (`onCapture`, `newThread`), the renderer's request handlers, runner events → panel, `stopAnswer` (Esc stops the chat on screen's answer, 097), each chat's queued questions added to the threads it sends (099, never saved), `resolveClaudeCommand`
   - `hotkeys.ts`: globalShortcut registration, debounce, pause/resume
   - `tray.ts`: tray menu and tooltip
   - `macos.ts`: darwin startup (Dock hidden before the tray, login-shell PATH once), the displays' physical sizes (`readDisplaySizes`: one osascript JavaScript run of CGDisplayScreenSize, task 091), the permission cards' actions (fixed settings URLs: Screen Recording, Microphone, Speech Recognition; relaunch), hotkey labels per platform
-  - `voice.ts`: dictation (task 063): the speech helper's JSON-line protocol, listen → stop and send / Esc / hide cancel, the temporary Esc shortcut, `resolveSpeechHelper`
-- `src/preload/preload.ts`: contextBridge exposing exactly the sixteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10, 11 and 15 (`copy` → `hide`; `newThread`; `onVoice`, `toggleVoice`, `openVoiceSettings`; `openThread`)
-- `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `styles.css`
+  - `voice.ts`: dictation (task 063; hold to talk, 096): the speech helper's JSON-line protocol, `press`/`release` per source (the hotkey, whose release is the helper's `released` line from its `--hold` modifier watch, `holdModifiers`; or a mic button), a tap under 300 ms cancelled, the 120 s hold cap, Esc / hide cancel, the temporary Esc shortcut, `resolveSpeechHelper`; listen to the Mac (098): a third source, the listen hotkey, whose helper runs with `--source system` and whose text is sent marked heard
+  - `knowledge.ts`: answer mode (task 089): `readKnowledge` (the knowledge folder's text files, limits, empty when there are none, `knowledgeUnreadable` / `knowledgeTooLarge`), `readAnswerFormat`, `knowledgeFolder` (config `knowledgeDir` → a folder), `answerSystemPrompt` (an answer chat's system prompt, built by the runner for every turn)
+- `src/preload/preload.ts`: contextBridge exposing exactly the eighteen functions of SPEC §4.4 as amended by Amendments 2, 9, 10, 11, 15, 25 and 27 (`copy` → `hide`; `newThread`; `onVoice`, `holdVoice` (was `toggleVoice`), `openVoiceSettings`; `openThread`; `getMode`, `setMode`)
+- `src/renderer/`: `index.html`, `renderer.ts` (UI), `render.ts` (markdown → sanitized HTML), `hold.ts` (the mic buttons held to talk, `bindHold`, task 096), `styles.css`
 - `src/shared/`: `types.ts` (Thread, Turn, Config, events), `ipc.ts` (channel names), `errors.ts` (error kinds + user messages), `models.ts` (`modelName`: a reported model id as the answer footer shows it, task 086)
-- `prompts/system.md`: the system prompt
+- `prompts/system.md`: the system prompt (solve chats)
+- `prompts/answer.md`, `prompts/answer-format.md` (task 089): an answer chat's prompt and its default answer format (the user's `<data>/answer-format.md` replaces the latter)
 - `assets/`: icons (tray, app)
-- `native/speech/` (063, macOS): `main.swift` (the on-device speech helper) and `Info.plist` (linked into it); built to `dist/native/snapsolve-speech`, released as `app/native/`
+- `native/speech/` (063, macOS): `main.swift` (the on-device speech helper; `--hold <modifiers>` also reports their release, 096; `--source system` hears what the Mac plays through a Core Audio process tap, 098) and `Info.plist` (linked into it); built to `dist/native/snapsolve-speech`, released as `app/native/`
 - `scripts/`: `build.mjs` (esbuild; compiles `native/speech` on macOS), `renderer-assets.mjs` (copies KaTeX CSS + fonts and the highlight.js themes (github, github-dark) into `dist/renderer/`), `smoke.mjs`, `make-problem-fixtures.ps1` (draws the live-test problem PNGs; Windows, run by hand); `release.mjs` (M2: assembles the plugin into a claude-skills marketplace folder, see `plugin/`)
 - `test/`: `unit/`, `integration/` (fake claude), `e2e/` (Electron via playwright-core), `live/` (real claude), `fixtures/`
 - `plugin/` (M2): `.claude-plugin/plugin.json` (no `version`, in the repo or the release: claude-skills convention, DECISIONS 027), `skills/snapsolve/SKILL.md`, `skills/snapsolve/scripts/` (installer, plain Node ESM, built-ins only: `steps.mjs` = the install steps the commands compose, each taking its dependencies; its data-dir rules and config defaults mirror `paths.ts` / `config.ts`, kept in step by `test/unit/installer-steps.test.ts`; `commands.mjs` = the five commands over injected steps, returning `ok:`/`warn:`/`fail:` lines; `snapsolve.mjs` = the CLI the skill runs; `realSteps.mjs` = the real steps it wires, with the test hooks inert unless `SNAPSOLVE_TEST=1`; install state in `<data>/app/install.json`). Released as `<marketplace>/plugins/snapsolve/` = `plugin/` + `app/` (`main.js`, `preload.js`, `renderer/`, `prompts/`, `assets/`, `bootstrap/`, `package.json` with `main: "main.js"`, the root `package-lock.json`)
@@ -51,7 +53,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
 - markdown: `markdown-it`; math: `katex` + `@vscode/markdown-it-katex`; code: `highlight.js`; sanitizing: `dompurify`
 - packaging (M2): `@electron/packager`
 - types: `@types/node`, `@types/markdown-it`
-- speech (063, macOS only): Apple `Speech` + `AVFoundation` frameworks, used only from a small Swift helper binary compiled with `swiftc` (DECISIONS 2026-10-17 speech-to-text); no npm package
+- speech (063, macOS only): Apple `Speech` + `AVFoundation` frameworks, and `CoreAudio` for the Mac's sound output (098; user, chat 2026-11-03: "aprroved the built coreaudio framework"), and `CoreGraphics` to read the held modifier keys (`CGEventSource.flagsState`, no event tap) for hold-to-talk (096; user, chat 2026-11-03: "Yes, add core graphics to the list."), used only from a small Swift helper binary compiled with `swiftc` (DECISIONS 2026-10-17 speech-to-text); no npm package
 - everything else: Node/Electron built-ins (`crypto.randomUUID`, `fs/promises`, `child_process`, `nativeImage`, `desktopCapturer`, `globalShortcut`, `Tray`, `protocol`)
 
 ## Conventions
@@ -62,11 +64,11 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
 - async: `fs/promises`; atomic JSON writes via `store.writeJsonAtomic` (temp + rename)
 - platform branches: `process.platform` checked only in `paths.ts`, `capture.ts`, `panel.ts`, `main.ts`, and passed in as a parameter elsewhere (tests cover both branches)
 - decisions: rows of closed tasks 001–029 (tidy 2026-10-17) and 030–065 (tidy 2026-10-23) live in `archive/DECISIONS.archive.md`; grep it as well as DECISIONS.md before a choice. Rules kept from them:
-  - preload API: exactly the functions SPEC §4.4 and its Amendments list (16 after 078); a new one needs a SPEC Amendment and a DECISIONS row; renderer calls take no URLs (030, 061, 063, 065)
+  - preload API: exactly the functions SPEC §4.4 and its Amendments list (18 after 089); a new one needs a SPEC Amendment and a DECISIONS row; renderer calls take no URLs (030, 061, 063, 065)
   - panel-only cards: the Screen Recording and voice cards are Threads that live only in app.ts `known` (never saved); a later denial updates the same card, the next success removes it (030, 063)
   - capture routing lives in main: app.ts `current` / `fresh`; a capture continues the current thread, "+" (`newThread`) starts a new one, the screenshot limit rolls over seeded with the last answer (051, 065)
   - Retry is a runner request `{ kind: "retry" }` that re-runs the failed last user turn in place; busy threads left by a crash are recovered at startup (`recoverBusyThreads`) before the first listing (050, 052)
-  - hotkeys: capture Control+Alt+C, toggle Control+Alt+X, voice Control+Alt+V (pressed again to send); existing config values are never migrated (060, 063, 064)
+  - hotkeys: capture Control+Alt+C, toggle Control+Alt+X, voice Control+Alt+V (held to talk, let go to send, 096); existing config values are never migrated (060, 063, 064)
 - test layout: one test file per module; e2e tests launch `dist/main.js` with `SNAPSOLVE_TEST=1`, a temp data dir (`SNAPSOLVE_DATA_DIR`) and the fake claude
 
 ## Exemplars

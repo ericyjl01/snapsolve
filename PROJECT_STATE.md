@@ -1,22 +1,14 @@
 # PROJECT_STATE
 
 ## Now
-Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089, 096–099, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
-- 089 answer mode, 096 hold-to-talk, 097 Esc stop, 098 listen to the Mac (⌃⌥B): DONE, Opus reviews pass; Eric hand-tested all four 2026-11-03: "they all work".
-- 099 queue a question asked during an answer: DONE (code e22d605, SPEC Amendment 30, Opus review 1 pass); unit 1249 green, build ok. Needs a rebuild + hand check by Eric (type and hold ⌃⌥V while an answer streams → faded "Queued", then answered in order). Backlog 100 (from the review).
-- Ask Eric: the speech helper imports CoreGraphics (096); ARCHITECTURE names Speech + AVFoundation + CoreAudio only.
-- Pending before merge: e2e (window) tests for 096–099, written, not run (Eric says when; ~3–5 min).
-- Merge path: queue 089/096/097/098/099 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.
-- Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
-- master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.
+On master (W). worktree-answer-mode merged --no-ff as 008a6e7 (Eric 2026-11-03, option A): 089 answer mode, 096 hold-to-talk, 097 Esc stop, 098 listen to the Mac (⌃⌥B), 099 queued questions — all closed by hand in tasks.json (built and Opus-reviewed outside keel gates).
+- Before the merge: Eric hand-checked all five (099: "Yes, it shows queued."); full npm test green, e2e included (1320 passed / 7 skipped); two stale e2e expectations updated (listen hotkey, Solve / Answer radios).
+- CoreGraphics approved for the speech helper (ARCHITECTURE Approved libraries, DECISIONS row).
+- `.claude/worktrees/` added to .git/info/exclude (main checkout clean for keel preflight).
+- Not yet: a release (0.2.9) so the installed app (0.2.8) gets these; removing the worktree and its branch — both wait for Eric.
+- Queue: 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095, 100 (question sent while a capture saves, from the 099 review).
 
 ## Log
-2026-10-22 · adhoc · backlog 074: update must re-package snapsolve.app when Info.plist keys change (0.2.0 voice helper SIGABRTs without NSSpeechRecognitionUsageDescription) (-)
-2026-10-22 · adhoc · queued 075: theme setting (dark default) and a more translucent window, Eric's choices (priority 0) (-)
-2026-10-22 · 075 · closed · config.json theme dark|light|system (default dark) sets nativeTheme.themeSource before the window, so the panel and its blur are dark on a Light Mac; window ground more see-through (0.56 light, 0.50 dark); SPEC Amendment 12; e2e launches without Playwright's light emulation (8388539)
-2026-10-22 · adhoc · released snapsolve 0.2.1 into ~/dev/snapsolve-local (075 theme, dark default, more translucent ground) (1ea96da)
-2026-10-22 · adhoc · queued 076: dark code blocks, New York serif answers, terminal-style see-through (Eric's choices; priority 0) (-)
-2026-10-22 · 076 · closed · dark code blocks (github-dark under prefers-color-scheme: dark), New York serif answers at 14 px with Menlo code, macOS window without vibrancy under an ~88% solid ground (Amendment 13) (604999c)
 2026-10-22 · adhoc · released snapsolve 0.2.2 into ~/dev/snapsolve-local (076 dark code blocks, New York serif, no-blur ~88% ground); updated on Eric's Mac (d5bec90)
 2026-10-22 · adhoc · dark-theme code blocks grey #202327 (Claude Code's code view) instead of github-dark's near-black; e2e pins it (bac44b8)
 2026-10-22 · adhoc · released snapsolve 0.2.3 into ~/dev/snapsolve-local (grey code blocks); updated on Eric's Mac (cb11abd)
@@ -51,3 +43,9 @@ Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master
 2026-10-23 · adhoc · released snapsolve 0.2.8 into ~/dev/snapsolve-local (090 see-through + Transparency menu, 087 icon ~15% smaller, 091 9 × 6 in centred default, 088 faster show, 086 per-answer footer); updated on Eric's Mac (f9efb11)
 2026-11-02 · keel · queued · 096 voice hold-to-talk (p1) and 097 Esc stops an answer (p2), backlog after 089: Eric's request, to build in a new session on worktree-answer-mode (-)
 2026-11-03 · keel · queued · 099 queue a question asked during an answer (voice and ⌃⌥B no longer say wait; queued questions show at once); hand checks of 089/096/097/098 pass (Eric) (-)
+2026-11-03 · 089 · closed · answer mode: a Solve / Answer switch in the title bar; Answer drafts your own answer from your knowledge folder (merged from worktree-answer-mode, closed by hand) (008a6e7)
+2026-11-03 · 096 · closed · voice hold-to-talk: hold ⌃⌥V or the mic to record, let go sends (merged from worktree-answer-mode, closed by hand) (008a6e7)
+2026-11-03 · 097 · closed · Esc stops an answer being written (merged from worktree-answer-mode, closed by hand) (008a6e7)
+2026-11-03 · 098 · closed · listen to the Mac: hold ⌃⌥B to transcribe what the Mac plays, let go sends (merged from worktree-answer-mode, closed by hand) (008a6e7)
+2026-11-03 · 099 · closed · a question asked during an answer queues (typed, voice, listen); queued ones show at once, faded, Queued (merged from worktree-answer-mode, closed by hand) (008a6e7)
+2026-11-03 · adhoc · merged worktree-answer-mode into master (--no-ff) after the full npm test passed (1320, e2e included); CoreGraphics approved for the speech helper; two stale e2e expectations updated for 089/098 (008a6e7)

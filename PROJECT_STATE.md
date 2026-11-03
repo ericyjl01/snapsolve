@@ -1,18 +1,16 @@
 # PROJECT_STATE
 
 ## Now
-Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089, 096, 097, 098, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
-- 089 answer mode, 096 voice hold-to-talk, 097 Esc stops an answer: DONE (Amendments 25–28, Opus reviews pass).
-- 098 listen to the Mac (hold ⌃⌥B, Amendment 29; Eric approved CoreAudio): e97236d + 9bd6c87 tests (red 126, 3), 7a5f866 code; live check ok (say → transcribed; silence → silent note). Unit 1240 passed, 7 skipped; 23e44e4 docs; Opus review 1 pass (hand-check notes in the task file). 098 DONE; next: Eric tries it.
+Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089, 096–099, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
+- 089 answer mode, 096 hold-to-talk, 097 Esc stop, 098 listen to the Mac (⌃⌥B): DONE, Opus reviews pass; Eric hand-tested all four 2026-11-03: "they all work".
+- 099 queue a question asked during an answer (Eric: "wait for the first question to finish and then answer the second one."): queued, task file written; next: tests first (voice/runner/app), then code, review. Waits for the goal line.
 - Ask Eric: the speech helper imports CoreGraphics (096); ARCHITECTURE names Speech + AVFoundation + CoreAudio only.
-- Hand checks for Eric (checklist 032 at merge): docs/tasks/096, 097, 098 Notes.
-- Pending: e2e (window) tests, updated for 096/097/098 but not run — Eric: "Later, I'll tell you". Then he tries it and says merge.
-- Merge path: queue 089/096/097/098 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.
+- Pending before merge: e2e (window) tests for 096–099, written, not run (Eric says when; ~3–5 min).
+- Merge path: queue 089/096/097/098/099 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.
 - Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
 - master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.
 
 ## Log
-2026-10-21 · adhoc · released snapsolve 0.2.0 into ~/dev/snapsolve-local (redesign 058–061, ⌃⌥C 064, one chat + 065, voice 063 with app/native/snapsolve-speech); Eric: restart Claude Code, then /snapsolve update (b5a6c08)
 2026-10-22 · adhoc · backlog 074: update must re-package snapsolve.app when Info.plist keys change (0.2.0 voice helper SIGABRTs without NSSpeechRecognitionUsageDescription) (-)
 2026-10-22 · adhoc · queued 075: theme setting (dark default) and a more translucent window, Eric's choices (priority 0) (-)
 2026-10-22 · 075 · closed · config.json theme dark|light|system (default dark) sets nativeTheme.themeSource before the window, so the panel and its blur are dark on a Light Mac; window ground more see-through (0.56 light, 0.50 dark); SPEC Amendment 12; e2e launches without Playwright's light emulation (8388539)
@@ -52,3 +50,4 @@ Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master
 2026-10-23 · 091 · closed · the default window is about 9 in × 6 in real size (CGDisplayScreenSize via osascript, 110 pt/in when unknown), centred in the work area, on first open and Reset; e2e sidebar tests narrow the window themselves; checklist row 16; found 095 (17f8751)
 2026-10-23 · adhoc · released snapsolve 0.2.8 into ~/dev/snapsolve-local (090 see-through + Transparency menu, 087 icon ~15% smaller, 091 9 × 6 in centred default, 088 faster show, 086 per-answer footer); updated on Eric's Mac (f9efb11)
 2026-11-02 · keel · queued · 096 voice hold-to-talk (p1) and 097 Esc stops an answer (p2), backlog after 089: Eric's request, to build in a new session on worktree-answer-mode (-)
+2026-11-03 · keel · queued · 099 queue a question asked during an answer (voice and ⌃⌥B no longer say wait; queued questions show at once); hand checks of 089/096/097/098 pass (Eric) (-)

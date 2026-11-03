@@ -780,6 +780,8 @@ describe("packageBootstrap (darwin)", () => {
         LSUIElement: true,
         NSMicrophoneUsageDescription: "snapsolve listens while you dictate a question with the voice hotkey.",
         NSSpeechRecognitionUsageDescription: "snapsolve turns your dictated question into text on this Mac.",
+        // 098: and when the listen hotkey first asks for System Audio Recording.
+        NSAudioCaptureUsageDescription: "snapsolve listens to what your Mac plays while you hold the listen hotkey, to turn it into a question.",
       },
     });
     expect(r).toEqual({ exe: path.join(bundle, "Contents", "MacOS", "snapsolve") });
@@ -1028,6 +1030,7 @@ describe("writeClaudePath", () => {
     expect(written).toEqual({ ...DEFAULTS, claudePath: claudeReal });
     expect(written.hotkeys.capture).toBe("Control+Alt+C");
     expect(written.hotkeys.voice).toBe("Control+Alt+V");
+    expect(written.hotkeys.listen).toBe("Control+Alt+B");
     expect(written.theme).toBe("dark");
     expect(r).toEqual({ claudePath: claudeReal, warning: null });
 

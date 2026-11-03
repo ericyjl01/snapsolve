@@ -2535,6 +2535,29 @@
       "tests_commit": null,
       "no_tests": null,
       "review": null
+    },
+    {
+      "id": "100",
+      "title": "Question sent while a capture saves can run before its screenshot (099 review)",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [
+        "099"
+      ],
+      "file": "docs/tasks/100-question-sent-while-a-capture-saves-can.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "",
+      "kind": "task",
+      "test_cmd": "npx vitest run --project unit test/unit/app.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

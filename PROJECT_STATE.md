@@ -3,7 +3,7 @@
 ## Now
 Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089, 096–099, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
 - 089 answer mode, 096 hold-to-talk, 097 Esc stop, 098 listen to the Mac (⌃⌥B): DONE, Opus reviews pass; Eric hand-tested all four 2026-11-03: "they all work".
-- 099 queue a question asked during an answer: tests bd774ac+315b652 (red 10), code e22d605, docs (SPEC Amendment 30, DECISIONS, ARCHITECTURE); unit 1249 green, build ok. In flight: Opus review 1. Next: fix any reasons, then memory commit, hand check by Eric.
+- 099 queue a question asked during an answer: DONE (code e22d605, SPEC Amendment 30, Opus review 1 pass); unit 1249 green, build ok. Needs a rebuild + hand check by Eric (type and hold ⌃⌥V while an answer streams → faded "Queued", then answered in order). Backlog 100 (from the review).
 - Ask Eric: the speech helper imports CoreGraphics (096); ARCHITECTURE names Speech + AVFoundation + CoreAudio only.
 - Pending before merge: e2e (window) tests for 096–099, written, not run (Eric says when; ~3–5 min).
 - Merge path: queue 089/096/097/098/099 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.

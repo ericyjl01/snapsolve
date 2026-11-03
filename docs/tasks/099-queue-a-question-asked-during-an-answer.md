@@ -17,7 +17,7 @@ Out: cancelling or editing a queued question; a question replacing the running a
 - [x] Holding ⌃⌥V or ⌃⌥B during an answer listens and, on let go, queues the question; no "wait" note (unit: voice.test, app.test).
 - [x] A question sent during an answer appears in the chat at once as queued, and runs after the answer (unit: runner.test, app.test; e2e written).
 - [x] Unit suite green (`npx vitest run --project unit`: 1249 passed, 7 skipped), build ok, typecheck ok, caps ok; e2e written (`queued questions (e2e, 099)`), not run unless Eric says.
-- [ ] An Opus review passes.
+- [x] An Opus review passes (review 1 pass, 2026-11-03; notes below).
 
 ## Tests
 Command: `npx vitest run --project unit test/unit/voice.test.ts test/unit/runner.test.ts test/unit/app.test.ts test/unit/ipc.test.ts`
@@ -33,3 +33,4 @@ SPEC Amendments 11, 27, 28, 29, 30 (this task); §3.5 concurrency.
 - Tests bd774ac (red: 10 failed in runner/app; voice.test failed on the removed isAnswering dep) and 315b652 (a test that picked the wrong queued event); code e22d605.
 - Also queued: a typed follow-up waiting for a slot (another chat holds the only one, maxConcurrent) is listed too.
 - Hand check on Eric's Mac (checklist 032 at merge): while an answer streams, type a question and hold ⌃⌥V → both show faded with Queued under the answer, then are asked and answered in order.
+- Review 1 (pass) notes, not changed: (1) when a queued question starts, its faded bubble leaves a moment before the saved question arrives (two thread.json writes between; "Thinking…" shows in the gap) — the order the Tests asked for; if it shows on the Mac, send the shorter list just before the `turn` event; (2) a question sent while a capture into the same chat is still saving can run before that screenshot → backlog 100; (3) the e2e needs the first answer still streaming when the dictation lands (~0.5 s margin at FAKE_DELAY_MS 1500): raise the delay if it flakes; (4) voice.test's `"isAnswering" in setup().deps` checks the fixture only; tsc and the VOICE_BUSY_NOTE export check enforce the removal.

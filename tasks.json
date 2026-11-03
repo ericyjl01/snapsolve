@@ -2489,6 +2489,29 @@
       "tests_commit": null,
       "no_tests": null,
       "review": null
+    },
+    {
+      "id": "098",
+      "title": "Listen to the Mac: hold ⌃⌥B to transcribe what the Mac plays, let go sends",
+      "status": "open",
+      "priority": 5,
+      "milestone": null,
+      "deps": [
+        "096"
+      ],
+      "file": "docs/tasks/098-listen-to-the-mac-hold-b-to-transcribe-w.md",
+      "blocked_on": null,
+      "attempts": 0,
+      "branch": null,
+      "stash": null,
+      "closed_at": null,
+      "commit": null,
+      "notes": "Eric 2026-11-03 (chat): build on worktree-answer-mode by hand like 096/097 (tasks.py start/red/close need one checkout on master).",
+      "kind": "task",
+      "test_cmd": "npx vitest run --project unit test/unit/voice.test.ts test/unit/hotkeys.test.ts test/unit/config.test.ts test/unit/runner.test.ts test/unit/app.test.ts",
+      "tests_commit": null,
+      "no_tests": null,
+      "review": null
     }
   ]
 }

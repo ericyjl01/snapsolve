@@ -1,14 +1,13 @@
 # PROJECT_STATE
 
 ## Now
-Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089 answer mode, then 096 and 097, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
-- 089 done (Amendments 25–26, 4 Opus reviews, pass). Eric's data in ~/snapsolve-answer-test (not in git); config opus/low.
-- 096 voice hold-to-talk DONE (Amendment 27): 2204ac9 tests (red 51) … c84e07c; review 1 fail → fixed; review 2 pass.
-- 097 Esc stops an answer (Eric: "just go"; Amendment 28): 2e3185d tests (red 22), 9dbbd80 code, 7fd2b61 docs; review 1 fail (e2e 058/059 Esc mid-answer; 1 s grace untested) → 96dfceb tests (red 1), 51a468a fixes; review 2 pass (follow-up notes in the task file). Unit 1196 passed, 7 skipped. 096 + 097 DONE; next: Eric tries them (hand checks), e2e when he says.
-- Ask Eric: the speech helper now imports CoreGraphics (system framework); ARCHITECTURE Approved libraries names only Speech + AVFoundation for it (changes only with him).
-- Hand checks for Eric (checklist 032 at merge): docs/tasks/096 and 097 Notes.
-- Pending: e2e (window) tests, updated for 096/097 but not run — Eric: "Later, I'll tell you". Then he tries it and says merge.
-- Merge path: queue 089/096/097 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.
+Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089, 096, 097, 098, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
+- 089 answer mode, 096 voice hold-to-talk, 097 Esc stops an answer: DONE (Amendments 25–28, Opus reviews pass).
+- 098 listen to the Mac (hold ⌃⌥B, Amendment 29; Eric approved CoreAudio): e97236d + 9bd6c87 tests (red 126, 3), 7a5f866 code; live check ok (say → transcribed; silence → silent note). Unit 1240 passed, 7 skipped. In flight: docs commit, then the Opus review.
+- Ask Eric: the speech helper imports CoreGraphics (096); ARCHITECTURE names Speech + AVFoundation + CoreAudio only.
+- Hand checks for Eric (checklist 032 at merge): docs/tasks/096, 097, 098 Notes.
+- Pending: e2e (window) tests, updated for 096/097/098 but not run — Eric: "Later, I'll tell you". Then he tries it and says merge.
+- Merge path: queue 089/096/097/098 on master (memory files to W), keel/<id> from master, merge each tests commit → red → the rest → review → close.
 - Main checkout lists .claude/worktrees/ as untracked (keel preflight counts it): add `.claude/worktrees/` to .git/info/exclude.
 - master unchanged: 0.2.8 installed; 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095.
 

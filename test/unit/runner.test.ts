@@ -1682,7 +1682,7 @@ describe("queued questions (099)", () => {
     expect((await first).ok).toBe(true);
     await until(() => spawned() === 2);
     // Gone from the list (an event saying so) before the turn event that carries the saved question.
-    const left = events.findIndex((e) => e.type === "queued" && e.threadId === t.id && e.queued.length === 1);
+    const left = events.findIndex((e) => e.type === "queued" && e.threadId === t.id && e.queued.length === 1 && e.queued[0].text === "and then?");
     const asked = events.findIndex((e) => e.type === "turn" && e.thread.turns.length === 3 && shape(e.thread.turns[2]) === "user:why?");
     expect(left).toBeGreaterThan(-1);
     expect(asked).toBeGreaterThan(left);

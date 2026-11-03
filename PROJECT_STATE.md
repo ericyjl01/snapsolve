@@ -3,7 +3,7 @@
 ## Now
 Worktree .claude/worktrees/answer-mode, branch worktree-answer-mode (from master 70bcce1): 089, 096, 097, 098, built by hand like 089. Not merged: Eric 2026-11-02 "keep this separate" until it works and he says merge.
 - 089 answer mode, 096 voice hold-to-talk, 097 Esc stops an answer: DONE (Amendments 25–28, Opus reviews pass).
-- 098 listen to the Mac (hold ⌃⌥B, Amendment 29; Eric approved CoreAudio): e97236d + 9bd6c87 tests (red 126, 3), 7a5f866 code; live check ok (say → transcribed; silence → silent note). Unit 1240 passed, 7 skipped. In flight: docs commit, then the Opus review.
+- 098 listen to the Mac (hold ⌃⌥B, Amendment 29; Eric approved CoreAudio): e97236d + 9bd6c87 tests (red 126, 3), 7a5f866 code; live check ok (say → transcribed; silence → silent note). Unit 1240 passed, 7 skipped; 23e44e4 docs; Opus review 1 pass (hand-check notes in the task file). 098 DONE; next: Eric tries it.
 - Ask Eric: the speech helper imports CoreGraphics (096); ARCHITECTURE names Speech + AVFoundation + CoreAudio only.
 - Hand checks for Eric (checklist 032 at merge): docs/tasks/096, 097, 098 Notes.
 - Pending: e2e (window) tests, updated for 096/097/098 but not run — Eric: "Later, I'll tell you". Then he tries it and says merge.

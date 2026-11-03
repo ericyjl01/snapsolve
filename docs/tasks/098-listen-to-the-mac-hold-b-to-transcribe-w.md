@@ -19,7 +19,7 @@ Out: a button for it; recording to a file; mic and Mac audio together; picking o
 - [x] ⌃⌥B is a registered hotkey with a config field, default and validation (unit: hotkeys.test, config.test).
 - [x] The helper builds (`npm run build`) and, run by hand with `--source system` while `say` speaks, prints the spoken words (2026-11-03: "Walk me through your resume, starting with your most recent role." word for word; nothing playing → final `""` with `silent` at once; the mic path still records).
 - [x] Unit suite green (`npx vitest run --project unit`: 1240 passed, 7 skipped), caps ok; e2e written for it, not run (Eric says when).
-- [ ] An Opus review passes.
+- [x] An Opus review passes (review 1 pass, 2026-11-03; notes below).
 
 ## Tests
 Command: `npx vitest run --project unit test/unit/voice.test.ts test/unit/hotkeys.test.ts test/unit/config.test.ts test/unit/runner.test.ts test/unit/app.test.ts`
@@ -38,4 +38,5 @@ SPEC Amendments 11, 27, 29; §1.1 hotkeys, §6.1 config.
 - Spike 2026-11-03 (scratchpad, not kept): a global process tap + aggregate device on Eric's Mac (macOS 26.6) got 48 kHz stereo float buffers with `say` audible (peak 0.19), no prompt shown to the terminal.
 - Hand check on Eric's Mac (checklist 032 at merge): play a video with speech, hold ⌃⌥B, let go → the heard question with a speaker mark, answered; first use shows the System Audio Recording prompt; with it refused → the silent note; ⌃⌥V still dictates from the mic.
 - Tests e97236d (red: 126 failed) and 9bd6c87 (installer bundle text and default, taken-key label; red: 3 failed); code 7a5f866. Found while building: with nothing playing macOS runs no audio callback, and SpeechAnalyzer then waits for ever after the end of input → a stop with no audio delivered ends at once (DECISIONS 2026-11-03 098).
+- Review 1 (pass) notes for the hand check, not changed: (1) the aggregate device is clocked from the *system* (alert-sound) output device, not the default output; the global tap should still hear everything, but try it with alerts routed to another device (fix: `kAudioHardwarePropertyDefaultOutputDevice`); (2) the callback reads the aggregate's whole input list as the tap's format: an output device that also has inputs (audio interface, headset) might put those first → silent or wrong channels; checked only on the built-in output. Also: a mic stop with no buffers now ends at once ("Didn't catch that.") instead of waiting for the 15 s timeout.
 - Fixed in passing: plugin SKILL.md still described voice as press-again (pre-096); now hold, plus the listen key.

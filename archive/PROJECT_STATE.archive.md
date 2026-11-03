@@ -97,3 +97,4 @@
 2026-10-22 · adhoc · released snapsolve 0.2.1 into ~/dev/snapsolve-local (075 theme, dark default, more translucent ground) (1ea96da)
 2026-10-22 · adhoc · queued 076: dark code blocks, New York serif answers, terminal-style see-through (Eric's choices; priority 0) (-)
 2026-10-22 · 076 · closed · dark code blocks (github-dark under prefers-color-scheme: dark), New York serif answers at 14 px with Menlo code, macOS window without vibrancy under an ~88% solid ground (Amendment 13) (604999c)
+2026-10-22 · adhoc · released snapsolve 0.2.2 into ~/dev/snapsolve-local (076 dark code blocks, New York serif, no-blur ~88% ground); updated on Eric's Mac (d5bec90)

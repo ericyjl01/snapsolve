@@ -1,15 +1,12 @@
 # PROJECT_STATE
 
 ## Now
-On master (W). worktree-answer-mode merged --no-ff as 008a6e7 (Eric 2026-11-03, option A): 089 answer mode, 096 hold-to-talk, 097 Esc stop, 098 listen to the Mac (⌃⌥B), 099 queued questions — all closed by hand in tasks.json (built and Opus-reviewed outside keel gates).
-- Before the merge: Eric hand-checked all five (099: "Yes, it shows queued."); full npm test green, e2e included (1320 passed / 7 skipped); two stale e2e expectations updated (listen hotkey, Solve / Answer radios).
-- CoreGraphics approved for the speech helper (ARCHITECTURE Approved libraries, DECISIONS row).
-- `.claude/worktrees/` added to .git/info/exclude (main checkout clean for keel preflight).
-- Not yet: a release (0.2.9) so the installed app (0.2.8) gets these; removing the worktree and its branch — both wait for Eric.
-- Queue: 032 blocked on Eric's checklist; backlog 033, 067, 069, 074, 092–095, 100 (question sent while a capture saves, from the 099 review).
+On master (W). 0.2.9 released into ~/dev/snapsolve-local and installed on Eric's Mac (update 0.2.8 → 0.2.9 ok, restarted): 089 answer mode, 096 hold-to-talk, 097 Esc stop, 098 listen to the Mac (⌃⌥B), 099 queued questions.
+- These came from worktree-answer-mode, merged --no-ff as 008a6e7 after Eric's hand checks and a green full npm test (1320, e2e included); the five tasks closed by hand in tasks.json (Eric, option A). Worktree and branch removed.
+- CoreGraphics approved for the speech helper (ARCHITECTURE, DECISIONS). `.claude/worktrees/` is in .git/info/exclude.
+- Queue: 032 blocked on Eric's macOS checklist; backlog 033, 067, 069, 074, 092–095, 100 (question sent while a capture saves, from the 099 review).
 
 ## Log
-2026-10-22 · adhoc · released snapsolve 0.2.2 into ~/dev/snapsolve-local (076 dark code blocks, New York serif, no-blur ~88% ground); updated on Eric's Mac (d5bec90)
 2026-10-22 · adhoc · dark-theme code blocks grey #202327 (Claude Code's code view) instead of github-dark's near-black; e2e pins it (bac44b8)
 2026-10-22 · adhoc · released snapsolve 0.2.3 into ~/dev/snapsolve-local (grey code blocks); updated on Eric's Mac (cb11abd)
 2026-10-22 · keel · queued · 077 tray Appearance menu, 078 conversation sidebar, 079 pill composer (Eric's choices, mockup approved) (-)
@@ -49,3 +46,4 @@ On master (W). worktree-answer-mode merged --no-ff as 008a6e7 (Eric 2026-11-03, 
 2026-11-03 · 098 · closed · listen to the Mac: hold ⌃⌥B to transcribe what the Mac plays, let go sends (merged from worktree-answer-mode, closed by hand) (008a6e7)
 2026-11-03 · 099 · closed · a question asked during an answer queues (typed, voice, listen); queued ones show at once, faded, Queued (merged from worktree-answer-mode, closed by hand) (008a6e7)
 2026-11-03 · adhoc · merged worktree-answer-mode into master (--no-ff) after the full npm test passed (1320, e2e included); CoreGraphics approved for the speech helper; two stale e2e expectations updated for 089/098 (008a6e7)
+2026-11-03 · adhoc · released snapsolve 0.2.9 into ~/dev/snapsolve-local (089 answer mode, 096 hold-to-talk, 097 Esc stop, 098 listen to the Mac, 099 queued questions); updated on Eric's Mac 0.2.8 → 0.2.9; answer-mode worktree and branch removed (0807312)

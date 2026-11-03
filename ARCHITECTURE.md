@@ -53,7 +53,7 @@ The app lives at the repo root. The distributable plugin (M2) is assembled from 
 - markdown: `markdown-it`; math: `katex` + `@vscode/markdown-it-katex`; code: `highlight.js`; sanitizing: `dompurify`
 - packaging (M2): `@electron/packager`
 - types: `@types/node`, `@types/markdown-it`
-- speech (063, macOS only): Apple `Speech` + `AVFoundation` frameworks, and `CoreAudio` for the Mac's sound output (098; user, chat 2026-11-03: "aprroved the built coreaudio framework"), used only from a small Swift helper binary compiled with `swiftc` (DECISIONS 2026-10-17 speech-to-text); no npm package
+- speech (063, macOS only): Apple `Speech` + `AVFoundation` frameworks, and `CoreAudio` for the Mac's sound output (098; user, chat 2026-11-03: "aprroved the built coreaudio framework"), and `CoreGraphics` to read the held modifier keys (`CGEventSource.flagsState`, no event tap) for hold-to-talk (096; user, chat 2026-11-03: "Yes, add core graphics to the list."), used only from a small Swift helper binary compiled with `swiftc` (DECISIONS 2026-10-17 speech-to-text); no npm package
 - everything else: Node/Electron built-ins (`crypto.randomUUID`, `fs/promises`, `child_process`, `nativeImage`, `desktopCapturer`, `globalShortcut`, `Tray`, `protocol`)
 
 ## Conventions

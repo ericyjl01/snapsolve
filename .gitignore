@@ -7,3 +7,5 @@ node_modules/
 dist/
 coverage/
 *.log
+# Answer-mode knowledge bases (personal material); read via config.json knowledgeDir, never committed
+knowledge/
